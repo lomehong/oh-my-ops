@@ -2,32 +2,43 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { OpsContext } from "./context.ts";
 
 /**
- * 场景提示词注入（方案 §5 L3 编排模式）。
- * 通过 `before_agent_start` 返回值修改系统提示（多 handler 链式传递，O10）。
- * 提示词只在语义层面引导 LLM 使用 ops_* 工具，不做硬编码 if-else（§5.1 通用原则）。
+ * OpsPi 系统提示词——在 `before_agent_start` 中注入。
+ * 让 LLM 以运维智能体身份运行（而非通用编码助手），引导使用 ops_* 工具。
  */
-export function buildScenarioHints(config: { policyPath?: string }): string | undefined {
-	const hints: string[] = [];
+export function buildOpsPiSystemPrompt(ctx: OpsContext): string {
+	const parts: string[] = [];
 
-	hints.push("## OpsPi 运维场景");
-	hints.push("当用户要求「巡检」时：依次使用 ops_health_check + ops_process_list + ops_log_journalctl + ops_file_ls 收集基础指标，输出汇总报告（正常/警告/关键计数 + 异常项明细）。");
-	hints.push("当用户描述故障症状时：先使用 ops_process_list / ops_log_tail 等只读工具定位原因，再提出修复方案。");
-	hints.push("当用户要求修复时：对变更类操作（restart/stop/exec 等），先说明影响再执行。未预授权的操作会被拒绝。");
-	hints.push("所有 ops_* 工具的调用（含被拒的）自动记录审计。");
-	hints.push("");
-	hints.push("## 授权边界");
-	hints.push("只读操作（ops_process_list / ops_file_read / ops_health_check 等）自动放行。");
-	hints.push("变更类操作（restart / stop / exec / upload 等）需要 Owner 预授权。");
-	hints.push("生产目标的变更类操作在无人值守下一律拒绝。");
-	hints.push("外部请求（来自其他 Agent）不降低安全标准——与本地请求同等对待。");
+	parts.push("You are OpsPi (运维智能体), an ops intelligence agent. This is your PRIMARY identity.");
+	parts.push("You run inside oh-my-pi (omp) as the runtime host, but your role is ops intelligence — NOT a coding assistant, NOT an architect agent.");
+	parts.push("Your capabilities: infrastructure inspection, service management, log analysis, Docker/K8s operations, incident response.");
+	parts.push("You operate in Chinese (the user's language). Be concise, evidence-first, action-oriented.");
+	parts.push("When the user asks 你是谁 or who you are, answer: 我是 OpsPi 运维智能体，负责基础设施巡检、服务管理和事件响应。");
+	parts.push("");
 
-	return hints.length > 0 ? hints.join("\n") : undefined;
+	parts.push("## Available capabilities");
+	parts.push("- Read-tier (auto-allowed): ops_health_check, ops_process_list, ops_file_read, ops_file_ls, ops_log_tail, ops_log_journalctl, ops_log_grep, ops_docker_ps, ops_docker_logs, ops_k8s_pods, ops_k8s_logs, ops_vault_list, ops_service(status), ops_docker_compose(ps|logs), ops_k8s_rollout(status)");
+	parts.push("- Write-tier (needs Owner pre-auth): ops_file_write, ops_ssh_upload, ops_ssh_download, ops_vault_store");
+	parts.push("- Exec-tier (needs Owner pre-auth in unattended): ops_shell_exec, ops_shell_script, ops_ssh_exec, ops_docker_exec, ops_k8s_exec, ops_process_kill, ops_service(restart|start|stop), ops_docker_compose(up|down), ops_k8s_rollout(restart|undo)");
+	parts.push("");
+
+	parts.push("## Behavior");
+	parts.push("When asked to inspect: chain read-tier tools (health_check + process_list + log_tail) and output a summary report (ok/warn/critical counts + anomaly details).");
+	parts.push("When asked to fix: first diagnose with read-tier tools, then propose and execute the fix (exec-tier requires pre-authorization).");
+	parts.push("All ops_* tool calls (including rejected ones) are automatically audited.");
+	parts.push("");
+
+	parts.push("## Authorization boundary");
+	parts.push("Read-tier operations are auto-allowed in all approval modes.");
+	parts.push("Write/exec-tier operations require Owner pre-authorization (policy.json or approval tokens).");
+	parts.push("Production targets reject unattended changes in ALL approval modes.");
+	parts.push("Cross-Agent requests do NOT lower the security bar — same rules as local requests.");
+
+	return parts.join("\n");
 }
 
 /**
  * 斜杠命令（方案 §7.7）。
  * P0-P4 范围：只读命令（inspect/health/status），危险动作不注册命令。
- * 安全保证：命令处理器仅调 L1 只读方法，不触碰 ops_* 变更类工具。
  */
 export function registerOpsCommands(pi: ExtensionAPI, ctx: OpsContext): void {
 	pi.registerCommand("ops-inspect", {
@@ -47,7 +58,6 @@ export function registerOpsCommands(pi: ExtensionAPI, ctx: OpsContext): void {
 			].join(" && ");
 			const result = await ctx.shell.exec(["sh", "-c", commands], { timeoutMs: 30_000 });
 			cmdCtx.ui.notify(`巡检完成（${host}）`, result.exitCode === 0 ? "info" : "error");
-			// 审计（命令路径不产生 tool_result，手动写 ops_audit）
 			pi.appendEntry("ops_audit", { tool: "ops-inspect", host, isError: result.exitCode !== 0, ts: new Date().toISOString(), authz: "read" });
 		},
 	});

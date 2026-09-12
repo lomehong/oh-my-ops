@@ -119,9 +119,9 @@ case "${1:-}" in
     shift; FOREGROUND=false; EXTRA_ARGS=()
     for arg in "$@"; do case "$arg" in --foreground) FOREGROUND=true ;; *) EXTRA_ARGS+=("$arg") ;; esac; done
     if [ "$FOREGROUND" = true ]; then
-      echo "[omo] 前台服务模式"; exec omp --mode rpc "${EXTRA_ARGS[@]}"
+      echo "[omo] 前台服务模式"; exec omp --profile ops --extension "$HOME/.omp/agent/extensions/ops-pi" --mode rpc "${EXTRA_ARGS[@]}"
     else
-      echo "[omo] 后台服务…"; nohup omp --mode rpc "${EXTRA_ARGS[@]}" > /tmp/omo-serve.log 2>&1 & echo $! > /tmp/omo-serve.pid
+      echo "[omo] 后台服务…"; nohup omp --profile ops --extension "$HOME/.omp/agent/extensions/ops-pi" --mode rpc "${EXTRA_ARGS[@]}" > /tmp/omo-serve.log 2>&1 & echo $! > /tmp/omo-serve.pid
       echo "[omo] ✓ PID $(cat /tmp/omo-serve.pid)"
     fi ;;
   status)
@@ -142,7 +142,7 @@ case "${1:-}" in
     echo "  omo install              部署"
     echo "  其他参数透传 omp" ;;
   *)
-    exec omp "$@" ;;
+    exec omp --profile ops --extension "$HOME/.omp/agent/extensions/ops-pi" "$@" ;;
 esac
 OMOEOF
 chmod +x "$BIN_DST"

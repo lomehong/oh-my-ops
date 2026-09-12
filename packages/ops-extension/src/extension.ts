@@ -9,7 +9,6 @@ import { registerDockerTools, registerK8sTools } from "./tools/docker-k8s.ts";
 import { registerServiceTools } from "./tools/service.ts";
 import { setupHooks } from "./hooks.ts";
 import { registerOpsCommands } from "./commands.ts";
-import { buildScenarioHints } from "./commands.ts";
 
 /**
  * OpsPi 扩展入口（方案 §7.3）。
@@ -31,21 +30,5 @@ export default function (pi: ExtensionAPI): void {
 	registerReadOnlyTools(pi, ctx);
 
 	registerOpsCommands(pi, ctx);
-	setupHooks(pi, ctx, { hasUI: false });
-
-	// 场景提示词注入（before_agent_start 返回值，O10）
-	pi.on("before_agent_start", async (event) => {
-		const hints = buildScenarioHints(config);
-		if (!hints) return;
-		const base = Array.isArray(event.systemPrompt) ? event.systemPrompt.join("\n\n") : String(event.systemPrompt);
-		return { systemPrompt: `${base}\n\n${hints}` };
-	});
-
-	// 跨 Agent 降级提示（身份归 Yuyi 插件；适配器缺席时 notify）
-	pi.on("session_start", async (_e, c) => {
-		const hasYuyi = c.sessionManager !== undefined; // 占位：检测 Yuyi 适配器在场
-		if (!hasYuyi) return;
-		// Yuyi 适配器在场 → 跨 Agent 路径可用（只读）
-		c.ui.notify("ops-pi：Yuyi 适配器在场，跨 Agent 只读请求已启用", "info");
-	});
+	setupHooks(pi, ctx);
 }
