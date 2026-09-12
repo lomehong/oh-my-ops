@@ -22,11 +22,12 @@ bash scripts/install.sh
 
 安装脚本会交互式提示输入 **Yuyi Agent Token**，然后自动完成：
 
-1. 部署 ops-pi 扩展到 omp（自动发现，无需手动挂载）
+1. 部署 ops-pi 扩展到 omp profile `ops`（身份隔离，不读全局 AGENTS.md）
 2. 部署 Yuyi 适配器（跨 Agent 通信）
-3. 创建 `omo` CLI
+3. 创建 `omo` CLI（自动带 `--profile ops --extension` + `OMO_APP_NAME=OpsPi`）
 4. 初始化策略目录（缺省：变更类操作全拒）
 5. 写入 Yuyi 通讯配置（`~/.yuyi/agent.json` + `~/.yuyi/env`）
+6. omp 品牌补丁（可选）：让 TUI 横幅/进程名/UA 显示 OpsPi——需要写 omp 安装目录，若提示 EACCES 手动执行一次 `sudo node scripts/patch-omp-brand.mjs` 即可；不打补丁不影响功能，只是界面仍显示 omp
 
 安装完成后 `omo` 命令即可使用，**无需任何 `-e` 挂载参数**。
 

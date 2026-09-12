@@ -114,14 +114,16 @@ set -euo pipefail
 # 加载 Yuyi 环境变量（Hub / Yufu URL）
 [ -f "$HOME/.yuyi/env" ] && source "$HOME/.yuyi/env"
 export OPS_PI_SANDBOX="${OPS_PI_SANDBOX:-0}"
+export OMO_APP_NAME="OpsPi"
+export OMO_TIPS=$'/ops-inspect <主机> 执行标准巡检（只读）\n/ops-health 十秒健康快照；/ops-status 查看策略/沙箱/凭据状态\n只读 ops 工具自动放行；变更类需 Owner 预授权（policy.json）\n无人值守下生产目标变更一律拒绝——这是设计，不是故障\nomo serve 常驻后，cron/webhook 可直接触发巡检与诊断\nPress ctrl+r to search your prompt history\nCtrl+D exits but keeps your draft saved'
 case "${1:-}" in
   serve)
     shift; FOREGROUND=false; EXTRA_ARGS=()
     for arg in "$@"; do case "$arg" in --foreground) FOREGROUND=true ;; *) EXTRA_ARGS+=("$arg") ;; esac; done
     if [ "$FOREGROUND" = true ]; then
-      echo "[omo] 前台服务模式"; exec omp --mode rpc "${EXTRA_ARGS[@]}"
+      echo "[omo] 前台服务模式"; exec omp --profile ops --extension "$HOME/.omp/agent/extensions/ops-pi" --mode rpc "${EXTRA_ARGS[@]}"
     else
-      echo "[omo] 后台服务…"; nohup omp --mode rpc "${EXTRA_ARGS[@]}" > /tmp/omo-serve.log 2>&1 & echo $! > /tmp/omo-serve.pid
+      echo "[omo] 后台服务…"; nohup omp --profile ops --extension "$HOME/.omp/agent/extensions/ops-pi" --mode rpc "${EXTRA_ARGS[@]}" > /tmp/omo-serve.log 2>&1 & echo $! > /tmp/omo-serve.pid
       echo "[omo] ✓ PID $(cat /tmp/omo-serve.pid)"
     fi ;;
   status)
@@ -142,10 +144,19 @@ case "${1:-}" in
     echo "  omo install              部署"
     echo "  其他参数透传 omp" ;;
   *)
-    exec omp "$@" ;;
+    exec omp --profile ops --extension "$HOME/.omp/agent/extensions/ops-pi" "$@" ;;
 esac
 OMOEOF
 chmod +x "$BIN_DST"
+
+echo "[5/5] omp 品牌补丁…"
+PATCH="$(cd "$(dirname "$0")" && pwd)/scripts/patch-omp-brand.mjs"
+if node "$PATCH" 2>/dev/null; then
+  :
+else
+  echo "  ⚠ 无权限写入 omp 产物——手动执行一次以下命令即可："
+  echo "    sudo node $PATCH"
+fi
 echo "  ✓ $BIN_DST"
 
 if [ ! -f "$POLICY_DST/policy.json" ]; then

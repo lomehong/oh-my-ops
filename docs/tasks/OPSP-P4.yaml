@@ -1,6 +1,6 @@
 id: 'OPSP-P4'
 title: '编排模式 + 跨 Agent 只读降级路径'
-state: '待确认'
+state: '已落定'
 level: 'L2'
 created: '2026-09-12T06:01:26.734Z'
 accept:
@@ -21,6 +21,10 @@ events:
     op: 'report'
     by: 'omp-architect-session'
     note: 'P4 编排模式 + 跨 Agent 只读降级路径——运行时验收 2/2 通过'
+  - ts: '2026-09-12T13:26:03.311Z'
+    op: 'confirm'
+    by: '主人'
+    note: '2/2 运行时验收通过'
 branch: 'feature/OPSP-P4-orchestration-crossagent'
 report:
   summary: 'P4 编排模式 + 跨 Agent 只读降级路径——运行时验收 2/2 通过'
@@ -34,3 +38,5 @@ report:
     - 'yuyi 适配器真实版本共载冒烟（U1 持续登记）'
   at: '2026-09-12T09:01:00.590Z'
   by: 'omp-architect-session'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-09-12）'

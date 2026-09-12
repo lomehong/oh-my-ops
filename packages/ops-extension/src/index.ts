@@ -3,3 +3,4 @@ export { assertPlatformAtLoad, assertPlatformAtSessionStart, platformChecks } fr
 export { registerOpsTool } from "./approvals.ts";
 export { assertToolRegistryIntegrity, onToolCall, assertAuthorized } from "./guards.ts";
 export { setupHooks } from "./hooks.ts";
+export { buildOpsPiSystemPrompt, registerOpsCommands } from "./commands.ts";

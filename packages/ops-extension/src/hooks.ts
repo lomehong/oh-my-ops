@@ -1,63 +1,78 @@
 import { assertToolRegistryIntegrity, onToolCall } from "./guards.ts";
 import { assertPlatformAtSessionStart } from "./platform.ts";
+import { buildOpsPiSystemPrompt } from "./commands.ts";
 import type { OpsContext } from "./context.ts";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
-/**
- * P0 钩子装配（方案 §7.4 / §7.4.5 / §5 Contract ②⑤）。
- * —— session_start：平台 ctx 侧能力校验（X15）→ 工具清单断言（O11/X15）→ 沙箱降级提示（§7.4.3）
- * —— tool_call：② 内容硬拒 + ①-b 无人值守兜底（均同步、模式无关，O6/X10）
- * —— tool_execution_end：审计（R-4：被阻断调用只有该事件；N-4/RR-3：原因从结果文本提取，X23）
- */
-export function setupHooks(pi: ExtensionAPI, ctx: OpsContext, uiState: { hasUI: boolean }): void {
+export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
+	// ── session_start ──
 	pi.on("session_start", async (_event, sessionCtx) => {
+		// ① 平台 ctx 侧能力校验（X15）
 		assertPlatformAtSessionStart(sessionCtx);
+
+		// ② 工具清单断言（O11/X15）
 		assertToolRegistryIntegrity(pi);
 
-		// §7.4.3 降级可发现：策略未配置 = 变更类操作全拒（P0 为全拒基线）
+		// ③ 降级可发现性（§7.4.3）
 		if (!ctx.targetPolicy.isConfigured) {
 			sessionCtx.ui.notify("ops-pi：未配置目标策略（.ops-pi/policy.json）——变更类操作一律拒绝", "warning");
 		}
-		// §7.4.3 降级可发现：沙箱未检测到（P0 以环境标记判定）
 		if (process.env.OPS_PI_SANDBOX !== "1") {
-			sessionCtx.ui.notify("ops-pi：未检测到沙箱——运行于进程级隔离（§7.1），路径边界无额外限制", "warning");
+			sessionCtx.ui.notify("ops-pi：未检测到沙箱——运行于进程级隔离（§7.1）", "warning");
+		}
+
+		// ④ 品牌标识
+		// 品牌标识：omp TUI 由宿主控制，ops-pi 通过 notify 展示身份
+		sessionCtx.ui.notify("OpsPi 运维智能体已加载", "info");
+
+		// ⑤ 巡检轮询（受管定时器，session_shutdown 自动清理）
+		if (ctx.config?.health?.autoPollIntervalMs) {
+			sessionCtx.setInterval(async () => {
+				const report = await ctx.shell.exec(
+					["sh", "-c", "uptime && free -h | head -3 && df -h / | tail -1"],
+					{ timeoutMs: 30_000 },
+				);
+				if (report.exitCode === 0) {
+					pi.sendUserMessage(`[自动巡检] ${report.stdout}`, { deliverAs: "followUp" });
+				}
+			}, ctx.config.health.autoPollIntervalMs);
 		}
 	});
 
-	pi.on("tool_call", async (event, sessionCtx) => {
-		uiState.hasUI = sessionCtx.hasUI; // 同步兜底层所需的交互态（X10）
-		return onToolCall(event, ctx, uiState);
+	// ── before_agent_start：OpsPi 身份注入（覆盖 omp 编码助手身份）──
+	pi.on("before_agent_start", async (event) => {
+		const opsPrompt = buildOpsPiSystemPrompt(ctx);
+		const base = Array.isArray(event.systemPrompt)
+			? event.systemPrompt.join("\n\n")
+			: String(event.systemPrompt ?? "");
+		// ★ 前插 OpsPi 身份（优先级高于 AGENTS.md 等全局上下文文件）
+		return { systemPrompt: `${opsPrompt}\n\n${base}` };
 	});
 
+	// ── tool_call：①-b 兜底 + ② 内容硬拒（同步、模式无关）──
+	pi.on("tool_call", async (event, sessionCtx) => {
+		if (!event.toolName.startsWith("ops_")) return;
+		return onToolCall(event, ctx.authzView, { hasUI: sessionCtx.hasUI });
+	});
+
+	// ── tool_execution_end：审计（R-4：被阻断调用只有此事件）──
 	pi.on("tool_execution_end", async (event) => {
 		if (!event.toolName.startsWith("ops_")) return;
-		const reason = reasonText(event.result);
+		const result = event.result as Record<string, unknown> | undefined;
+		const contentArr = result?.content as Array<{ text?: string }> | undefined;
+		const reason = event.isError && Array.isArray(contentArr) ? contentArr[0]?.text : undefined;
+		const details = result?.details as Record<string, unknown> | undefined;
+
 		pi.appendEntry("ops_audit", {
 			tool: event.toolName,
 			toolCallId: event.toolCallId,
 			isError: event.isError,
 			ts: new Date().toISOString(),
-			authz: ctx.lastAuthzSource(),
-			reasonClass: reason === undefined ? undefined : reasonClass(reason),
-			reason,
+			authz: (details?.authz as string) ?? (event.isError ? "blocked" : "unknown"),
+			reasonClass: reason?.startsWith("[ERR_PERMISSION]") ? "ERR_PERMISSION"
+				: reason?.startsWith("[ERR_POLICY]") ? "ERR_POLICY"
+				: undefined,
+			reason: reason ?? undefined,
 		});
 	});
-}
-
-/** 拒绝原因提取（X23：结果文本携带宿主/钩子拒绝原因） */
-function reasonText(result: unknown): string | undefined {
-	if (typeof result !== "object" || result === null || !("content" in result)) return undefined;
-	const content: unknown = result.content;
-	if (!Array.isArray(content)) return undefined;
-	const first: unknown = content[0];
-	if (typeof first !== "object" || first === null || !("text" in first)) return undefined;
-	const text: unknown = first.text;
-	return typeof text === "string" && text !== "" ? text : undefined;
-}
-
-function reasonClass(reason: string): string | undefined {
-	if (reason.startsWith("[ERR_PERMISSION]")) return "ERR_PERMISSION";
-	if (reason.startsWith("[ERR_POLICY]")) return "ERR_POLICY";
-	if (reason.includes("is blocked by tool policy")) return "host-policy";
-	return undefined;
 }
