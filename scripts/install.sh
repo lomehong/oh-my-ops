@@ -51,6 +51,10 @@ if [ -z "$TOKEN" ] && [ -t 0 ]; then
   echo -n "Yuyi Agent Token（必填，从御符获取）: "
   read -r TOKEN
 fi
+if [ -z "$AGENT_NAME" ] && [ -f "$YUYI_DIR/agent.json" ]; then
+  AGENT_NAME=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$YUYI_DIR/agent.json','utf8')).name||'')}catch{}" 2>/dev/null)
+  [ -n "$AGENT_NAME" ] && echo "↺ 沿用已有设备名：$AGENT_NAME"
+fi
 if [ -z "$AGENT_NAME" ]; then
   AGENT_NAME=$(hostname)
   echo "设备名（缺省 $AGENT_NAME）: "
