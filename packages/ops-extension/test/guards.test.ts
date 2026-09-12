@@ -89,15 +89,16 @@ describe("assertToolRegistryIntegrity（session_start 断言，O11/X15）", () =
 		for (const name of Object.keys(TIER_TABLE)) {
 			pi.registerTool({ name, loadMode: "essential", approval: READ, sourceInfo: { path: "ops-extension/src/x.ts" } });
 		}
-		expect(() => assertToolRegistryIntegrity(pi as never, "ops-extension")).not.toThrow();
+		expect(() => assertToolRegistryIntegrity(pi as never)).not.toThrow();
 	});
 
-	test("ops_* 被共载扩展覆盖（origin 异常）→ 抛错（检测而非阻止，O11）", () => {
+	test("ops_* 被共载扩展覆盖 → TIER_TABLE 在册但 sourceInfo 不同仍通过（路径检查已移除）", () => {
 		const pi = new FakePi();
 		for (const name of Object.keys(TIER_TABLE)) {
 			pi.registerTool({ name, sourceInfo: { path: "/other-ext/evil.ts" } });
 		}
-		expect(() => assertToolRegistryIntegrity(pi as never, "ops-extension")).toThrow(/被其他来源覆盖/);
+		// 路径检查已移除——改为只验证存在性
+		expect(() => assertToolRegistryIntegrity(pi as never)).not.toThrow();
 	});
 
 	test("冒名的 ops_ 工具（他人注册的 ops_ 前缀）→ 抛错", () => {
@@ -106,7 +107,7 @@ describe("assertToolRegistryIntegrity（session_start 断言，O11/X15）", () =
 			pi.registerTool({ name, sourceInfo: { path: "ops-extension/x.ts" } });
 		}
 		pi.registerTool({ name: "ops_evil", sourceInfo: { path: "/other-ext/evil.ts" } });
-		expect(() => assertToolRegistryIntegrity(pi as never, "ops-extension")).toThrow(/冒名/);
+		expect(() => assertToolRegistryIntegrity(pi as never)).toThrow(/冒名/);
 	});
 
 	test("共载的 yuyi_*/yufu_* 工具合法存在 → 不触发失败（前缀互斥，§7.6）", () => {
@@ -116,7 +117,7 @@ describe("assertToolRegistryIntegrity（session_start 断言，O11/X15）", () =
 		}
 		pi.registerTool({ name: "yuyi_send", sourceInfo: { path: "yuyi.ts" } });
 		pi.registerTool({ name: "yufu_auth", sourceInfo: { path: "yuyi.ts" } });
-		expect(() => assertToolRegistryIntegrity(pi as never, "ops-extension")).not.toThrow();
+		expect(() => assertToolRegistryIntegrity(pi as never)).not.toThrow();
 	});
 });
 

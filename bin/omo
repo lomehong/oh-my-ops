@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# omo — oh-my-ops CLI（omp 包装器，ops-pi 扩展已自动集成）
+#
+# 子命令：
+#   omo                      → omp 交互式（ops-pi 自动加载）
+#   omo serve                → 后台服务模式（RPC + 健康巡检轮询）
+#   omo serve --foreground   → 前台服务模式
+#   omo status               → ops-pi 状态
+#   omo install              → 重新部署扩展
+#   其他参数                  → 直接透传给 omp
+
+set -euo pipefail
+export OPS_PI_SANDBOX="${OPS_PI_SANDBOX:-0}"
+
+case "${1:-}" in
+  serve)
+    shift
+    FOREGROUND=false
+    EXTRA_ARGS=()
+    for arg in "$@"; do
+      case "$arg" in
+        --foreground) FOREGROUND=true ;;
+        *) EXTRA_ARGS+=("$arg") ;;
+      esac
+    done
+    if [ "$FOREGROUND" = true ]; then
+      echo "[omo] 前台服务模式（健康巡检轮询启动，Ctrl+C 退出）"
+      exec omp --mode rpc "${EXTRA_ARGS[@]}"
+    else
+      echo "[omo] 后台服务模式启动…"
+      nohup omp --mode rpc "${EXTRA_ARGS[@]}" > /tmp/omo-serve.log 2>&1 &
+      OMO_PID=$!
+      echo $OMO_PID > /tmp/omo-serve.pid
+      echo "[omo] ✓ PID $OMO_PID（日志 /tmp/omo-serve.log）"
+      echo "  停止：kill $(cat /tmp/omo-serve.pid)"
+    fi
+    ;;
+  status)
+    echo "═══ oh-my-ops 状态 ═══"
+    if [ -d "$HOME/.omp/agent/extensions/ops-pi" ]; then
+      echo "  扩展：✓ 已部署"
+    else
+      echo "  扩展：✗ 未部署（运行 omo install）"
+    fi
+    if [ -f /tmp/omo-serve.pid ]; then
+      PID=$(cat /tmp/omo-serve.pid)
+      if kill -0 "$PID" 2>/dev/null; then
+        echo "  服务：✓ 运行中（PID $PID）"
+      else
+        echo "  服务：✗ 已停止"
+      fi
+    else
+      echo "  服务：未启动（omo serve 启动）"
+    fi
+    if [ -f "$HOME/.ops-pi/policy.json" ]; then
+      echo "  策略：✓ 已配置"
+    else
+      echo "  策略：⚠ 未配置（变更类操作全拒）"
+    fi
+    if [ "${OPS_PI_SANDBOX:-0}" = "1" ]; then
+      echo "  沙箱：✓ 已启用"
+    else
+      echo "  沙箱：⚠ 未启用（进程级隔离）"
+    fi
+    ;;
+  install)
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    if [ -f "$SCRIPT_DIR/scripts/install.sh" ]; then
+      bash "$SCRIPT_DIR/scripts/install.sh"
+    else
+      echo "✗ install.sh 不在预期位置"
+      exit 1
+    fi
+    ;;
+  help|--help|-h)
+    echo "omo — oh-my-ops CLI"
+    echo ""
+    echo "用法："
+    echo "  omo                      交互式会话（ops-pi 自动加载）"
+    echo "  omo serve                后台服务模式（健康巡检轮询）"
+    echo "  omo serve --foreground   前台服务模式"
+    echo "  omo status               查看 ops-pi 状态"
+    echo "  omo install              重新部署扩展"
+    echo ""
+    echo "其他参数透传给 omp："
+    echo "  omo -p '巡检 web-01'     非交互巡检"
+    echo "  omo -c                   继续上次会话"
+    echo "  omo --help               omp 帮助"
+    ;;
+  *)
+    exec omp "$@"
+    ;;
+esac

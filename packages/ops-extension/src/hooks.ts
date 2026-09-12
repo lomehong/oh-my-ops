@@ -3,7 +3,6 @@ import { assertPlatformAtSessionStart } from "./platform.ts";
 import type { OpsContext } from "./context.ts";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
-export const OWN_MARKER = "ops-extension";
 /**
  * P0 钩子装配（方案 §7.4 / §7.4.5 / §5 Contract ②⑤）。
  * —— session_start：平台 ctx 侧能力校验（X15）→ 工具清单断言（O11/X15）→ 沙箱降级提示（§7.4.3）
@@ -13,7 +12,7 @@ export const OWN_MARKER = "ops-extension";
 export function setupHooks(pi: ExtensionAPI, ctx: OpsContext, uiState: { hasUI: boolean }): void {
 	pi.on("session_start", async (_event, sessionCtx) => {
 		assertPlatformAtSessionStart(sessionCtx);
-		assertToolRegistryIntegrity(pi, OWN_MARKER);
+		assertToolRegistryIntegrity(pi);
 
 		// §7.4.3 降级可发现：策略未配置 = 变更类操作全拒（P0 为全拒基线）
 		if (!ctx.targetPolicy.isConfigured) {
