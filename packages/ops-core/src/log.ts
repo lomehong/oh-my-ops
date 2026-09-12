@@ -21,7 +21,10 @@ export interface GrepResult {
  * 设计 §3.8：日志类工具统一走 ShellExec，不依赖特定日志库。
  */
 export class LogCollector {
-	constructor(private readonly shell: ShellExec = new ShellExec()) {}
+	private readonly shell: ShellExec;
+	constructor(shell: ShellExec = new ShellExec()) {
+		this.shell = shell;
+	}
 
 	/** 读取日志文件末尾 N 行 */
 	async tailFile(path: string, opts: { lines?: number }, execOpts: ExecOptions = {}): Promise<TailResult> {
