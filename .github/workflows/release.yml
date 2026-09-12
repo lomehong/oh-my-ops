@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: 测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 安装依赖
+        run: npm install --ignore-scripts
+
+      - name: L1 测试
+        run: node --test packages/ops-core/test/*.test.ts
+
+      - name: L2 测试
+        run: bun test packages/ops-extension/test/guards.test.ts packages/ops-extension/test/platform.test.ts
+
+      - name: 类型检查
+        run: npx tsc -p packages/ops-core/tsconfig.json --noEmit
+
+  release:
+    name: 打包发布
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 提取版本号
+        id: ver
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      # 打包结构 = git 仓库结构（install.sh 依赖相对路径 packages/…）
+      - name: 打部署包
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          PKG="oh-my-ops-${VERSION}"
+
+          mkdir -p "/tmp/${PKG}"
+          cp -r packages  "/tmp/${PKG}/packages"
+          cp -r bin       "/tmp/${PKG}/bin"
+          cp -r types     "/tmp/${PKG}/types"
+          cp -r vendor    "/tmp/${PKG}/vendor"
+          cp -r docs/examples "/tmp/${PKG}/examples"
+          cp -r scripts   "/tmp/${PKG}/scripts"
+          cp README.md    "/tmp/${PKG}/README.md"
+
+          # 清除不需要的文件
+          find "/tmp/${PKG}" -name "*.test.ts" -delete
+          find "/tmp/${PKG}" -name "*.map" -delete
+
+          cd /tmp
+          tar czf "${PKG}.tar.gz" "${PKG}"
+          sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
+          mv "${PKG}.tar.gz" "${PKG}.tar.gz.sha256" "$GITHUB_WORKSPACE/"
+
+      - name: 发布 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          name: "oh-my-ops ${{ steps.ver.outputs.version }}"
+          body: |
+            ## oh-my-ops ${{ steps.ver.outputs.version }}
+
+            ### 安装
+            ```bash
+            curl -L "https://github.com/lomehong/oh-my-ops/releases/download/${{ steps.ver.outputs.version }}/oh-my-ops-${{ steps.ver.outputs.version }}.tar.gz" | tar xz
+            cd oh-my-ops-*
+            bash scripts/install.sh
+            ```
+
+            ### 验证
+            ```bash
+            omo status
+            omo -p "Use ops_file_read to read /etc/hostname"
+            ```
+          draft: false
+          prerelease: false
+          files: |
+            oh-my-ops-*.tar.gz
+            oh-my-ops-*.tar.gz.sha256
