@@ -2,13 +2,14 @@
 # P3 契约验收：Docker/K8s 工具注册 + 执行路径验证
 # 容器内 docker/kubectl 可能不可用——验收关注「工具被调用且返回 OpsError」，而非「命令成功」
 set -euo pipefail
+export PATH="$HOME/.local/bin:$PATH"
 cd "$(git rev-parse --show-toplevel)"
 
 PASS=0; FAIL=0
 
 echo "═══ ① Docker 工具注册成功（LLM 可见）═══"
 OUT_A=$(mktemp)
-timeout 120 omp --no-session --approval-mode yolo \
+timeout 120 omo --no-session --approval-mode yolo \
   -e packages/ops-extension/src/extension.ts \
   -p "List all tools starting with 'ops_docker'. Return them one per line." \
   > "$OUT_A" 2>&1 || true
@@ -24,7 +25,7 @@ rm -f "$OUT_A"
 
 echo "═══ ② K8s 工具注册成功（LLM 可见）═══"
 OUT_B=$(mktemp)
-timeout 120 omp --no-session --approval-mode yolo \
+timeout 120 omo --no-session --approval-mode yolo \
   -e packages/ops-extension/src/extension.ts \
   -p "List all tools starting with 'ops_k8s'. Return them one per line." \
   > "$OUT_B" 2>&1 || true
@@ -40,7 +41,7 @@ rm -f "$OUT_B"
 
 echo "═══ ③ ops_docker_exec（exec 档）在 yolo 非交互下被 ①-b 拒 ═══"
 OUT_C=$(mktemp)
-timeout 120 omp --no-session --approval-mode yolo \
+timeout 120 omo --no-session --approval-mode yolo \
   -e packages/ops-extension/src/extension.ts \
   -p "Use ops_docker_exec with container='test', command='echo hi'. Report the exact error. Do not explain." \
   > "$OUT_C" 2>&1 || true

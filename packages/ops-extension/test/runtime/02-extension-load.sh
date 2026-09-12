@@ -5,13 +5,14 @@
 #   ② 工具名断言（§5 Contract ②）通过（无 [ops-pi] 工具清单断言失败报错）
 #   ③ 工具注册成功（LLM 可见 ops_file_read / ops_process_list）
 set -euo pipefail
+export PATH="$HOME/.local/bin:$PATH"
 cd "$(git rev-parse --show-toplevel)"
 
 OUT=$(mktemp)
 trap 'rm -f "$OUT"' EXIT
 
 echo "[P0-C] 加载 ops-extension（无共载），验证无平台/断言报错"
-timeout 120 omp --no-session \
+timeout 120 omo --no-session \
   -e packages/ops-extension/src/extension.ts \
   -p "List ALL available tools prefixed with 'ops_'. Return them one per line." \
   > "$OUT" 2>&1 || true

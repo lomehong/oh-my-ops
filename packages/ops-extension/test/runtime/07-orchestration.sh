@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # P4 契约验收：编排模式 + 命令 + 提示词注入
 set -euo pipefail
+export PATH="$HOME/.local/bin:$PATH"
 cd "$(git rev-parse --show-toplevel)"
 
 PASS=0; FAIL=0
 
 echo "═══ ① 斜杠命令 ops-health（只读）═══"
 OUT_A=$(mktemp)
-timeout 120 omp --no-session --approval-mode write \
+timeout 120 omo --no-session --approval-mode write \
   -e packages/ops-extension/src/extension.ts \
   -p "/ops-health" \
   > "$OUT_A" 2>&1 || true
@@ -23,7 +24,7 @@ rm -f "$OUT_A"
 
 echo "═══ ② 提示词注入（before_agent_start）═══"
 OUT_B=$(mktemp)
-timeout 120 omp --no-session --approval-mode yolo \
+timeout 120 omo --no-session --approval-mode yolo \
   -e packages/ops-extension/src/extension.ts \
   -p "List ALL available tools starting with 'ops_'. Return them one per line. Do not explain." \
   > "$OUT_B" 2>&1 || true

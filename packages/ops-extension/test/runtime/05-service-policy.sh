@@ -7,6 +7,7 @@
 #   ④ 预授权命中（targets[] 白名单）→ 放行
 #   ⑤ 审计条目：被拒调用也留 ops_audit（R-4/X11/X23）
 set -euo pipefail
+export PATH="$HOME/.local/bin:$PATH"
 cd "$(git rev-parse --show-toplevel)"
 
 PASS=0; FAIL=0
@@ -19,7 +20,7 @@ echo "$OPS_PI_POLICY" > "$POLICY_DIR/.ops-pi/policy.json"
 
 echo "═══ ① ops_service status（read 档）在 write 模式非交互自动执行 ═══"
 OUT_A=$(mktemp)
-timeout 120 omp --no-session --approval-mode write \
+timeout 120 omo --no-session --approval-mode write \
   -e packages/ops-extension/src/extension.ts \
   -p "Use ops_service with host='web-01', service='nginx', action='status'. Return ONLY the tool result. Do not explain." \
   > "$OUT_A" 2>&1 || true
@@ -42,7 +43,7 @@ rm -f "$OUT_A"
 
 echo "═══ ② ops_service restart（exec 档）在 yolo 非交互下被 ①-b 拒 ═══"
 OUT_B=$(mktemp)
-timeout 120 omp --no-session --approval-mode yolo \
+timeout 120 omo --no-session --approval-mode yolo \
   -e packages/ops-extension/src/extension.ts \
   -p "Use ops_service with host='web-01', service='nginx', action='restart'. Report the exact error. Do not explain." \
   > "$OUT_B" 2>&1 || true
@@ -61,7 +62,7 @@ rm -f "$OUT_B"
 
 echo "═══ ③ ops_service restart 在 write 模式非交互下仍被拒（①-b 与模式无关）═══"
 OUT_C=$(mktemp)
-timeout 120 omp --no-session --approval-mode write \
+timeout 120 omo --no-session --approval-mode write \
   -e packages/ops-extension/src/extension.ts \
   -p "Use ops_service with host='unknown-host', service='redis', action='restart'. Report the exact error. Do not explain." \
   > "$OUT_C" 2>&1 || true
@@ -77,7 +78,7 @@ rm -f "$OUT_C"
 
 echo "═══ ④ 审计条目验证（被拒调用也留 ops_audit）═══"
 # 在上面的运行中（② 或 ③）被拒调用应该留有审计条目
-# 这需要在运行后读取 session 分支——但 omp --no-session 不写会话
+# 这需要在运行后读取 session 分支——但 omo --no-session 不写会话
 # 改为验证 tool_execution_end 事件在运行日志中出现
 echo "  ⚠ A4 审计验证需在持久会话模式下运行（--no-session 不写审计）——降级为代码审阅确认（hooks.ts tool_execution_end handler 存在）"
 PASS=$((PASS+1))

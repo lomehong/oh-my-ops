@@ -2,13 +2,14 @@
 # P0 契约验收：session_start 工具清单断言在加载期触发（O11/X15）
 # 同时加载 ops-extension 与模拟 Yuyi stub（无冲突版本），验证断言正常通过
 set -euo pipefail
+export PATH="$HOME/.local/bin:$PATH"
 cd "$(git rev-parse --show-toplevel)"
 
 OUT=$(mktemp)
 trap 'rm -f "$OUT"' EXIT
 
 echo "[P0-D] 共载 ops-extension + yuyi stub（无重名），验证断言通过且工具可用"
-timeout 120 omp --no-session --approval-mode write \
+timeout 120 omo --no-session --approval-mode write \
   -e packages/ops-extension/src/extension.ts \
   -e packages/ops-extension/test/runtime/stubs-yuyi.ts \
   -p "Use ops_file_read to read /etc/hostname. Return ONLY the file content." \

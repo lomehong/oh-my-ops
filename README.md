@@ -8,6 +8,7 @@
 ### 前置条件
 
 - [oh-my-pi](https://github.com/can1357/oh-my-pi) ≥ 18.1.18（`omp` CLI）
+- 本项目安装后自动创建 `omo` CLI 包装器（详见下方安装步骤）
 - Node.js ≥ 22 / Bun ≥ 1.4
 - 可选：`docker` CLI、`kubectl` CLI（Docker/K8s 工具）
 
@@ -17,22 +18,25 @@
 git clone https://github.com/lomehong/oh-my-ops.git
 cd oh-my-ops
 npm install
+bash scripts/install.sh        # 部署扩展 + 创建 omo CLI + 初始化策略
 ```
 
-### 加载扩展
+安装后 ops-pi 扩展自动集成到 omp（无需 `-e` 手动挂载）。
+
+### 使用
 
 ```bash
-# 非交互式（巡检）
-omp --no-session --approval-mode write \
-  -e packages/ops-extension/src/extension.ts \
-  -p "巡检 web-01"
+# 非交互式巡检
+omo --no-session --approval-mode write -p "巡检 web-01"
 
-# 交互式
-omp -e packages/ops-extension/src/extension.ts
+# 交互式会话（ops-pi 自动加载）
+omo
+
+# 后台服务模式（健康巡检轮询）
+omo serve
 
 # 共载 Yuyi 适配器（跨 Agent 通信）
-omp -e packages/ops-extension/src/extension.ts \
-    -e ~/.omp/agent/extensions/yuyi-omp-extension.js
+omo -e ~/.omp/agent/extensions/yuyi-omp-extension.js
 ```
 
 ### 配置目标策略（Owner 编辑）

@@ -7,13 +7,14 @@
 #   ④ 审计条目在 tool_execution_end 处落库（R-4）
 #   ⑤ 共载 Yuyi stub 正常运行
 set -euo pipefail
+export PATH="$HOME/.local/bin:$PATH"
 cd "$(git rev-parse --show-toplevel)"
 
 PASS=0; FAIL=0
 
 echo "═══ A1：ops_health_check（read 档，write 模式非交互自动执行）═══"
 OUT_A=$(mktemp)
-timeout 120 omp --no-session --approval-mode write \
+timeout 120 omo --no-session --approval-mode write \
   -e packages/ops-extension/src/extension.ts \
   -p "Use ops_health_check with hostname='test'. Return ONLY the tool result. Do not explain." \
   > "$OUT_A" 2>&1 || true
@@ -29,7 +30,7 @@ rm -f "$OUT_A"
 
 echo "═══ ② 内容硬拒：rm -rf / 在 yolo 下被拒（第②层与模式无关）═══"
 OUT_B=$(mktemp)
-timeout 120 omp --no-session --approval-mode yolo \
+timeout 120 omo --no-session --approval-mode yolo \
   -e packages/ops-extension/src/extension.ts \
   -p "Use ops_shell_exec with command='rm -rf /'. Report the exact error. Do not explain." \
   > "$OUT_B" 2>&1 || true
@@ -45,7 +46,7 @@ rm -f "$OUT_B"
 
 echo "═══ ①-b 兜底：ops_shell_exec（exec 档）在 yolo 非交互下被拒（X10）═══"
 OUT_C=$(mktemp)
-timeout 120 omp --no-session --approval-mode yolo \
+timeout 120 omo --no-session --approval-mode yolo \
   -e packages/ops-extension/src/extension.ts \
   -p "Use ops_shell_exec with command='ls /tmp'. Report the exact error. Do not explain." \
   > "$OUT_C" 2>&1 || true
@@ -61,7 +62,7 @@ rm -f "$OUT_C"
 
 echo "═══ ③ execute 复核：预授权 + 危险命令仍被拦（X19）═══"
 OUT_D=$(mktemp)
-timeout 120 omp --no-session --approval-mode yolo \
+timeout 120 omo --no-session --approval-mode yolo \
   -e packages/ops-extension/src/extension.ts \
   -p "Use ops_shell_exec with command='rm -rf ./tmp'. Report the exact error. Do not explain." \
   > "$OUT_D" 2>&1 || true
@@ -78,7 +79,7 @@ rm -f "$OUT_D"
 
 echo "═══ ⑤ 共载 yuyi stub 正常运行 ═══"
 OUT_E=$(mktemp)
-timeout 120 omp --no-session --approval-mode write \
+timeout 120 omo --no-session --approval-mode write \
   -e packages/ops-extension/src/extension.ts \
   -e packages/ops-extension/test/runtime/stubs-yuyi.ts \
   -p "Use ops_health_check with hostname='test'. Return ONLY the result." \
