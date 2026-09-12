@@ -43,8 +43,10 @@ if [[ "$UNINSTALL" == true ]]; then
   echo "[uninstall] ✓ 已移除（策略与令牌保留在 ~/.ops-pi/ 和 ~/.yuyi/）"
   exit 0
 fi
-
-# ── 交互式补全缺失参数
+if [ -z "$TOKEN" ] && [ -f "$YUYI_DIR/agent.json" ]; then
+  TOKEN=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$YUYI_DIR/agent.json','utf8')).token||'')}catch{}" 2>/dev/null)
+  [ -n "$TOKEN" ] && echo "↺ 沿用已有 Yuyi token（如需更换，传 --token <新token>）"
+fi
 if [ -z "$TOKEN" ] && [ -t 0 ]; then
   echo -n "Yuyi Agent Token（必填，从御符获取）: "
   read -r TOKEN
@@ -63,10 +65,9 @@ echo "  设备名：$AGENT_NAME"
 echo "  Hub：$HUB_URL"
 echo "  Yufu：$YUFU_URL"
 echo
-
 # ── 1) 部署 ops-pi 扩展
 echo "[1/4] 部署 ops-pi 扩展…"
-rm -rf "$EXT_DST"
+rm -rf "$EXT_DST" "$HOME/.omp/agent/extensions/ops-pi-deps"
 mkdir -p "$EXT_DST/tools"
 for f in "$EXT_SRC"/*.ts; do
   base=$(basename "$f"); [ "$base" = "index.ts" ] && continue; cp "$f" "$EXT_DST/"
