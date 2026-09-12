@@ -740,7 +740,7 @@ export function setupOpsHooks(pi: ExtensionAPI, ctx: OpsToolContext, config: Ops
 | **OPSP-P4** | 编排模式 + 跨 Agent 只读降级路径 | 4 条（见台账） | L2 |
 | **OPSP-P5** | 接入 Yuyi 身份接口开放跨 Agent 写路径（**依赖 B1，阻断**） | 3 条（见台账） | L3 |
 
-> **任务面落点（已补齐机制）**：台账 `<目标项目>/docs/tasks/<taskId>.yaml`，操作入口 `scripts/task-ledger.mjs`（本次落定后新实现，符合 `principle/task-and-memory-surface.md` 五操作 + 四态状态机 + 四不变量；`--selftest` / `--validate` 通过）。
+> **任务面落点（已补齐机制）**：台账 `<目标项目>/docs/tasks/<taskId>.yaml`，操作入口 `scripts/task-ledger.mjs`（本次落定后新实现，符合 `principle/task-and-memory-surface.md` 五操作 + 四态状态机 + 四不变量 + `rescope`；`--selftest` 10 项 / `--validate` 通过）。目标仓 `github.com/lomehong/oh-my-ops`，分支 `main`；台账不持久化设备路径（随项目版本化）。
 > 任务已立项（`create`），全部处于「待执行」；执行方按分工 `claim` 认领，完成后 `report` 自报，**`confirm` 只能由主人发起且必须带来源**（脚本级拒绝无来源确认、非法跳步、未落定归档）。
 
 ---
@@ -755,7 +755,7 @@ export function setupOpsHooks(pi: ExtensionAPI, ctx: OpsToolContext, config: Ops
 | Cross-team Commitment | 走 Yuyi 受支持身份接口（B1，**阻断**，需主人中转） | 主人 2026-09-12 |
 | High-risk Change | 档位表 + 生产变更禁止无人值守 + 高危需 Owner 明示批准 | 主人 2026-09-12 |
 | Unknown（需求来源） | 验收标准 A1–A4 由主人口述确认 | 主人 2026-09-12 |
-| 环境（仓库/git） | 延后确认；先落 `/workspace` | 主人 2026-09-12 |
+| 环境（仓库/git） | 目标仓 `github.com/lomehong/oh-my-ops`（分支 `main`）；目录按适配层标准 `docs/designs\|reports\|tasks` | 主人 2026-09-12 |
 | **方案落定** | v4.3 经两轮独立复审 + 主人确认，状态改「**已落定**」；进入任务拆解与实现（§8） | 主人 2026-09-12 |
 
 ---
