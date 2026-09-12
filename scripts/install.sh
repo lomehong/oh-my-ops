@@ -132,7 +132,7 @@ case "${1:-}" in
     [ -d "$HOME/.omp/agent/extensions/ops-pi" ] && echo "  扩展：✓" || echo "  扩展：✗"
     [ -f /tmp/omo-serve.pid ] && kill -0 "$(cat /tmp/omo-serve.pid)" 2>/dev/null && echo "  服务：✓ PID $(cat /tmp/omo-serve.pid)" || echo "  服务：✗"
     [ -f "$HOME/.ops-pi/policy.json" ] && echo "  策略：✓" || echo "  策略：⚠ 未配置（变更全拒）"
-    [ -f "$HOME/.yuyi/agent.json" ] && echo "  Yuyi：✓ 已配置" || echo "  Yuyi：✗ 未配置"
+    grep -q '"token": "[^"]' "$HOME/.yuyi/agent.json" 2>/dev/null && echo "  Yuyi：✓ 已配置" || echo "  Yuyi：✗ 缺 token（bash scripts/install.sh --token <token> 补上）"
     [ "${OPS_PI_SANDBOX:-0}" = "1" ] && echo "  沙箱：✓" || echo "  沙箱：⚠" ;;
   install)
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
