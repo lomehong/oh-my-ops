@@ -114,6 +114,7 @@ set -euo pipefail
 # 加载 Yuyi 环境变量（Hub / Yufu URL）
 [ -f "$HOME/.yuyi/env" ] && source "$HOME/.yuyi/env"
 export OPS_PI_SANDBOX="${OPS_PI_SANDBOX:-0}"
+export OMO_APP_NAME="OpsPi"
 case "${1:-}" in
   serve)
     shift; FOREGROUND=false; EXTRA_ARGS=()
@@ -146,6 +147,15 @@ case "${1:-}" in
 esac
 OMOEOF
 chmod +x "$BIN_DST"
+
+echo "[5/5] omp 品牌补丁…"
+PATCH="$(cd "$(dirname "$0")" && pwd)/scripts/patch-omp-brand.mjs"
+if node "$PATCH" 2>/dev/null; then
+  :
+else
+  echo "  ⚠ 无权限写入 omp 产物——手动执行一次以下命令即可："
+  echo "    sudo node $PATCH"
+fi
 echo "  ✓ $BIN_DST"
 
 if [ ! -f "$POLICY_DST/policy.json" ]; then
