@@ -1,6 +1,6 @@
 id: 'OPSP-P3'
 title: '高危批准令牌 + Docker/K8s/Health'
-state: '待确认'
+state: '已落定'
 level: 'L2'
 created: '2026-09-12T06:01:26.668Z'
 accept:
@@ -21,6 +21,10 @@ events:
     op: 'report'
     by: 'omp-architect-session'
     note: 'P3 高危批准令牌 + Docker/K8s/Health——运行时验收 3/3 通过'
+  - ts: '2026-09-12T08:59:26.643Z'
+    op: 'confirm'
+    by: '主人'
+    note: '3/3 运行时验收通过'
 branch: 'feature/OPSP-P3-tokens-docker-k8s-health'
 report:
   summary: 'P3 高危批准令牌 + Docker/K8s/Health——运行时验收 3/3 通过'
@@ -34,3 +38,5 @@ report:
     - 'Docker CLI 在容器不可用（EXEC_FAILED 预期）；kubectl 同理'
   at: '2026-09-12T08:58:42.150Z'
   by: 'omp-architect-session'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-09-12）'
