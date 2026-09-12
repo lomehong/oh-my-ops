@@ -56,7 +56,8 @@ declare module "@oh-my-pi/pi-coding-agent" {
 				override?: boolean;
 				policy?: "allow" | "deny" | "prompt";
 				policyKey?: string;
-		  };
+		  }
+		| ((args: unknown) => ToolApproval);
 
 	export interface AgentToolResult {
 		content: Array<{ type: "text"; text: string } | { type: "image"; data?: unknown }>;

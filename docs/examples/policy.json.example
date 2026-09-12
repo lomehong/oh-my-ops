@@ -1,0 +1,20 @@
+{
+  "$comment": "OpsPi 目标策略模板（Owner 编辑，defaultDeny）",
+  "$comment2": "production: true 的目标在无人值守下由 ①-b 兜底层拒绝（任何 approvalMode）",
+  "targets": [
+    {
+      "host": "web-01",
+      "services": ["nginx"],
+      "actions": ["restart", "status"],
+      "expiresAt": "2027-12-31T23:59:59Z",
+      "production": false
+    },
+    {
+      "host": "staging-01",
+      "services": ["app"],
+      "actions": ["restart", "status"],
+      "expiresAt": "2027-06-30T00:00:00Z",
+      "production": false
+    }
+  ]
+}

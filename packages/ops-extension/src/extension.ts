@@ -5,6 +5,7 @@ import { OpsContext } from "./context.ts";
 import { registerReadOnlyTools } from "./tools/read-only.ts";
 import { registerShellTools } from "./tools/shell.ts";
 import { registerLogTools } from "./tools/log.ts";
+import { registerServiceTools } from "./tools/service.ts";
 import { setupHooks } from "./hooks.ts";
 
 /**
@@ -21,6 +22,7 @@ export default function (pi: ExtensionAPI): void {
 	// P1：注册所有工具——Shell（exec）+ 日志（read）+ Process/File（read）+ Health/Vault（read）
 	registerShellTools(pi, ctx);
 	registerLogTools(pi, ctx);
+	registerServiceTools(pi, ctx);
 	registerReadOnlyTools(pi, ctx);
 
 	setupHooks(pi, ctx, { hasUI: false });

@@ -20,6 +20,12 @@ export const TIER_TABLE: Readonly<Record<string, Tier | ((args: unknown) => Tier
 	ops_health_poll: READ,
 	ops_vault_list: READ,
 
+	// P2 · action 多态
+	ops_service: (args: unknown) => {
+		const a = (args as Record<string, unknown> | null)?.action;
+		return a === "status" ? READ : EXEC;
+	},
+
 	// P1 · exec
 	ops_shell_exec: EXEC,
 	ops_shell_script: EXEC,
