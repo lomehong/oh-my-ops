@@ -1,0 +1,32 @@
+id: 'GOV-TEST'
+title: '治理链路验证任务（临时）'
+state: '已落定'
+level: 'L1'
+created: '2026-09-12T06:59:29.809Z'
+accept:
+  - '平台 confirm 后删除本任务'
+events:
+  - ts: '2026-09-12T06:59:29.809Z'
+    op: 'create'
+    by: 'observatory 验证'
+    note: '治理链路验证任务（临时）'
+  - ts: '2026-09-12T07:00:27.874Z'
+    op: 'claim'
+    by: 'observatory 验证'
+    note: ''
+  - ts: '2026-09-12T07:00:28.004Z'
+    op: 'report'
+    by: 'observatory 验证'
+    note: ''
+  - ts: '2026-09-12T07:05:07.711Z'
+    op: 'confirm'
+    by: '主人'
+    note: 'observatory'
+report:
+  summary: ''
+  evidence: []
+  pending: []
+  at: '2026-09-12T07:00:28.004Z'
+  by: 'observatory 验证'
+confirmedBy: '主人'
+confirmedVia: 'observatory'

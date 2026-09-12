@@ -1,0 +1,19 @@
+{
+  "name": "oh-my-ops",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpsPi — 基于 oh-my-pi 的运维智能体（方案 v4.3 已落定）",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc -p packages/ops-core/tsconfig.json --noEmit && tsc -p packages/ops-extension/tsconfig.json --noEmit",
+    "ledger:selftest": "node scripts/task-ledger.mjs --selftest",
+    "ledger:validate": "node scripts/task-ledger.mjs --validate"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.6.0"
+  }
+}

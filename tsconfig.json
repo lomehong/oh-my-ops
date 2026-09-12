@@ -1,0 +1,7 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/ops-core" },
+    { "path": "packages/ops-extension" }
+  ]
+}
