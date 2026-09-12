@@ -29,6 +29,24 @@ export const TIER_TABLE: Readonly<Record<string, Tier | ((args: unknown) => Tier
 	// P1 · exec
 	ops_shell_exec: EXEC,
 	ops_shell_script: EXEC,
+	// P3 · Docker
+	ops_docker_ps: READ,
+	ops_docker_logs: READ,
+	ops_docker_exec: EXEC,
+	ops_docker_compose: (args: unknown) => {
+		const a = (args as Record<string, unknown> | null)?.action;
+		return a === "ps" || a === "logs" ? READ : EXEC;
+	},
+
+	// P3 · K8s
+	ops_k8s_pods: READ,
+	ops_k8s_logs: READ,
+	ops_k8s_exec: EXEC,
+	ops_k8s_rollout: (args: unknown) => {
+		const a = (args as Record<string, unknown> | null)?.action;
+		return a === "status" ? READ : EXEC;
+	},
+
 	// P2/P3 的工具在实现时才会加入本表（assertion 只检查已注册工具）
 };
 

@@ -1,6 +1,6 @@
 id: 'OPSP-P2'
 title: '指定服务重启 + 目标策略'
-state: '待确认'
+state: '已落定'
 level: 'L2'
 created: '2026-09-12T06:01:26.601Z'
 accept:
@@ -22,6 +22,10 @@ events:
     op: 'report'
     by: 'omp-architect-session'
     note: 'P2 指定服务重启 + 目标策略——运行时验收 4/4 通过'
+  - ts: '2026-09-12T08:56:28.735Z'
+    op: 'confirm'
+    by: '主人'
+    note: '4/4 运行时验收通过'
 branch: 'feature/OPSP-P2-service-target-policy'
 report:
   summary: 'P2 指定服务重启 + 目标策略——运行时验收 4/4 通过'
@@ -36,3 +40,5 @@ report:
     - 'A4 审计条目在 --no-session 下不可验证（需持久会话）；systemctl 在容器不可用（预期）'
   at: '2026-09-12T08:54:56.974Z'
   by: 'omp-architect-session'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-09-12）'
