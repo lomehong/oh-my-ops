@@ -19,17 +19,14 @@
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 
-const CANDIDATES = [
-	"/usr/local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js",
-	`${process.env.HOME}/.omp/local/pi-coding-agent/dist/cli.js`,
-];
+const argTarget = process.argv[process.argv.indexOf("--target") + 1];
+const CANDIDATES = argTarget ? [argTarget]
+	: [
+		"/usr/local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js",
+		`${process.env.HOME}/.ops-pi/omp/dist/cli.js`,
+	];
 
 const targets = CANDIDATES.filter(existsSync);
-if (targets.length === 0) {
-	console.log("[patch-omp-brand] 未找到 omp 产物，跳过（不影响安装）");
-	process.exit(0);
-}
-
 for (const file of targets) {
 	let src = readFileSync(file, "utf8");
 	const before = src;

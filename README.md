@@ -7,29 +7,39 @@
 
 ### 前置条件
 
-- [oh-my-pi](https://github.com/can1357/oh-my-pi) ≥ 18.1.18
+- [oh-my-pi](https://github.com/can1357/oh-my-pi) ≥ 18.1.18（含 Bun 运行时）
 - Node.js ≥ 22
-- Yuyi Agent Token（从御符平台获取，用于跨 Agent 通信）
+- Yuyi Agent Token（可选，用于跨 Agent 通信；没有也能用全部单机运维功能）
 
 ### 安装
 
 ```bash
-git clone https://github.com/lomehong/oh-my-ops.git
-cd oh-my-ops
-npm install
+# 用户：下载 Release（推荐）
+curl -sL https://github.com/lomehong/oh-my-ops/releases/download/v0.3.0/oh-my-ops-v0.3.0.tar.gz -o oh-my-ops.tar.gz
+tar xzf oh-my-ops.tar.gz && cd oh-my-ops-v0.3.0
+bash scripts/install.sh
+
+# 开发者：从源码
+git clone https://github.com/lomehong/oh-my-ops.git && cd oh-my-ops
 bash scripts/install.sh
 ```
 
-安装脚本会交互式提示输入 **Yuyi Agent Token**，然后自动完成：
+安装一条命令完成，**无需 sudo、无需任何补丁步骤**（OpsPi 品牌已内置）：
 
-1. 部署 ops-pi 扩展到 omp profile `ops`（身份隔离，不读全局 AGENTS.md）
-2. 部署 Yuyi 适配器（跨 Agent 通信）
-3. 创建 `omo` CLI（自动带 `--profile ops --extension` + `OMO_APP_NAME=OpsPi`）
-4. 初始化策略目录（缺省：变更类操作全拒）
-5. 写入 Yuyi 通讯配置（`~/.yuyi/agent.json` + `~/.yuyi/env`）
-6. omp 品牌补丁（可选）：让 TUI 横幅/进程名/UA 显示 OpsPi——需要写 omp 安装目录，若提示 EACCES 手动执行一次 `sudo node scripts/patch-omp-brand.mjs` 即可；不打补丁不影响功能，只是界面仍显示 omp
+```bash
+tar xzf oh-my-ops-v0.3.0.tar.gz && cd oh-my-ops-v0.3.0
+bash scripts/install.sh
+```
 
-安装完成后 `omo` 命令即可使用，**无需任何 `-e` 挂载参数**。
+安装脚本自动完成：
+
+1. 部署 ops-pi 扩展到 `~/.ops-pi/`（自包含，删除解压目录不影响运行）
+2. 构建品牌化 omp 镜像到用户目录（TUI 横幅/tips/面板提示 = OpsPi，不动系统 omp）
+3. 创建 `omo` CLI（启动时自动检测 omp 升级并自愈刷新镜像）
+4. 初始化策略目录（缺省：变更类操作全拒）+ Yuyi 通讯配置（自动沿用已有 token/设备名）
+
+前置条件仅一个：系统已安装 [oh-my-pi](https://github.com/can1357/oh-my-pi) ≥ 18.1.18。
+`omo` 即 OpsPi 完整形态；裸 `omp` 命令完全不受影响。卸载：`bash scripts/install.sh --uninstall`。
 
 ## 日常使用
 
