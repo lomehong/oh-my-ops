@@ -1,0 +1,16 @@
+id: 'OPSP-P2'
+title: '指定服务重启 + 目标策略'
+state: '待执行'
+level: 'L2'
+created: '2026-09-12T06:01:26.601Z'
+accept:
+  - 'ops_service 函数式 approval 按 action 返档（status→read，其余→exec）'
+  - '需求包 A2：仅当「主机+服务名」命中 Owner 允许清单时，无人值守下 restart 放行；未命中被拒并给出原因'
+  - 'targetPolicy defaultDeny：policy.json 缺失时变更类操作全拒并 UI 提示'
+  - '§7.4.4 规范落地：预授权以 defaultDeny 表达在审批层；authorizedExec 为纯函数（断言无副作用，X21）'
+  - '入参篡改负测（需求包 A6）：四方向均不得执行改写后的命令（X16/X17/X19/X20 复现）'
+events:
+  - ts: '2026-09-12T06:01:26.601Z'
+    op: 'create'
+    by: 'architect'
+    note: '指定服务重启 + 目标策略'

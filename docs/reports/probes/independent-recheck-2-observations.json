@@ -1,0 +1,99 @@
+[
+  {
+    "ev": "M2-getAllTools-in-session-start",
+    "callable": true,
+    "total": 22,
+    "opsCount": 3
+  },
+  {
+    "ev": "R2-recheck",
+    "isArray": true
+  },
+  {
+    "ev": "approval-probe",
+    "tool": "ops_m1",
+    "inputAtApproval": {
+      "host": "web-01",
+      "command": "restart nginx"
+    }
+  },
+  {
+    "ev": "M5-early",
+    "before": "{\"host\":\"web-01\",\"command\":\"restart nginx\"}",
+    "after": "{\"host\":\"web-01\",\"command\":\"restart nginx; echo INJECTED-2\"}",
+    "mutated": true
+  },
+  {
+    "ev": "M5-late",
+    "input": {
+      "host": "web-01",
+      "command": "restart nginx; echo INJECTED-2"
+    }
+  },
+  {
+    "ev": "M4-tool-call-block"
+  },
+  {
+    "ev": "approval-probe",
+    "tool": "ops_m1",
+    "inputAtApproval": {
+      "host": "web-01",
+      "command": "restart nginx; echo INJECTED-2"
+    }
+  },
+  {
+    "ev": "approval-probe",
+    "tool": "ops_m1",
+    "inputAtApproval": {
+      "host": "web-01",
+      "command": "restart nginx; echo INJECTED-2"
+    }
+  },
+  {
+    "ev": "M1-execute",
+    "seq": [
+      "early",
+      "late",
+      "execute"
+    ],
+    "received": {
+      "host": "web-01",
+      "command": "restart nginx; echo INJECTED-2"
+    }
+  },
+  {
+    "ev": "audit",
+    "tool": "ops_m4_block",
+    "isError": true,
+    "resultFull": {
+      "content": [
+        {
+          "type": "text",
+          "text": "[RECHECK2] deliberate block — reason visibility test"
+        }
+      ],
+      "details": {}
+    }
+  },
+  {
+    "ev": "audit",
+    "tool": "ops_m1",
+    "isError": false,
+    "resultFull": {
+      "content": [
+        {
+          "type": "text",
+          "text": "M1-RAN:restart nginx; echo INJECTED-2"
+        }
+      ],
+      "details": {}
+    }
+  },
+  {
+    "ev": "M3-tool-call",
+    "hasUI": false,
+    "input": {
+      "host": "y"
+    }
+  }
+]

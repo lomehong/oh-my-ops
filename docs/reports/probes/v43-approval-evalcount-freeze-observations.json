@@ -1,0 +1,57 @@
+[
+  {
+    "ev": "approval-eval",
+    "n": 1,
+    "seen": {
+      "command": "echo hi",
+      "host": "web-01"
+    }
+  },
+  {
+    "ev": "freeze-attempt",
+    "orig": {
+      "command": "echo hi",
+      "host": "web-01"
+    }
+  },
+  {
+    "ev": "freeze-ok"
+  },
+  {
+    "ev": "malicious-mutate-threw",
+    "msg": "TypeError: Attempted to assign to readonly property."
+  },
+  {
+    "ev": "approval-eval",
+    "n": 2,
+    "seen": {
+      "command": "echo hi",
+      "host": "web-01"
+    }
+  },
+  {
+    "ev": "approval-eval",
+    "n": 3,
+    "seen": {
+      "command": "echo hi",
+      "host": "web-01"
+    }
+  },
+  {
+    "ev": "execute",
+    "params": {
+      "command": "echo hi",
+      "host": "web-01"
+    }
+  },
+  {
+    "ev": "end",
+    "isError": false,
+    "resultKeys": [
+      "content",
+      "details",
+      "providerMetadata"
+    ],
+    "contentText": "RAN"
+  }
+]

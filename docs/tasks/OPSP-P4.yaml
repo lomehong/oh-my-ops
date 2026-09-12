@@ -1,0 +1,15 @@
+id: 'OPSP-P4'
+title: '编排模式 + 跨 Agent 只读降级路径'
+state: '待执行'
+level: 'L2'
+created: '2026-09-12T06:01:26.734Z'
+accept:
+  - '巡检/诊断/自愈提示词经 before_agent_start 返回值注入（string 归一化，X12 复现）'
+  - '斜杠命令仅只读：仓库内不存在 ops-deploy/ops-kill/ops-rollback；契约测试断言可达方法集 ⊆ read 档'
+  - '§7.6 降级表落地：适配器缺席或身份不可验证时跨 Agent 请求一律拒绝，UI 明示'
+  - 'ctx.setInterval 巡检轮询可用且 session_shutdown 自动清理（X5 相关）'
+events:
+  - ts: '2026-09-12T06:01:26.734Z'
+    op: 'create'
+    by: 'architect'
+    note: '编排模式 + 跨 Agent 只读降级路径'

@@ -1,0 +1,127 @@
+[
+  {
+    "ev": "tools-snapshot-error",
+    "msg": "Error: Extension runtime not initialized. Action methods cannot be called during extension loading."
+  },
+  {
+    "ev": "R2-systemPrompt",
+    "isArray": true,
+    "len": 2
+  },
+  {
+    "ev": "T1-rewrite",
+    "note": "early hook 已尝试改写",
+    "detail": {
+      "phase": "early-rewrite",
+      "before": "{\"host\":\"web-01\",\"command\":\"restart nginx\"}",
+      "after": "{\"host\":\"web-01\",\"command\":\"restart nginx; echo INJECTED\"}",
+      "sameRef": false
+    }
+  },
+  {
+    "ev": "tool_call",
+    "tool": "ops_t1",
+    "hasUI": false,
+    "input": {
+      "host": "web-01",
+      "command": "restart nginx; echo INJECTED"
+    }
+  },
+  {
+    "ev": "tool_call",
+    "tool": "ops_t3",
+    "hasUI": false,
+    "input": {
+      "v": "x"
+    }
+  },
+  {
+    "ev": "tool_call",
+    "tool": "ops_t4_read",
+    "hasUI": false,
+    "input": {
+      "host": "web-01"
+    }
+  },
+  {
+    "ev": "tool_call",
+    "tool": "ops_t4_preauth",
+    "hasUI": false,
+    "input": {
+      "host": "web-01"
+    }
+  },
+  {
+    "ev": "tool_call",
+    "tool": "ops_t4_unauth",
+    "hasUI": false,
+    "input": {
+      "host": "web-01"
+    }
+  },
+  {
+    "ev": "T1-execute",
+    "received": {
+      "host": "web-01",
+      "command": "restart nginx; echo INJECTED"
+    }
+  },
+  {
+    "ev": "T3-execute",
+    "which": "second"
+  },
+  {
+    "ev": "T4-execute",
+    "tool": "ops_t4_read",
+    "ran": true
+  },
+  {
+    "ev": "T4-execute",
+    "tool": "ops_t4_preauth",
+    "ran": true
+  },
+  {
+    "ev": "audit",
+    "tool": "ops_t4_unauth",
+    "isError": true,
+    "authz": "blocked"
+  },
+  {
+    "ev": "audit",
+    "tool": "ops_t4_deny",
+    "isError": true,
+    "authz": "blocked"
+  },
+  {
+    "ev": "audit",
+    "tool": "ops_t1",
+    "isError": false,
+    "authz": "executed"
+  },
+  {
+    "ev": "audit",
+    "tool": "ops_t3",
+    "isError": false,
+    "authz": "unknown"
+  },
+  {
+    "ev": "audit",
+    "tool": "ops_t4_read",
+    "isError": false,
+    "authz": "executed"
+  },
+  {
+    "ev": "audit",
+    "tool": "ops_t4_preauth",
+    "isError": false,
+    "authz": "executed"
+  },
+  {
+    "ev": "tool_call",
+    "tool": "ops_t2_discoverable",
+    "hasUI": false,
+    "input": {
+      "host": "web-01"
+    }
+  }
+]

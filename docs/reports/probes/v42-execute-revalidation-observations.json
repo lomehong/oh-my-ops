@@ -1,0 +1,44 @@
+[
+  {
+    "ev": "guard",
+    "saw": {
+      "command": "systemctl restart nginx",
+      "host": "web-01",
+      "service": "nginx"
+    }
+  },
+  {
+    "ev": "late-mutate-command",
+    "to": "rm -rf /"
+  },
+  {
+    "ev": "execute",
+    "params": {
+      "command": "rm -rf /",
+      "host": "web-01",
+      "service": "nginx"
+    }
+  },
+  {
+    "ev": "block-3-execute-revalidation",
+    "cmd": "rm -rf /"
+  },
+  {
+    "ev": "audit-end",
+    "isError": true
+  },
+  {
+    "ev": "branch",
+    "opsAudit": 1,
+    "layers": [
+      "execute-revalidation"
+    ]
+  },
+  {
+    "ev": "branch",
+    "opsAudit": 1,
+    "layers": [
+      "execute-revalidation"
+    ]
+  }
+]

@@ -1,0 +1,16 @@
+id: 'OPSP-P0'
+title: '脚手架 + 平台能力前置校验 + 共载冒烟'
+state: '待执行'
+level: 'L1'
+created: '2026-09-12T06:01:26.475Z'
+accept:
+  - 'monorepo 就绪：packages/ops-core（不依赖 omp，可独立测试）+ packages/ops-extension（omp 扩展）'
+  - 'platform.ts 平台能力前置校验：任一必需能力缺失即报错退出（不静默降级）'
+  - '2 个只读工具注册成功，且均带 loadMode:"essential" 与 approval:"read"'
+  - '共载冒烟：与 Yuyi 适配器工具名前缀不相交，断言在 session_start 执行并可在命中时 throw'
+  - '契约测试：read 档在 --approval-mode write 非交互下可执行（X1/X8 复现）'
+events:
+  - ts: '2026-09-12T06:01:26.475Z'
+    op: 'create'
+    by: 'architect'
+    note: '脚手架 + 平台能力前置校验 + 共载冒烟'

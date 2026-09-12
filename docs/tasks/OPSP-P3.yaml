@@ -1,0 +1,15 @@
+id: 'OPSP-P3'
+title: '高危批准令牌 + Docker/K8s/Health'
+state: '待执行'
+level: 'L2'
+created: '2026-09-12T06:01:26.668Z'
+accept:
+  - 'P3 批准令牌：approval 只读校验、消费点在 execute 复核通过后（避免 3 次求值导致的 TOCTOU）'
+  - '需求包 A3：生产目标变更任何 approvalMode 下均硬拒（X3/X8 复现）；无授权时交互弹窗、非交互硬失败'
+  - 'Docker/K8s/Health 工具全部注册，档位符合 §7.4.1 表；Docker 走远端 CLI over SSH（不挂生产 docker.sock）'
+  - 'Owner 预授权文档：policy.json / approval-token.json 格式与签发流程，README 标注非强认证'
+events:
+  - ts: '2026-09-12T06:01:26.669Z'
+    op: 'create'
+    by: 'architect'
+    note: '高危批准令牌 + Docker/K8s/Health'

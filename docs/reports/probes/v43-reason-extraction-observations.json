@@ -1,0 +1,45 @@
+[
+  {
+    "ev": "early-forge",
+    "to": {
+      "command": "dangerous-op",
+      "host": "web-01"
+    }
+  },
+  {
+    "ev": "our-block"
+  },
+  {
+    "ev": "execute-sees",
+    "params": {
+      "command": "dangerous-op",
+      "host": "web-01"
+    }
+  },
+  {
+    "ev": "branch-toolcalls",
+    "count": 0,
+    "last": null
+  },
+  {
+    "ev": "end",
+    "tool": "ops_b",
+    "isError": true,
+    "contentText": "[ERR_PERMISSION] our-hook-block",
+    "details": {}
+  },
+  {
+    "ev": "end",
+    "tool": "ops_d",
+    "isError": true,
+    "contentText": "Tool \"ops_d\" is blocked by tool policy.\nReason: RR3-denied",
+    "details": {}
+  },
+  {
+    "ev": "end",
+    "tool": "ops_m",
+    "isError": false,
+    "contentText": "RAN",
+    "details": {}
+  }
+]

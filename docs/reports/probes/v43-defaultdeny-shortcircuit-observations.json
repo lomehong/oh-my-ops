@@ -1,0 +1,17 @@
+[
+  {
+    "ev": "approval-eval",
+    "key": "real-target/prod-api",
+    "verdict": "deny"
+  },
+  {
+    "ev": "approval-eval",
+    "key": "real-target/prod-api",
+    "verdict": "deny"
+  },
+  {
+    "ev": "end",
+    "isError": true,
+    "text": "Tool \"ops_x\" is blocked by tool policy.\nReason: defaultDeny: 未授权目标"
+  }
+]

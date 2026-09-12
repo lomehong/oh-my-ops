@@ -1,0 +1,16 @@
+id: 'OPSP-P1'
+title: 'MVP：只读工具集 + 安全三层 + 审计'
+state: '待执行'
+level: 'L1'
+created: '2026-09-12T06:01:26.538Z'
+accept:
+  - 'Shell/SSH/Process/File/Log 只读工具全部注册，档位符合 §7.4.1 表'
+  - '需求包 A1：omp -p ''巡检 <host>'' 无人工交互完成，产出 ok/warn/critical 聚合报告，退出码 0'
+  - '需求包 A4：每次 ops_* 调用（含被拒）留 ops_audit；拒绝原因按前缀分类（reasonClass）'
+  - '第②层内容硬拒生效：rm -rf /、sudo rm、curl|bash 在任何 approvalMode 下均被拒'
+  - '①-b 无人值守兜底：--approval-mode yolo + 非交互下未预授权 exec 档被拒且工具未运行（X10）'
+events:
+  - ts: '2026-09-12T06:01:26.538Z'
+    op: 'create'
+    by: 'architect'
+    note: 'MVP：只读工具集 + 安全三层 + 审计'

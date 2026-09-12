@@ -1,0 +1,27 @@
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+*.tgz
+
+# 运行时本地状态（凭据/策略/令牌 — 属 Owner 本机文件，严禁入库）
+.ops-pi/
+*.pem
+*.key
+approval-token.json
+policy.json
+
+# 编辑器/系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# 日志与临时
+*.log
+tmp/
+.cache/
+
+# 探针观测输出（本机路径，不入库）
+out*.json

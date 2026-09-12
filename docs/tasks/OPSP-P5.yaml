@@ -1,0 +1,30 @@
+id: 'OPSP-P5'
+title: '跨 Agent 请求走同一安全三层（不依赖身份接口；身份由 Yuyi 插件自治）'
+state: '待执行'
+level: 'L2'
+created: '2026-09-12T06:01:26.802Z'
+accept:
+  - '跨 Agent 注入的请求经 ops_* 工具执行时，同样受 ①-a/①-b/②/③ 三层约束（无旁路）'
+  - '默认拒绝：未命中 Owner 预授权（targets[]/令牌）的跨 Agent 变更类请求一律被拒并回 [ERR_PERMISSION]'
+  - '只读跨 Agent 请求按 read 档放行（符合 A1/A5）；身份与鉴权归 Yuyi 插件，ops-pi 不重复实现'
+  - '负测：模拟外部消息注入后触发变更类 ops_*，验证被拒且留审计条目'
+events:
+  - ts: '2026-09-12T06:01:26.802Z'
+    op: 'create'
+    by: 'architect'
+    note: '接入 Yuyi 身份接口开放跨 Agent 写路径（依赖 B1，阻断）'
+  - ts: '2026-09-12T06:11:43.450Z'
+    op: 'rescope'
+    by: 'architect'
+    note: '主人 2026-09-12 指示：Yuyi 身份插件是 omp 插件、自治，ops-pi 不接管身份；原「请求 Yuyi 提供身份接口」的 B1 前提撤销'
+rescope:
+  - at: '2026-09-12T06:11:43.450Z'
+    by: 'architect'
+    reason: '主人 2026-09-12 指示：Yuyi 身份插件是 omp 插件、自治，ops-pi 不接管身份；原「请求 Yuyi 提供身份接口」的 B1 前提撤销'
+    before:
+      title: '接入 Yuyi 身份接口开放跨 Agent 写路径（依赖 B1，阻断）'
+      accept:
+        - 'B1 交付后：按调用方御符权限集判定 ops: 'exec/ops:kill/ops:deploy'''
+        - '写路径开放需 Owner 逐项确认（不得默认放开）'
+        - '同进程单实例保证：Hub 连接数为 1'
+      level: 'L3'
