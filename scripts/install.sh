@@ -90,16 +90,12 @@ cp -r "$REPO_ROOT/packages/ops-core/src" "$EXT_DST/node_modules/@ops-pi/core"
 echo 'export { default } from "./extension.ts";' > "$EXT_DST/index.ts"
 echo '{"name":"ops-pi","private":true,"type":"module","dependencies":{"@ops-pi/core":"*"}}' > "$EXT_DST/package.json"
 echo "  ✓ $EXT_DST（自包含，含 ops-core）"
-
 # ── 2) 品牌化 omp 镜像（用户副本，免 sudo）
 echo "[2/4] 构建 OpsPi 品牌 omp 镜像…"
-MIR="$OPS_DIR/omp"
-mkdir -p "$MIR" "$OPS_DIR/bin"
-cp -r "$SYS_DIR/dist" "$MIR/dist"
-cp "$SYS_DIR/package.json" "$MIR/" 2>/dev/null || true
-ln -sfn "$SYS_DIR/node_modules" "$MIR/node_modules"
+mkdir -p "$OPS_DIR/bin"
+cp "$REPO_ROOT/scripts/build-mirror.sh" "$OPS_DIR/bin/build-mirror.sh"
 cp "$PATCH_SRC" "$OPS_DIR/bin/patch-omp-brand.mjs"
-node "$OPS_DIR/bin/patch-omp-brand.mjs" --target "$MIR/dist/cli.js" >/dev/null && echo "  ✓ 品牌已内置（$MIR/dist/cli.js）"
+bash "$OPS_DIR/bin/build-mirror.sh" "$OPS_DIR/omp" "$SYS_DIR"
 
 # ── 3) omo 启动器（自愈：系统 omp 升级后自动刷新镜像并重打品牌）
 echo "[3/4] 创建 omo 启动器…"
@@ -118,11 +114,8 @@ YUYI="\$HOME/.omp/agent/extensions/yuyi-omp-extension.js"
 SYS_DIR="\$(cd "\$(dirname "\$(readlink -f "\$(command -v omp)")")/.." && pwd)"
 # 自愈：系统 omp 比镜像新 → 重建镜像 + 重打品牌
 if [ -f "\$SYS_DIR/dist/cli.js" ] && { [ ! -f "\$MIR/dist/cli.js" ] || [ "\$SYS_DIR/dist/cli.js" -nt "\$MIR/dist/cli.js" ]; }; then
-  rm -rf "\$MIR/dist"; mkdir -p "\$MIR"
-  cp -r "\$SYS_DIR/dist" "\$MIR/dist"
-  cp "\$SYS_DIR/package.json" "\$MIR/" 2>/dev/null || true
-  ln -sfn "\$SYS_DIR/node_modules" "\$MIR/node_modules"
-  node "\$HOME/.ops-pi/bin/patch-omp-brand.mjs" --target "\$MIR/dist/cli.js" 2>/dev/null
+  bash "\$HOME/.ops-pi/bin/build-mirror.sh" "\$MIR" "\$SYS_DIR" >/dev/null 2>&1 || \
+    echo "[omo] ⚠ 镜像刷新失败，沿用现有镜像"
 fi
 EXT_ARGS=()
 [ -d "\$EXT" ] && EXT_ARGS+=(--extension "\$EXT")
