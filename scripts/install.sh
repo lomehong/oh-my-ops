@@ -13,6 +13,7 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   echo "[uninstall] 移除 ops-pi…"
   rm -rf "$EXT_DST"
   rm -f "$BIN_DST"
+  rm -f "$HOME/.omp/agent/extensions/yuyi-omp-extension.js"
   echo "[uninstall] ✓ 已移除（策略与令牌保留在 ~/.ops-pi/）"
   exit 0
 fi
@@ -43,7 +44,18 @@ mkdir -p "$EXT_DST/node_modules/@ops-pi"
 ln -sfn "$CORE_SRC" "$EXT_DST/node_modules/@ops-pi/core"
 echo '{"name":"ops-pi","private":true,"type":"module","dependencies":{"@ops-pi/core":"*"}}' > "$EXT_DST/package.json"
 
-echo "  ✓ 部署完成（$(find "$EXT_DST" -name '*.ts' | wc -l) 个 .ts 文件）"
+ echo "  ✓ 部署完成（$(find "$EXT_DST" -name '*.ts' | wc -l) 个 .ts 文件）"
+
+# 1b) 部署 Yuyi 适配器（让 omo 自带跨 Agent 通讯能力）
+YUYI_SRC="$REPO_ROOT/vendor/yuyi-omp-extension.js"
+YUYI_DST="$HOME/.omp/agent/extensions/yuyi-omp-extension.js"
+echo "[1b/3] 部署 Yuyi 适配器…"
+if [ -f "$YUYI_SRC" ]; then
+  cp "$YUYI_SRC" "$YUYI_DST"
+  echo "  ✓ Yuyi 适配器已部署（$(wc -c < "$YUYI_SRC") bytes，27 个 yuyi_*/yufu_* 工具）"
+else
+  echo "  ⚠ vendor/yuyi-omp-extension.js 不存在——跨 Agent 通讯不可用（不影响核心功能）"
+fi
 
 # 2) 创建 omo CLI
 echo "[2/3] 创建 omo CLI…"
