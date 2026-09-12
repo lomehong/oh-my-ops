@@ -20,6 +20,8 @@ declare module "@oh-my-pi/pi-coding-agent" {
 		number(): ZodLikeSchema<number>;
 		boolean(): ZodLikeSchema<boolean>;
 		enum<const Values extends readonly [string, ...string[]]>(values: Values): ZodLikeSchema<Values[number]>;
+		default(value: unknown): ZodLikeSchema<unknown>;
+		array<T>(inner: ZodLikeSchema<T>): ZodLikeSchema<T[]>;
 		object<const Shape extends Record<string, unknown>>(shape: Shape): ZodLikeSchema<{ [K in keyof Shape]: Shape[K] }>;
 	}
 

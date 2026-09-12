@@ -1,4 +1,4 @@
-import { FileOps, ProcessManager, loadTargetPolicy, loadTokenStore, StaticTokenStore } from "@ops-pi/core";
+import { FileOps, LogCollector, ProcessManager, ShellExec, loadTargetPolicy, loadTokenStore, StaticTokenStore } from "@ops-pi/core";
 import type { PolicyRequest, TargetPolicy, TokenStore } from "@ops-pi/core";
 import type { OpsConfig } from "./setup.ts";
 
@@ -9,19 +9,28 @@ import type { OpsConfig } from "./setup.ts";
 export class OpsContext {
 	readonly targetPolicy: TargetPolicy;
 	readonly tokens: TokenStore;
-	readonly config: OpsConfig;
+	readonly #config: OpsConfig;
 	readonly files: FileOps;
 	readonly process: ProcessManager;
+	readonly log: LogCollector;
+	readonly shell: ShellExec;
 	#lastAuthzSource = "unknown";
 
 	constructor(
 		config: OpsConfig,
 		paths: { policyPath: string; tokenPath: string },
-		l1: { files: FileOps; process: ProcessManager } = { files: new FileOps(), process: new ProcessManager() },
+		l1: { files: FileOps; process: ProcessManager; log: LogCollector; shell: ShellExec } = {
+			files: new FileOps(),
+			process: new ProcessManager(),
+			log: new LogCollector(),
+			shell: new ShellExec(),
+		},
 	) {
 		this.files = l1.files;
 		this.process = l1.process;
-		this.config = config;
+		this.log = l1.log;
+		this.shell = l1.shell;
+		this.#config = config;
 		this.targetPolicy = config.policyPath !== undefined
 			? loadTargetPolicy(config.policyPath)
 			: new NoPolicy();
@@ -33,6 +42,8 @@ export class OpsContext {
 		return this.targetPolicy.allows(request) || this.tokens.find(request).valid;
 	}
 
+	/** 配置（供工具读取 vault 路径等运行时信息） */
+	get config(): OpsConfig { return this.#config; }
 	/** 授权判定视图（最小接口，guards 层依赖此形状） */
 	get authzView(): {
 		targetPolicy: Pick<TargetPolicy, "isProduction" | "allows" | "check">;

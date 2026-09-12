@@ -6,6 +6,7 @@ export interface OpsConfig {
 	hostMode?: "pi" | "omp";
 	policyPath?: string;
 	tokenPath?: string;
+	vault?: { dbPath?: string };
 	health?: { autoPollIntervalMs?: number };
 }
 
@@ -25,6 +26,7 @@ export function loadConfig(cwd: string): OpsConfig {
 		hostMode: raw.hostMode === "pi" || raw.hostMode === "omp" ? raw.hostMode : "omp",
 		policyPath: typeof raw.policyPath === "string" ? raw.policyPath : path.join(cwd, DEFAULT_POLICY_PATH),
 		tokenPath: typeof raw.tokenPath === "string" ? raw.tokenPath : path.join(cwd, DEFAULT_TOKEN_PATH),
+		vault: isVaultConfig(raw.vault) ? raw.vault : undefined,
 		health: isHealthConfig(raw.health) ? raw.health : undefined,
 	};
 }
@@ -33,4 +35,11 @@ function isHealthConfig(value: unknown): value is NonNullable<OpsConfig["health"
 	if (value === null || typeof value !== "object") return false;
 	const interval = (value as Record<string, unknown>).autoPollIntervalMs;
 	return typeof interval === "number" && Number.isFinite(interval) && interval > 0;
+}
+
+
+function isVaultConfig(value: unknown): value is NonNullable<OpsConfig["vault"]> {
+	if (value === null || typeof value !== "object") return false;
+	const dbPath = (value as Record<string, unknown>).dbPath;
+	return typeof dbPath === "string" && dbPath !== "";
 }

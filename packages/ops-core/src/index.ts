@@ -8,6 +8,8 @@ export type { FileReadOptions } from "./files.ts";
 export { ProcessManager, parsePsOutput } from "./process.ts";
 export type { ProcessInfo, ProcessListOptions } from "./process.ts";
 export { criticalReason } from "./content-guard.ts";
+export { LogCollector } from "./log.ts";
+export type { TailResult, JournalctlResult, GrepResult } from "./log.ts";
 export { loadTargetPolicy, DefaultDenyPolicy } from "./policy.ts";
 export type { TargetPolicy, TargetRule, PolicyFile, PolicyRequest } from "./policy.ts";
 export { loadTokenStore, StaticTokenStore } from "./tokens.ts";
