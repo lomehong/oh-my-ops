@@ -1,10 +1,10 @@
 id: 'OPSP-P10'
 title: 'yuyi 上游双连接互踢修复跟进（外部依赖）'
-state: '待执行'
+state: '待确认'
 level: 'L3'
 created: '2026-09-13T10:05:09.421Z'
 accept:
-  - 'yuyi-omp 源码修复合入：YUYI_TOKEN 缺失禁用 device token 兜底，或携带 principal:''device'''
+  - 'yuyi-omp 源码修复合入：YUYI_TOKEN 缺失禁用 device token 兜底，或携带 principal: '''device'''
   - 'ops-pi 侧复测：长会话零 superseded 抖动，心跳自回声归零'
   - '修复后 P5 全链路回归通过'
 events:
@@ -12,3 +12,22 @@ events:
     op: 'create'
     by: 'omp-architect-session'
     note: 'yuyi 上游双连接互踢修复跟进（外部依赖）'
+  - ts: '2026-09-13T13:56:37.889Z'
+    op: 'claim'
+    by: 'omp-architect-session'
+    note: 'branch=feature/OPSP-P7-sshpool-remote'
+  - ts: '2026-09-13T13:56:37.966Z'
+    op: 'report'
+    by: 'omp-architect-session'
+    note: 'P10 yuyi 上游双连接互踢——上游已修复并交付新构建，部分验收通过，全量 soak 待干净部署'
+branch: 'feature/OPSP-P7-sshpool-remote'
+report:
+  summary: 'P10 yuyi 上游双连接互踢——上游已修复并交付新构建，部分验收通过，全量 soak 待干净部署'
+  evidence:
+    - 'yuyi-omp 新构建已部署（principal:''device'' 路径 7 处标记，18:51 落盘）并同步 vendor（md5 一致）'
+    - '目标机同别名双会话共存花名册（修复前互踢必掉线）'
+    - '新构建进程首投实时命中（3 试 1 中；2 失败归因开发容器旧构建常驻会话继续争抢别名）'
+  pending:
+    - '30 分钟零 superseded soak：目标机升 v0.5.0 + 重启 serve；开发容器重启（旧构建会话退出）后复测'
+  at: '2026-09-13T13:56:37.966Z'
+  by: 'omp-architect-session'
