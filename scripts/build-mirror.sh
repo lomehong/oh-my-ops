@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-mirror.sh — 构建/刷新 OpsPi 品牌化 omp 镜像。用法：build-mirror.sh <mirror-dir> <system-pkg-dir>
+# build-mirror.sh — 构建/刷新 omo 品牌化 omp 镜像。用法：build-mirror.sh <mirror-dir> <system-pkg-dir>
 # 由 install.sh 与 omo 启动器（自愈）共用。原子构建：失败不动现有镜像。
 #
 # node_modules 解析覆盖三种布局：

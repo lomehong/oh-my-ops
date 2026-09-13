@@ -1,8 +1,8 @@
-# 可执行技术方案：OpsPi — 基于 oh-my-pi（omp）的运维智能体
+# 可执行技术方案：omo — 基于 oh-my-pi（omp）的运维智能体
 
 ```yaml
 ---
-title: OpsPi — 基于 oh-my-pi（omp, pi 血统 harness）的运维智能体扩展
+title: omo — 基于 oh-my-pi（omp, pi 血统 harness）的运维智能体扩展
 status: 已落定          # 草稿 → 已评审 → 已落定 → 已执行（主人 2026-09-12 确认）
 requirement: docs/requirements/ops-pi-requirement-package.md
 author: 架构师会话（2026-09-12）

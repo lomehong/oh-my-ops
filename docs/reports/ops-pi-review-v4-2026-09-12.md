@@ -1,4 +1,4 @@
-# 评审结论：OpsPi 运维智能体架构设计 v4.0
+# 评审结论：omo 运维智能体架构设计 v4.0
 
 - 评审对象：`docs/designs/ops-pi-architecture-design.md`（v4.0，状态 `草稿`）
 - 配套需求包：`docs/requirements/ops-pi-requirement-package.md`

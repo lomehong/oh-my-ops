@@ -2,7 +2,7 @@
 
 ```yaml
 ---
-title: 独立复审（第二轮）：OpsPi v4.1 复评发现复核
+title: 独立复审（第二轮）：omo v4.1 复评发现复核
 status: 待主人确认
 reviewer: dsh 侧独立评审会话（第二轮，新探针 independent-recheck-2-probe.ts，方法学改进见下）
 created: 2026-09-12

@@ -1,4 +1,4 @@
-# 结构化需求包：OpsPi 运维智能体
+# 结构化需求包：omo 运维智能体
 
 > 来源：主人 2026-09-12 决策回复（决策简报 `docs/reports/ops-pi-decision-brief-2026-09-12.md` D1–D6）
 > 产出：architect-prd-digest 六项覆盖检查

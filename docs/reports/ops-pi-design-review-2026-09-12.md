@@ -1,4 +1,4 @@
-# 评审结论：OpsPi — 基于 pi (earendil-works/pi) 的运维智能体架构设计 v1.4
+# 评审结论：omo — 基于 pi (earendil-works/pi) 的运维智能体架构设计 v1.4
 
 - 评审对象：`docs/designs/ops-pi-architecture-design.md`（v1.4，2026-09-12，状态「设计评审」，1210 行）
 - 评审类型：方案评审（architect-review，流水线阶段 8/9 独立视角）

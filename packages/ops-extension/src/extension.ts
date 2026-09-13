@@ -11,7 +11,7 @@ import { setupHooks } from "./hooks.ts";
 import { registerOpsCommands } from "./commands.ts";
 
 /**
- * OpsPi 扩展入口（方案 §7.3）。
+ * omo 扩展入口（方案 §7.3）。
  * 加载顺序：平台校验 → 配置 → 上下文 → 工具注册 → 钩子。
  * 任何平台能力缺失 → 抛错拒启（§7.2）。
  */

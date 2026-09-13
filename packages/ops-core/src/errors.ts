@@ -1,4 +1,4 @@
-/** OpsPi 统一错误：机器可判读 code + 人类可读 message（方案 §7.4 错误处理） */
+/** omo 统一错误：机器可判读 code + 人类可读 message（方案 §7.4 错误处理） */
 export type OpsErrorCode =
 	| "CONNECTION_REFUSED"
 	| "AUTH_FAILED"

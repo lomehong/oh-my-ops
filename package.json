@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "OpsPi — 基于 oh-my-pi 的运维智能体（方案 v4.3 已落定）",
+  "description": "omo — 基于 oh-my-pi 的运维智能体（方案 v4.3 已落定）",
   "workspaces": [
     "packages/*"
   ],

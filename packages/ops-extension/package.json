@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "OpsPi L2：omp 扩展（审批档 + 无人值守兜底 + 内容硬拒 + 目标策略 + 审计）",
+  "description": "omo L2：omp 扩展（审批档 + 无人值守兜底 + 内容硬拒 + 目标策略 + 审计）",
   "exports": { ".": "./src/index.ts" },
   "scripts": { "test": "bun test" }
 }

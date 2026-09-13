@@ -1,4 +1,4 @@
-# OpsPi — 基于 oh-my-pi 的运维智能体
+# omo — 基于 oh-my-pi 的运维智能体
 
 基于 [oh-my-pi](https://github.com/can1357/oh-my-pi) 扩展的运维智能体。
 无人值守完成只读巡检、对指定服务执行重启，高危敏感操作须 Owner 明示批准，全过程留审计。
@@ -24,7 +24,7 @@ git clone https://github.com/lomehong/oh-my-ops.git && cd oh-my-ops
 bash scripts/install.sh
 ```
 
-安装一条命令完成，**无需 sudo、无需任何补丁步骤**（OpsPi 品牌已内置）：
+安装一条命令完成，**无需 sudo、无需任何补丁步骤**（omo 品牌已内置）：
 
 ```bash
 tar xzf oh-my-ops-v0.3.0.tar.gz && cd oh-my-ops-v0.3.0
@@ -34,12 +34,12 @@ bash scripts/install.sh
 安装脚本自动完成：
 
 1. 部署 ops-pi 扩展到 `~/.ops-pi/`（自包含，删除解压目录不影响运行）
-2. 构建品牌化 omp 镜像到用户目录（TUI 横幅/tips/面板提示 = OpsPi，不动系统 omp）
+2. 构建品牌化 omp 镜像到用户目录（TUI 横幅/tips/面板提示 = omo，不动系统 omp）
 3. 创建 `omo` CLI（启动时自动检测 omp 升级并自愈刷新镜像）
 4. 初始化策略目录（缺省：变更类操作全拒）+ Yuyi 通讯配置（自动沿用已有 token/设备名）
 
 前置条件仅一个：系统已安装 [oh-my-pi](https://github.com/can1357/oh-my-pi) ≥ 18.1.18。
-`omo` 即 OpsPi 完整形态；裸 `omp` 命令完全不受影响。卸载：`bash scripts/install.sh --uninstall`。
+`omo` 即 omo 完整形态；裸 `omp` 命令完全不受影响。卸载：`bash scripts/install.sh --uninstall`。
 
 ## 日常使用
 

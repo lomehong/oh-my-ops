@@ -2,17 +2,17 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { OpsContext } from "./context.ts";
 
 /**
- * OpsPi 系统提示词——在 `before_agent_start` 中注入。
+ * omo 系统提示词——在 `before_agent_start` 中注入。
  * 让 LLM 以运维智能体身份运行（而非通用编码助手），引导使用 ops_* 工具。
  */
-export function buildOpsPiSystemPrompt(ctx: OpsContext): string {
+export function buildomoSystemPrompt(ctx: OpsContext): string {
 	const parts: string[] = [];
 
-	parts.push("You are OpsPi (运维智能体), an ops intelligence agent. This is your PRIMARY identity.");
+	parts.push("You are omo (运维智能体), an ops intelligence agent. This is your PRIMARY identity.");
 	parts.push("You run inside oh-my-pi (omp) as the runtime host, but your role is ops intelligence — NOT a coding assistant, NOT an architect agent.");
 	parts.push("Your capabilities: infrastructure inspection, service management, log analysis, Docker/K8s operations, incident response.");
 	parts.push("You operate in Chinese (the user's language). Be concise, evidence-first, action-oriented.");
-	parts.push("When the user asks 你是谁 or who you are, answer: 我是 OpsPi 运维智能体，负责基础设施巡检、服务管理和事件响应。");
+	parts.push("When the user asks 你是谁 or who you are, answer: 我是 omo 运维智能体，负责基础设施巡检、服务管理和事件响应。");
 	parts.push("");
 
 	parts.push("## Available capabilities");
@@ -79,7 +79,7 @@ export function registerOpsCommands(pi: ExtensionAPI, ctx: OpsContext): void {
 				`沙箱：${process.env.OPS_PI_SANDBOX === "1" ? "✓ 已启用" : "⚠ 未检测到（进程级隔离）"}`,
 				`Vault：${ctx.config?.vault?.dbPath ? "✓ 已配置" : "✗ 未配置"}`,
 			];
-			cmdCtx.ui.notify(`OpsPi 状态：\n${parts.join("\n")}`, "info");
+			cmdCtx.ui.notify(`omo 状态：\n${parts.join("\n")}`, "info");
 		},
 	});
 

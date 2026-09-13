@@ -91,7 +91,7 @@ echo 'export { default } from "./extension.ts";' > "$EXT_DST/index.ts"
 echo '{"name":"ops-pi","private":true,"type":"module","dependencies":{"@ops-pi/core":"*"}}' > "$EXT_DST/package.json"
 echo "  ✓ $EXT_DST（自包含，含 ops-core）"
 # ── 2) 品牌化 omp 镜像（用户副本，免 sudo）
-echo "[2/4] 构建 OpsPi 品牌 omp 镜像…"
+echo "[2/4] 构建 omo 品牌 omp 镜像…"
 mkdir -p "$OPS_DIR/bin"
 cp "$REPO_ROOT/scripts/build-mirror.sh" "$OPS_DIR/bin/build-mirror.sh"
 cp "$PATCH_SRC" "$OPS_DIR/bin/patch-omp-brand.mjs"
@@ -102,11 +102,11 @@ echo "[3/4] 创建 omo 启动器…"
 mkdir -p "$(dirname "$BIN_DST")"
 cat > "$BIN_DST" <<OMOEOF
 #!/usr/bin/env bash
-# omo — OpsPi 运维智能体 CLI（品牌内置镜像 + profile 隔离 + 自愈升级）
+# omo — 运维智能体 CLI（品牌内置镜像 + profile 隔离 + 自愈升级）
 set -euo pipefail
 [ -f "\$HOME/.yuyi/env" ] && source "\$HOME/.yuyi/env"
 export OPS_PI_SANDBOX="\${OPS_PI_SANDBOX:-0}"
-export OMO_APP_NAME="OpsPi"
+export OMO_APP_NAME="omo"
 export OMO_BIN="omo"   # 命令提示用真实 CLI 名（update/models/plugin 提示可照敲）
 export OMO_TIPS=\$'/ops-inspect <主机> 执行标准巡检（只读）\n/ops-health 十秒健康快照；/ops-status 查看策略/沙箱/凭据状态\n只读 ops 工具自动放行；变更类需 Owner 预授权（policy.json）\n无人值守下生产目标变更一律拒绝——这是设计，不是故障\nomo serve 常驻后，cron/webhook 可直接触发巡检与诊断\nPress ctrl+r to search your prompt history\nCtrl+D exits but keeps your draft saved'
 MIR="\$HOME/.ops-pi/omp"
@@ -132,7 +132,7 @@ case "\${1:-}" in
       echo "[omo] ✓ 服务已启动 PID \$(cat /tmp/omo-serve.pid)"
     fi ;;
   status)
-    echo "═══ OpsPi (oh-my-ops) ═══"
+    echo "═══ omo (oh-my-ops) ═══"
     [ -d "\$EXT" ] && echo "  扩展：✓" || echo "  扩展：✗（重跑安装脚本）"
     [ -f "\$MIR/dist/cli.js" ] && echo "  镜像：✓" || echo "  镜像：✗（重跑安装脚本）"
     [ -f /tmp/omo-serve.pid ] && kill -0 "\$(cat /tmp/omo-serve.pid)" 2>/dev/null && echo "  服务：✓ PID \$(cat /tmp/omo-serve.pid)" || echo "  服务：✗"
@@ -142,7 +142,7 @@ case "\${1:-}" in
   install)
     [ -f "\$PWD/scripts/install.sh" ] && bash "\$PWD/scripts/install.sh" || { echo "✗ 请在解压目录内运行"; exit 1; } ;;
   help|--help|-h)
-    echo "omo — OpsPi 运维智能体 CLI"
+    echo "omo — 运维智能体 CLI"
     echo "  omo                      交互式"
     echo "  omo -p '巡检 web-01'     非交互执行"
     echo "  omo serve                后台服务（cron/webhook 入口）"
@@ -189,7 +189,7 @@ fi
 
 echo
 echo "═══ ✓ 安装完成 ═══"
-echo "  omo                      → 交互式（OpsPi 品牌，无需任何补丁）"
+echo "  omo                      → 交互式（omo 品牌，无需任何补丁）"
 echo "  omo -p '巡检本机'        → 非交互巡检"
 echo "  omo serve                → 后台服务"
 echo "  omo status               → 状态"

@@ -1,6 +1,6 @@
 import { assertToolRegistryIntegrity, onToolCall } from "./guards.ts";
 import { assertPlatformAtSessionStart } from "./platform.ts";
-import { buildOpsPiSystemPrompt } from "./commands.ts";
+import { buildomoSystemPrompt } from "./commands.ts";
 import type { OpsContext } from "./context.ts";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
@@ -23,7 +23,7 @@ export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
 
 		// ④ 品牌标识
 		// 品牌标识：omp TUI 由宿主控制，ops-pi 通过 notify 展示身份
-		sessionCtx.ui.notify("OpsPi 运维智能体已加载", "info");
+		sessionCtx.ui.notify("omo 运维智能体已加载", "info");
 
 		// ⑤ 巡检轮询（受管定时器，session_shutdown 自动清理）
 		if (ctx.config?.health?.autoPollIntervalMs) {
@@ -39,13 +39,13 @@ export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
 		}
 	});
 
-	// ── before_agent_start：OpsPi 身份注入（覆盖 omp 编码助手身份）──
+	// ── before_agent_start：omo 身份注入（覆盖 omp 编码助手身份）──
 	pi.on("before_agent_start", async (event) => {
-		const opsPrompt = buildOpsPiSystemPrompt(ctx);
+		const opsPrompt = buildomoSystemPrompt(ctx);
 		const base = Array.isArray(event.systemPrompt)
 			? event.systemPrompt.join("\n\n")
 			: String(event.systemPrompt ?? "");
-		// ★ 前插 OpsPi 身份（优先级高于 AGENTS.md 等全局上下文文件）
+		// ★ 前插 omo 身份（优先级高于 AGENTS.md 等全局上下文文件）
 		return { systemPrompt: `${opsPrompt}\n\n${base}` };
 	});
 

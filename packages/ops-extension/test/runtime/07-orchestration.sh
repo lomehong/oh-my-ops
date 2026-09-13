@@ -12,7 +12,7 @@ timeout 120 omo --no-session --approval-mode write \
   -e packages/ops-extension/src/extension.ts \
   -p "/ops-health" \
   > "$OUT_A" 2>&1 || true
-if grep -q "OpsPi\|ops-pi\|健康\|巡检\|health" "$OUT_A"; then
+if grep -q "omo\|ops-pi\|健康\|巡检\|health" "$OUT_A"; then
   echo "  ✓ ① ops-health 命令响应"
   PASS=$((PASS+1))
 else

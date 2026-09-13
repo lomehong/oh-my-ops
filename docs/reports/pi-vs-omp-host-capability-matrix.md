@@ -1,10 +1,10 @@
 # 宿主能力矩阵：上游 pi 0.84.1 ⨯ oh-my-pi（omp）18.1.18
 
-> 用途：OpsPi 方案（及任何 pi 血统扩展）的**宿主契约基准**。核心代码按上游 pi 契约写；omp 专有能力视为**可选增强**并显式降级。
+> 用途：omo 方案（及任何 pi 血统扩展）的**宿主契约基准**。核心代码按上游 pi 契约写；omp 专有能力视为**可选增强**并显式降级。
 > 证据基准（本机实测，2026-09-12）：
 > - **上游 pi** `@earendil-works/pi-coding-agent@0.84.1`（npm 实装解包，含 `dist/core/extensions/types.d.ts` 与 `docs/extensions.md`）
 > - **omp** `@oh-my-pi/pi-coding-agent@18.1.18`（`/usr/local/lib/node_modules/.../src`）
-> - 上游 pi 最新版为 **0.85.1**；本文以 0.84.1 为准（OpsPi 方案声明的基线版本）。
+> - 上游 pi 最新版为 **0.85.1**；本文以 0.84.1 为准（omo 方案声明的基线版本）。
 > 标注：**一致** = 两宿主同形；**分歧** = 需适配层；**pi-only** = 仅上游有；**omp+** = 仅 omp 有的增强。
 
 ---
@@ -13,7 +13,7 @@
 
 **上游 pi 是扩展契约的事实标准；omp 是其下游宿主，通过 `legacy-pi-compat` 兼容层运行 pi 扩展，并额外提供若干增强。**
 
-三条对 OpsPi 设计有决定性影响的结论：
+三条对 omo 设计有决定性影响的结论：
 
 1. **上游 pi 没有审批子系统**。`ToolDefinition` 无 `approval` 成员；`docs/extensions.md` 把 "Permission gates (confirm before `rm -rf`, `sudo`, etc.)" 列为**需要扩展自己实现**的用例。→ **核心必须自研审批门**，omp 的原生 `approval` 档位只能当增强。
 2. **上游 pi 要求工具自行截断输出**（硬性契约，非建议）："**Tools MUST truncate their output**"，内置上限 **50KB / 2000 行**，并规定截断后**把完整输出写临时文件、把路径告知 LLM**。→ 核心必须自截断；omp 的集中 artifact spill 是另一套机制。
