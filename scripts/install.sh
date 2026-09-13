@@ -184,11 +184,30 @@ elif [ ! -f "$YUYI_DIR/agent.json" ]; then
 else
   echo "  ↺ 保留已有 ~/.yuyi/agent.json"
 fi
-cat > "$YUYI_DIR/env" <<ENVEOF
-YUYI_HUB=$HUB_URL
-YUYI_YUFU_URL=$YUFU_URL
-ENVEOF
-chmod 600 "$YUYI_DIR/env"
+# ~/.yuyi/env 写入：**按键合并**，保留未知键，避免重装抹掉人工/其他组件写入的配置。
+#   受管键（每次刷新为新值）：YUYI_HUB / YUYI_YUFU_URL / YUYI_TOKEN
+#   YUYI_TOKEN 仅在已发放 token 时写入，保证插件不依赖启动 shell 导出变量也能连 Hub
+#   其余键（含注释/空行）原样保留；纯 bash 实现，无新依赖（兼容 curl | bash）
+ENV_FILE="$YUYI_DIR/env"
+ENV_TMP="$ENV_FILE.tmp.$$"
+: > "$ENV_TMP"
+if [ -f "$ENV_FILE" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      YUYI_HUB=*|YUYI_YUFU_URL=*|YUYI_TOKEN=*) continue ;;  # 受管键：丢弃旧值，末尾统一重写
+      *) printf '%s\n' "$line" >> "$ENV_TMP" ;;              # 未知键/注释/空行：原样保留
+    esac
+  done < "$ENV_FILE"
+fi
+{
+  printf 'YUYI_HUB=%s\n' "$HUB_URL"
+  printf 'YUYI_YUFU_URL=%s\n' "$YUFU_URL"
+  if [ -n "$TOKEN" ]; then
+    printf 'YUYI_TOKEN=%s\n' "$TOKEN"
+  fi
+} >> "$ENV_TMP"
+mv "$ENV_TMP" "$ENV_FILE"
+chmod 600 "$ENV_FILE"
 if [ ! -f "$POLICY_DST/policy.json" ]; then
   echo '{"targets":[]}' > "$POLICY_DST/policy.json"
   echo "  ✓ 空策略（变更全拒）"
