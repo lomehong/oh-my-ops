@@ -128,7 +128,7 @@ var init_credentials = () => {};
 
 // adapters/omp/yuyi.ts
 import { readFileSync as readFileSync7 } from "fs";
-import { homedir as homedir7 } from "os";
+import { homedir as homedir7, hostname } from "os";
 import { join as join9 } from "path";
 
 // packages/protocol/dist/protocol.js
@@ -175,9 +175,6 @@ var REQUEST_TIMEOUT_MS = 15000;
 var RECONNECT_MIN_MS = 1000;
 var RECONNECT_MAX_MS = 30000;
 var RECONNECT_JITTER_MAX_MS = 5000;
-var RECONNECT_SUPERSEDED_MIN_MS = 20000;
-var CLOSE_SUPERSEDED = 4009;
-var SUPERSEDED_NOTICE_INTERVAL_MS = 120000;
 var WS = globalThis.WebSocket;
 
 class HubClient {
@@ -189,9 +186,6 @@ class HubClient {
   pending = new Map;
   roster = [];
   opts;
-  lastCloseSuperseded = false;
-  supersededStreak = 0;
-  lastSupersededNoticeAt = 0;
   connected = false;
   lastError;
   hubProtocolVersion = 1;
@@ -293,14 +287,6 @@ class HubClient {
     });
     if (frame.type !== "agent/register/ok")
       throw new Error(`unexpected reply: ${frame.type}`);
-    if (frame.ok) {
-      if (frame.agentId)
-        this.hubAgentId = frame.agentId;
-      if (frame.agentName)
-        this.hubAgentName = frame.agentName;
-      if (frame.role)
-        this.hubRole = frame.role;
-    }
     return {
       ok: frame.ok,
       agentId: frame.agentId,
@@ -457,31 +443,15 @@ class HubClient {
       if (ev?.reason)
         this.lastError = ev.reason;
       this.failAllPending(new Error("hub connection closed"));
-      const superseded = ev?.code === CLOSE_SUPERSEDED;
-      this.lastCloseSuperseded = superseded;
-      if (superseded) {
-        this.supersededStreak++;
-        this.diagnoseSuperseded(ev?.reason);
-      }
       if (wasConnected) {
         this.opts.log?.(`hub disconnected (${ev?.code ?? "?"}) ${ev?.reason ?? ""}`.trimEnd());
       }
       this.scheduleReconnect();
     };
   }
-  diagnoseSuperseded(reason) {
-    const now = Date.now();
-    if (now - this.lastSupersededNoticeAt < SUPERSEDED_NOTICE_INTERVAL_MS)
-      return;
-    this.lastSupersededNoticeAt = now;
-    this.opts.log?.(`\u26A0 \u8FDE\u63A5\u88AB\u540C\u8EAB\u4EFD\u65B0\u8FDE\u63A5\u9876\u66FF\uFF084009\uFF0C\u8FDE\u7EED\u7B2C ${this.supersededStreak} \u6B21\uFF09${reason ? `\uFF1A${reason}` : ""}\u3002\u672C\u673A\u53E6\u6709\u63A5\u5165\u9762\u4F7F\u7528\u540C\u4E00\u4E2A agent token + device\u300C${this.opts.device}\u300D\uFF08agentKind=${this.opts.agentKind ?? "?"}\uFF09\uFF1B\u4E24\u4FA7\u81EA\u52A8\u91CD\u8FDE\u4F1A\u4E92\u76F8\u9876\u66FF\u6210\u9707\u8361\u3002\u8BF7\u4E3A\u6BCF\u4E2A\u63A5\u5165\u9762\u914D\u4E0D\u540C\u7684 device\uFF08\u5982 YUYI_DEVICE_OMP\uFF09\uFF0C\u6216\u8BA9\u540C\u4E00 agent \u53EA\u4FDD\u7559\u4E00\u4E2A\u63A5\u5165\u9762\u3002\u91CD\u8FDE\u95F4\u9694\u5DF2\u6309 20s \u5730\u677F\u653E\u6162\uFF0C\u907F\u514D\u65E5\u5FD7\u6D2A\u6C34\u3002`);
-  }
   scheduleReconnect() {
     if (this.closed || this.reconnectTimer)
       return;
-    if (this.lastCloseSuperseded) {
-      this.reconnectDelay = Math.max(this.reconnectDelay, this.opts.supersededReconnectMs ?? RECONNECT_SUPERSEDED_MIN_MS);
-    }
     const jitter = Math.random() * RECONNECT_JITTER_MAX_MS;
     const delay = this.reconnectDelay + jitter;
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, RECONNECT_MAX_MS);
@@ -528,10 +498,6 @@ class HubClient {
         this.principal = frame.connectionPrincipal ?? "agent";
         this.connected = true;
         this.reconnectDelay = RECONNECT_MIN_MS;
-        if (!this.lastCloseSuperseded) {
-          this.supersededStreak = 0;
-          this.lastSupersededNoticeAt = 0;
-        }
         this.opts.log?.(`hub welcome: protocolVersion=${this.hubProtocolVersion} features=[${this.hubFeatures.join(",")}]`);
         if (this.roster.length > 0) {
           this.sendFrame({ type: "roster", sessions: this.roster });
@@ -2614,19 +2580,6 @@ class YufuProxy {
   }
 }
 
-// adapters/omp/device.ts
-import { hostname } from "os";
-var OMP_SURFACE_SUFFIX = "omp";
-function resolveOmpDevice(env = process.env, host = hostname()) {
-  const own = env.YUYI_DEVICE_OMP?.trim();
-  if (own)
-    return own;
-  const explicit = env.YUYI_DEVICE?.trim();
-  if (explicit)
-    return explicit;
-  return `${host}-${OMP_SURFACE_SUFFIX}`;
-}
-
 // adapters/omp/yuyi.ts
 var LOG_DIR = process.env.YUYI_STATE_DIR ?? process.env.YUYI_OMP_LOG_DIR ?? join9(homedir7(), ".yuyi");
 var LOG_FILE = join9(LOG_DIR, "omp-plugin.log");
@@ -2661,13 +2614,7 @@ function yuyi_default(pi) {
   const gateStrict = process.env.YUYI_AGENT_GATE_STRICT === "true";
   const gateClient = new GateClient;
   const agentId = yuyiEnv("YUYI_AGENT_ID");
-  const device = resolveOmpDevice();
-  const sharedDevice = yuyiEnv("YUYI_DEVICE");
-  if (sharedDevice && !process.env.YUYI_DEVICE?.trim()) {
-    log(`device=${device}\uFF08~/.yuyi/env \u7684 YUYI_DEVICE=${sharedDevice} \u662F\u5168\u673A\u5171\u4EAB\u503C\uFF0C\u5DF2\u5FFD\u7565\uFF1A\u540C\u673A\u5404\u63A5\u5165\u9762\u7528\u540C\u4E00\u4E2A device \u4F1A\u5728 Hub \u4FA7\u5224\u540C\u8EAB\u4EFD\u4E92\u8E22\u3002\u8981\u6539\u8BF7\u8BBE YUYI_DEVICE_OMP \u6216\u8FDB\u7A0B\u73AF\u5883 YUYI_DEVICE\uFF09`);
-  } else {
-    log(`device=${device}`);
-  }
+  const device = yuyiEnv("YUYI_DEVICE") ?? hostname();
   let hubUrl = yuyiEnv("YUYI_HUB") ?? "ws://127.0.0.1:7377";
   resolveHubUrl({ fallback: hubUrl }).then((resolved) => {
     hubUrl = resolved;
@@ -3119,8 +3066,7 @@ ${sigNote}` : ""), (chunk) => pi.sendUserMessage(chunk, { deliverAs: "steer" }))
           });
         }
         const mode = ack.deliveredAs === "notify" ? "\u5B9E\u65F6\u5524\u9192\u9001\u8FBE" : ack.deliveredAs === "mail_fallback" ? `\u76EE\u6807\u79BB\u7EBF\uFF0C\u964D\u7EA7\u5165\u7BB1\uFF08${ack.detail ?? "ok"}\uFF09` : ack.detail ?? "ok";
-        const addrHint = ack.detail?.includes("no session matching") ? "\uFF08\u7528 yuyi_peers \u67E5\u770B\u5BF9\u7AEF\u522B\u540D/sessionID\uFF0C\u6216 yuyi_status \u786E\u8BA4\u672C Agent \u8EAB\u4EFD\uFF09" : "";
-        return { content: [{ type: "text", text: ack.ok ? `\u5DF2\u6295\u9012\uFF1A${mode}` : `\u6295\u9012\u5931\u8D25\uFF1A${ack.detail}${addrHint}` }] };
+        return { content: [{ type: "text", text: ack.ok ? `\u5DF2\u6295\u9012\uFF1A${mode}` : `\u6295\u9012\u5931\u8D25\uFF1A${ack.detail}` }] };
       } catch (err) {
         return { content: [{ type: "text", text: `\u53D1\u9001\u5F02\u5E38: ${String(err)}` }] };
       }
@@ -3360,8 +3306,7 @@ ${snap ?? "\uFF08\u4EFB\u52A1\u8BB0\u5F55\u4E3A\u7A7A\uFF09"}` }] };
           });
           return { content: [{ type: "text", text: `\u5DF2\u53D1\u8D77\u65B0\u4E00\u8F6E\uFF08taskId=${taskId}${replyTo ? `\uFF0CreplyTo=${replyTo}` : "\uFF0C\u9996\u8F6E\u8BF7\u6C42"}\uFF09\uFF1A${ack.detail ?? "ok"}` }] };
         }
-        const addrHint = ack.detail?.includes("no session matching") ? "\uFF08\u7528 yuyi_peers \u67E5\u770B\u5BF9\u7AEF\u522B\u540D/sessionID\uFF0C\u6216 yuyi_status \u786E\u8BA4\u672C Agent \u8EAB\u4EFD\uFF09" : "";
-        return { content: [{ type: "text", text: `\u6295\u9012\u5931\u8D25\uFF1A${ack.detail}${addrHint}` }] };
+        return { content: [{ type: "text", text: `\u6295\u9012\u5931\u8D25\uFF1A${ack.detail}` }] };
       } catch (err) {
         return { content: [{ type: "text", text: `\u53D1\u9001\u5F02\u5E38: ${String(err)}` }] };
       }
@@ -3573,6 +3518,5 @@ ${snap ?? "\uFF08\u4EFB\u52A1\u8BB0\u5F55\u4E3A\u7A7A\uFF09"}` }] };
 }
 export {
   resolveYuyiToken,
-  resolveOmpDevice,
   yuyi_default as default
 };
