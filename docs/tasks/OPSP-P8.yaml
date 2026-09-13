@@ -1,0 +1,15 @@
+id: 'OPSP-P8'
+title: 'Write 档 + Vault 凭据加密存储（§3.11）'
+state: '待执行'
+level: 'L1'
+created: '2026-09-13T10:05:09.290Z'
+accept:
+  - 'CredentialVault 加密存储：OPS_VAULT_PASSPHRASE 派生密钥，密文落盘'
+  - 'ops_vault_store / ops_file_write 经 registerOpsTool 注册进 write 档（fail-fast）'
+  - '提示词能力清单由 buildCapabilityLists 自动同步（零漂移）'
+  - '运行时验收：写→读回一致；错误口令拒绝；write 全量审计'
+events:
+  - ts: '2026-09-13T10:05:09.290Z'
+    op: 'create'
+    by: 'omp-architect-session'
+    note: 'Write 档 + Vault 凭据加密存储（§3.11）'

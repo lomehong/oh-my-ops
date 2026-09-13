@@ -1,0 +1,14 @@
+id: 'OPSP-P9'
+title: '沙箱隔离落地（§7.1）'
+state: '待执行'
+level: 'L2'
+created: '2026-09-13T10:05:09.360Z'
+accept:
+  - '隔离实现二选一并记录决策：bubblewrap 或容器化执行'
+  - 'OPS_PI_SANDBOX=1 实际生效，status 面板真实反映'
+  - '运行时负测：沙箱内白名单外写操作失败且不落宿主'
+events:
+  - ts: '2026-09-13T10:05:09.360Z'
+    op: 'create'
+    by: 'omp-architect-session'
+    note: '沙箱隔离落地（§7.1）'

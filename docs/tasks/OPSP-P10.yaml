@@ -1,0 +1,14 @@
+id: 'OPSP-P10'
+title: 'yuyi 上游双连接互踢修复跟进（外部依赖）'
+state: '待执行'
+level: 'L3'
+created: '2026-09-13T10:05:09.421Z'
+accept:
+  - 'yuyi-omp 源码修复合入：YUYI_TOKEN 缺失禁用 device token 兜底，或携带 principal:''device'''
+  - 'ops-pi 侧复测：长会话零 superseded 抖动，心跳自回声归零'
+  - '修复后 P5 全链路回归通过'
+events:
+  - ts: '2026-09-13T10:05:09.421Z'
+    op: 'create'
+    by: 'omp-architect-session'
+    note: 'yuyi 上游双连接互踢修复跟进（外部依赖）'

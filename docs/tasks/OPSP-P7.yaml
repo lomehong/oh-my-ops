@@ -1,0 +1,16 @@
+id: 'OPSP-P7'
+title: 'SshPool 远程多主机执行（§3.0/§3.2）'
+state: '待执行'
+level: 'L2'
+created: '2026-09-13T10:05:09.223Z'
+accept:
+  - 'SshPool 连接池（复用/空闲超时/并发上限可配）'
+  - 'policy 匹配支持 @remote 真实 hostname（ruleCovers 扩展非本机目标）'
+  - '移除本地工具的远程诚实化拒绝：read/exec/docker/k8s/service 全走 SshPool'
+  - '审计记录含真实 host'
+  - '运行时验收：真实远程主机只读巡检 + 预授权后远程 exec'
+events:
+  - ts: '2026-09-13T10:05:09.224Z'
+    op: 'create'
+    by: 'omp-architect-session'
+    note: 'SshPool 远程多主机执行（§3.0/§3.2）'
