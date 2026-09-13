@@ -16,3 +16,5 @@ export { loadTokenStore, StaticTokenStore, ReloadableTokenStore } from "./tokens
 export type { ApprovalToken, TokenFile, TokenStore } from "./tokens.ts";
 export { READ, WRITE, EXEC, byAction, tierOf, needsOwnerAuth, createAuthorizedExec, evaluateAuthorization } from "./approvals.ts";
 export type { Tier, ApprovalDecision, AuthzSource, AuthorizationVerdict } from "./approvals.ts";
+export { SshPool, normalizeTargetHost, type SshConfig } from "./ssh.ts";
+export type { Runner } from "./runner.ts";

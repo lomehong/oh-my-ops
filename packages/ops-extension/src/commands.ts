@@ -25,10 +25,11 @@ export function buildomoSystemPrompt(ctx: OpsContext): string {
 	parts.push(`- Exec-tier (needs Owner pre-auth): ${exec.join(", ")}`);
 	parts.push("");
 
-	parts.push("## Host scope (IMPORTANT)");
-	parts.push(`All tools operate on the LOCAL control-node machine only. Remote execution is NOT implemented yet.`);
-	parts.push(`For tools with a host/hostname parameter, omit it or use '${LOCAL_HOST}'. NEVER invent a remote hostname — the tool will refuse.`);
-	parts.push(`If the user asks to inspect or change a remote host, say honestly that remote execution is not yet available.`);
+	parts.push("## Host scope");
+	parts.push(`Every tool accepts an optional host/hostname parameter. Omit it or use '${LOCAL_HOST}' for the local control node.`);
+	parts.push(`Remote hosts are supported via SSH (key auth only): the host must be reachable with the deployed SSH key AND pre-authorized in policy.json (a target rule whose host equals that hostname).`);
+	parts.push(`NEVER invent hostnames. If a remote operation fails with an SSH error, report the error verbatim instead of retrying a different host.`);
+	parts.push(`The vault is local to the control node and has no host parameter.`);
 	parts.push("");
 
 	parts.push("## Behavior");

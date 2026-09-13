@@ -1,4 +1,4 @@
-import { LOCAL_HOST, OpsError, READ } from "@ops-pi/core";
+import { LOCAL_HOST, READ } from "@ops-pi/core";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { registerOpsTool } from "../approvals.ts";
 import { assertAuthorized } from "../guards.ts";
@@ -9,22 +9,11 @@ import type { OpsContext } from "../context.ts";
  * 全部经 registerOpsTool 强制 loadMode:"essential" + approval（P0 Contract ③）。
  * health_check/health_poll 走 shell exec 收集基础指标，L1 不依赖 omp（设计 §7.1）。
  *
- * ★ hostname 诚实化：health_* 的 hostname 参数仅接受省略或 "@local"——
- *   此前填任何值都静默返回本机指标（「巡检 web-01 实为本机」误导，现明确拒绝）。
+ * ★ hostname 支持远程目标（P7 SshPool）：经 ctx.forHost 路由；
+ *   非法主机名由 forHost/normalizeTargetHost 即抛 POLICY_DENIED。
  */
 export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 	const z = pi.zod;
-
-	/** hostname 诚实化守卫（health_* 共用） */
-	const assertLocalHostname = (raw: unknown): void => {
-		const value = typeof raw === "string" ? raw.trim() : "";
-		if (value !== "" && value !== LOCAL_HOST) {
-			throw new OpsError(
-				"POLICY_DENIED",
-				`[ERR_POLICY] 远程巡检尚未实现（P1 经 SshPool 引入）：当前仅支持本机。hostname 请省略或填 '${LOCAL_HOST}'，收到：'${value}'`,
-			);
-		}
-	};
 
 	// ── Process ──
 	registerOpsTool(pi, {
@@ -37,11 +26,13 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			user: z.string().optional().describe("按用户名精确过滤"),
 			name: z.string().optional().describe("按命令行子串过滤"),
 			limit: z.number().optional().describe("返回条数上限（缺省 50）"),
+			host: z.string().optional().describe("目标主机（留空 = 本机；远程须在 policy.json 预授权 + SSH 密钥可达）"),
 		}),
 		async execute(_toolCallId, params, signal) {
 			const authz = assertAuthorized("ops_process_list", params, ctx.authzView);
 			const p = params as Record<string, unknown>;
-			const rows = await ctx.process.list(
+			const ops = ctx.forHost(typeof p.host === "string" ? p.host : undefined);
+			const rows = await ops.process.list(
 				{ user: p.user as string | undefined, name: p.name as string | undefined, limit: p.limit !== undefined ? Number(p.limit) : undefined },
 				{ signal, timeoutMs: 15_000 },
 			);
@@ -55,17 +46,19 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 		label: "File Read",
 		loadMode: "essential",
 		approval: READ,
-		description: "读取本机文本文件内容（只读）。超过 2 MiB 或 3000 行时由宿主截断并存入 artifact。路径边界由沙箱约束。",
+		description: "读取文本文件内容（只读；支持远程主机）。超过 2 MiB 或 3000 行时由宿主截断并存入 artifact。",
 		parameters: z.object({
 			path: z.string().describe("文件绝对路径"),
 			maxBytes: z.number().optional().describe("读取上限（字节），缺省 2 MiB"),
+			host: z.string().optional().describe("目标主机（留空 = 本机）"),
 		}),
 		async execute(_toolCallId, params, signal) {
 			const p = params as Record<string, unknown>;
 			const path = String(p.path ?? "");
 			if (!path) throw new Error("[INTERNAL] 缺少 path");
 			const authz = assertAuthorized("ops_file_read", p, ctx.authzView);
-			const text = await ctx.files.read(path, { maxBytes: p.maxBytes !== undefined ? Number(p.maxBytes) : undefined, signal });
+			const ops = ctx.forHost(typeof p.host === "string" ? p.host : undefined);
+			const text = await ops.files.read(path, { maxBytes: p.maxBytes !== undefined ? Number(p.maxBytes) : undefined, signal });
 			return { content: [{ type: "text", text }], details: { authz } };
 		},
 	});
@@ -76,16 +69,18 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 		label: "File List",
 		loadMode: "essential",
 		approval: READ,
-		description: "列出目录内容（文件名、大小、修改时间）。仅返回目录下直接条目（非递归）。",
+		description: "列出目录内容（文件名、大小、修改时间；支持远程主机）。仅返回目录下直接条目（非递归）。",
 		parameters: z.object({
 			path: z.string().describe("目录绝对路径"),
+			host: z.string().optional().describe("目标主机（留空 = 本机）"),
 		}),
 		async execute(_toolCallId, params, signal) {
 			const p = params as Record<string, unknown>;
 			const path = String(p.path ?? "");
 			if (!path) throw new Error("[INTERNAL] 缺少 path");
 			const authz = assertAuthorized("ops_file_ls", p, ctx.authzView);
-			const result = await ctx.shell.exec(["ls", "-lh", "--time-style=full-iso", path], { signal, timeoutMs: 10_000 });
+			const ops = ctx.forHost(typeof p.host === "string" ? p.host : undefined);
+			const result = await ops.shell.exec(["ls", "-lh", "--time-style=full-iso", path], { signal, timeoutMs: 10_000 });
 			return { content: [{ type: "text", text: result.stdout }], details: { authz } };
 		},
 	});
@@ -96,13 +91,13 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 		label: "Health Check",
 		loadMode: "essential",
 		approval: READ,
-		description: "本机快速健康检查：CPU 负载、内存使用、磁盘空间、关键进程。超时 30s。",
+		description: "快速健康检查：CPU 负载、内存使用、磁盘空间、关键进程（支持远程主机）。超时 30s。",
 		parameters: z.object({
-			hostname: z.string().optional().describe("主机标识：留空或 '@local'（当前仅本机；远程支持 P1 引入）"),
+			hostname: z.string().optional().describe("目标主机（留空 = 本机；远程须 policy 预授权 + SSH 密钥可达）"),
 		}),
 		async execute(_toolCallId, params, signal) {
 			const p = params as Record<string, unknown>;
-			assertLocalHostname(p.hostname);
+			const ops = ctx.forHost(typeof p.hostname === "string" ? p.hostname : undefined);
 			const authz = assertAuthorized("ops_health_check", p, ctx.authzView);
 			const commands = [
 				"echo '=== CPU ===' && uptime && mpstat 1 1 2>/dev/null | tail -1 || top -bn1 | head -3",
@@ -110,10 +105,10 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 				"echo '=== DISK ===' && df -h / 2>/dev/null | tail -1",
 				"echo '=== TOP PROCESSES ===' && ps aux --sort=-%cpu | head -6",
 			].join(" && ");
-			const result = await ctx.shell.exec(["sh", "-c", commands], { signal, timeoutMs: 30_000 });
+			const result = await ops.shell.exec(["sh", "-c", commands], { signal, timeoutMs: 30_000 });
 			return {
 				content: [{ type: "text", text: result.stdout }],
-				details: { authz, host: LOCAL_HOST },
+				details: { authz, host: ops.host ?? LOCAL_HOST },
 			};
 		},
 	});
@@ -124,13 +119,13 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 		label: "Health Poll",
 		loadMode: "essential",
 		approval: READ,
-		description: "本机连续健康检查（单次快照）。返回与 health_check 相同格式，供定期轮询使用。",
+		description: "连续健康检查（单次快照；支持远程主机）。返回与 health_check 相同格式，供定期轮询使用。",
 		parameters: z.object({
-			hostname: z.string().optional().describe("主机标识：留空或 '@local'"),
+			hostname: z.string().optional().describe("目标主机（留空 = 本机）"),
 		}),
 		async execute(_toolCallId, params, signal) {
 			const p = params as Record<string, unknown>;
-			assertLocalHostname(p.hostname);
+			const ops = ctx.forHost(typeof p.hostname === "string" ? p.hostname : undefined);
 			const authz = assertAuthorized("ops_health_poll", p, ctx.authzView);
 			const commands = [
 				"echo '=== LOAD ===' && uptime",
@@ -138,8 +133,8 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 				"echo '=== DISK ===' && df -h / 2>/dev/null | tail -1",
 				"echo '=== TOP3 ===' && ps aux --sort=-%cpu | head -4",
 			].join(" && ");
-			const result = await ctx.shell.exec(["sh", "-c", commands], { signal, timeoutMs: 30_000 });
-			return { content: [{ type: "text", text: result.stdout }], details: { authz, host: LOCAL_HOST } };
+			const result = await ops.shell.exec(["sh", "-c", commands], { signal, timeoutMs: 30_000 });
+			return { content: [{ type: "text", text: result.stdout }], details: { authz, host: ops.host ?? LOCAL_HOST } };
 		},
 	});
 

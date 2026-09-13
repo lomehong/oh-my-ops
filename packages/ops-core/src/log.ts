@@ -1,4 +1,5 @@
 import { ShellExec, type ExecOptions } from "./exec.ts";
+import type { Runner } from "./runner.ts";
 
 export interface TailResult {
 	file: string;
@@ -21,8 +22,8 @@ export interface GrepResult {
  * 设计 §3.8：日志类工具统一走 ShellExec，不依赖特定日志库。
  */
 export class LogCollector {
-	private readonly shell: ShellExec;
-	constructor(shell: ShellExec = new ShellExec()) {
+	private readonly shell: Runner;
+	constructor(shell: Runner = new ShellExec()) {
 		this.shell = shell;
 	}
 

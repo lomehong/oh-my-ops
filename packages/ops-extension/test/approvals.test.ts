@@ -47,9 +47,9 @@ const RULES: readonly TargetRule[] = [
 const TOKENS = [{ id: "T-1", scope: `${LOCAL_HOST}/redis/restart`, issuedBy: "主人", issuedAt: "2026-09-12T00:00:00Z" }];
 
 describe("policyRequestFor（工具入参 → PolicyRequest 单一映射）", () => {
-	test("ops_service：host 强制本机，入参 host 被忽略（远程未实现，诚实化）", () => {
+	test("ops_service：host 透传（P7 远程目标 → 策略按真实主机匹配）", () => {
 		expect(policyRequestFor("ops_service", { service: "nginx", action: "restart", host: "web-01" }))
-			.toEqual({ host: LOCAL_HOST, service: "nginx", action: "restart" });
+			.toEqual({ host: "web-01", service: "nginx", action: "restart" });
 	});
 
 	test("ops_shell_exec：action 固定 shell，command 进入请求", () => {
@@ -82,8 +82,8 @@ describe("policyRequestFor（工具入参 → PolicyRequest 单一映射）", ()
 			.toEqual({ host: LOCAL_HOST, service: "deployment/api", action: "restart" });
 	});
 
-	test("未登记工具 → 仅 host 本机（无目标语义的 read 不会走到判定）", () => {
-		expect(policyRequestFor("ops_x", { host: "whatever" })).toEqual({ host: LOCAL_HOST });
+	test("未登记工具 → host 透传（read 档在判定前短路，此映射仅供一致性）", () => {
+		expect(policyRequestFor("ops_x", { host: "whatever" })).toEqual({ host: "whatever" });
 		expect(policyRequestFor("ops_x", "not-an-object")).toEqual({ host: LOCAL_HOST });
 	});
 });

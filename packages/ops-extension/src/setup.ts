@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { SshConfig } from "@ops-pi/core";
 
 export interface OpsConfig {
 	/** 部署环境显式指定；缺省 auto（§7.4.4 探针边界：无法自检 approvalMode） */
@@ -8,6 +9,7 @@ export interface OpsConfig {
 	tokenPath?: string;
 	vault?: { dbPath?: string };
 	health?: { autoPollIntervalMs?: number };
+	ssh?: SshConfig;
 }
 
 /** loadConfig 的返回：路径字段已保证有值（缺省 → cwd/.ops-pi/），供 OpsContext 直接使用 */
@@ -34,6 +36,7 @@ export function loadConfig(cwd: string): LoadedOpsConfig {
 		tokenPath: typeof raw.tokenPath === "string" ? raw.tokenPath : path.join(cwd, DEFAULT_TOKEN_PATH),
 		vault: isVaultConfig(raw.vault) ? raw.vault : undefined,
 		health: isHealthConfig(raw.health) ? raw.health : undefined,
+		ssh: isSshConfig(raw.ssh) ? raw.ssh : undefined,
 	};
 }
 
@@ -48,4 +51,19 @@ function isVaultConfig(value: unknown): value is NonNullable<OpsConfig["vault"]>
 	if (value === null || typeof value !== "object") return false;
 	const dbPath = (value as Record<string, unknown>).dbPath;
 	return typeof dbPath === "string" && dbPath !== "";
+}
+
+function isSshConfig(value: unknown): value is NonNullable<OpsConfig["ssh"]> {
+	if (value === null || typeof value !== "object") return false;
+	const rec = value as Record<string, unknown>;
+	const numOk = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+	const strOk = (v: unknown) => typeof v === "string" && v !== "";
+	return (
+		(rec.user === undefined || strOk(rec.user)) &&
+		(rec.port === undefined || numOk(rec.port)) &&
+		(rec.identityFile === undefined || strOk(rec.identityFile)) &&
+		(rec.connectTimeoutSec === undefined || numOk(rec.connectTimeoutSec)) &&
+		(rec.controlPersistSec === undefined || numOk(rec.controlPersistSec)) &&
+		(rec.maxSessions === undefined || numOk(rec.maxSessions))
+	);
 }
