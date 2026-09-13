@@ -137,7 +137,8 @@ case "\${1:-}" in
     if [ "\$FOREGROUND" = true ]; then
       exec "\$MIR/dist/cli.js" --profile ops "\${EXT_ARGS[@]}" --mode rpc "\${EXTRA_ARGS[@]}"
     else
-      setsid nohup "\$MIR/dist/cli.js" --profile ops "\${EXT_ARGS[@]}" --mode rpc "\${EXTRA_ARGS[@]}" < /dev/null > /tmp/omo-serve.log 2>&1 & echo \$! > /tmp/omo-serve.pid
+      setsid bash -c 'tail -f /dev/null | exec "\$HOME/.ops-pi/omp/dist/cli.js" --profile ops "\${EXT_ARGS[@]}" --mode rpc "\${EXTRA_ARGS[@]}"' < /dev/null >> /tmp/omo-serve.log 2>&1 &
+      sleep 1; pgrep -f "mode rpc" | tail -1 > /tmp/omo-serve.pid
       echo "[omo] ✓ 服务已启动 PID \$(cat /tmp/omo-serve.pid)"
     fi ;;
   status)
