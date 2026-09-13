@@ -1,6 +1,6 @@
 id: 'OPSP-P7'
 title: 'SshPool 远程多主机执行（§3.0/§3.2）'
-state: '待确认'
+state: '已落定'
 level: 'L2'
 created: '2026-09-13T10:05:09.223Z'
 accept:
@@ -22,6 +22,10 @@ events:
     op: 'report'
     by: 'omp-architect-session'
     note: 'P7 SshPool 远程多主机——实现完成，本机验收 2/2 通过，真实远程项待目标环境'
+  - ts: '2026-09-13T11:10:11.258Z'
+    op: 'confirm'
+    by: '主人'
+    note: '会话确认（2026-09-13）'
 branch: 'feature/OPSP-P7-sshpool-remote'
 report:
   summary: 'P7 SshPool 远程多主机——实现完成，本机验收 2/2 通过，真实远程项待目标环境'
@@ -38,3 +42,5 @@ report:
     - 'docker/k8s 远程执行依赖目标机安装 docker/kubectl CLI（文档已注明语义）'
   at: '2026-09-13T10:34:04.193Z'
   by: 'omp-architect-session'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-09-13）'

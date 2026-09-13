@@ -1,6 +1,6 @@
 id: 'OPSP-P8'
 title: 'Write 档 + Vault 凭据加密存储（§3.11）'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-13T10:05:09.290Z'
 accept:
@@ -21,12 +21,16 @@ events:
     op: 'report'
     by: 'omp-architect-session'
     note: 'P8 Write 档 + Vault 加密存储——实现完成，运行时验收 3/3 通过'
+  - ts: '2026-09-13T11:10:11.396Z'
+    op: 'confirm'
+    by: '主人'
+    note: '会话确认（2026-09-13）'
 branch: 'feature/OPSP-P8-write-vault'
 report:
   summary: 'P8 Write 档 + Vault 加密存储——实现完成，运行时验收 3/3 通过'
   evidence:
     - 'core/vault.ts：CredentialVault（AES-256-GCM + scrypt 派生，原子落盘 0600，GCM 完整性防篡改）'
-    - 'ops_vault_store / ops_file_write 注册进 write 档（TIER_TABLE: WRITE → needsOwnerAuth 恒真）'
+    - 'ops_vault_store / ops_file_write 注册进 write 档（TIER_TABLE: 'WRITE → needsOwnerAuth 恒真）'''
     - 'ops_file_write：本地写入 + mode 权限 + 远程诚实拒绝（远程写留后续版本）'
     - 'ops_vault_list 升级：解锁态回真实 key 清单（仅名不回文）'
     - 'vault 解锁：session_start + 工具内惰性解锁双路径，口令仅来自 OPS_VAULT_PASSPHRASE 环境变量（§7.7）'
@@ -37,3 +41,5 @@ report:
     - 'vault 口令轮换（re-key）与备份策略未实现'
   at: '2026-09-13T10:45:55.490Z'
   by: 'omp-architect-session'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-09-13）'

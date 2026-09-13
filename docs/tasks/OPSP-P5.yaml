@@ -1,6 +1,6 @@
 id: 'OPSP-P5'
 title: '跨 Agent 请求走同一安全三层（不依赖身份接口；身份由 Yuyi 插件自治）'
-state: '待确认'
+state: '已落定'
 level: 'L2'
 created: '2026-09-12T06:01:26.802Z'
 accept:
@@ -25,6 +25,10 @@ events:
     op: 'report'
     by: 'omp-architect-session'
     note: 'P5 跨 Agent 请求安全覆盖——运行时验收 3/3 通过（① 适配器加载 ② 命名空间隔离 ③ 安全覆盖 ④ Hub 连通）'
+  - ts: '2026-09-13T11:10:11.108Z'
+    op: 'confirm'
+    by: '主人'
+    note: '会话确认（2026-09-13）'
 rescope:
   - at: '2026-09-12T06:11:43.450Z'
     by: 'architect'
@@ -40,7 +44,7 @@ branch: 'feature/OPSP-P5-crossagent-security'
 report:
   summary: 'P5 跨 Agent 请求安全覆盖——运行时验收 3/3 通过（① 适配器加载 ② 命名空间隔离 ③ 安全覆盖 ④ Hub 连通）'
   evidence:
-    - 'tsc strict 0 errors；bun test 90/90 全绿；L1 node:test 64/64'
+    - 'tsc strict 0 errors；bun test 90/90 全绿；L1 node: 'test 64/64'''
     - 'Yuyi 适配器 27 个工具加载成功'
     - 'ops_* 与 yuyi_*/yufu_* 命名空间隔离（无冲突）'
     - 'Yuyi Hub 连通（yuyi_peers 返回对端列表）'
@@ -50,3 +54,5 @@ report:
     - '跨 Agent 身份校验需 Yuyi Hub 稳定连接 + 对端 Agent 配合测试（当前 Hub 间歇性 superseded）'
   at: '2026-09-12T13:34:13.196Z'
   by: 'omp-architect-session'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-09-13）'
