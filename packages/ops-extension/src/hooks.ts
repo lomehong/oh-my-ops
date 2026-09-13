@@ -29,6 +29,15 @@ export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
 		// 品牌标识：omp TUI 由宿主控制，ops-pi 通过 notify 展示身份
 		sessionCtx.ui.notify("omo 运维智能体已加载", "info");
 
+		// ④½ vault 解锁（口令仅来自环境变量 OPS_VAULT_PASSPHRASE，§7.7）
+		if (ctx.vault && process.env.OPS_VAULT_PASSPHRASE) {
+			const okUnlock = ctx.vault.unlock(process.env.OPS_VAULT_PASSPHRASE);
+			sessionCtx.ui.notify(
+				okUnlock ? "vault 已解锁（OPS_VAULT_PASSPHRASE）" : "vault 解锁失败（OPS_VAULT_PASSPHRASE 口令错误）",
+				okUnlock ? "info" : "warning",
+			);
+		}
+
 		// ⑤ 巡检轮询（受管定时器，session_shutdown 自动清理）
 		// 说明：命令为硬编码只读本地探针，不经 LLM、不经审批流；仍落审计条目保证可发现性。
 		if (ctx.config?.health?.autoPollIntervalMs) {

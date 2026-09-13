@@ -10,7 +10,7 @@ import { buildCapabilityLists } from "./approvals.ts";
  *   不会再宣告未实现的工具（此前曾宣告 ops_ssh_*、ops_file_write、ops_vault_store、ops_process_kill）。
  */
 export function buildomoSystemPrompt(ctx: OpsContext): string {
-	const { read, exec } = buildCapabilityLists();
+	const { read, write, exec } = buildCapabilityLists();
 	const parts: string[] = [];
 
 	parts.push("You are omo (运维智能体), an ops intelligence agent. This is your PRIMARY identity.");
@@ -22,6 +22,7 @@ export function buildomoSystemPrompt(ctx: OpsContext): string {
 
 	parts.push("## Available capabilities");
 	parts.push(`- Read-tier (auto-allowed): ${read.join(", ")}`);
+	parts.push(`- Write-tier (needs Owner pre-auth): ${write.join(", ")}`);
 	parts.push(`- Exec-tier (needs Owner pre-auth): ${exec.join(", ")}`);
 	parts.push("");
 

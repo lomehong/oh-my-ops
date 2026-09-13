@@ -41,6 +41,19 @@ export class FileOps {
 		});
 	}
 
+	/**
+	 * 写入文本文件（write 档，P8）。父目录须已存在（不静默 mkdir）；
+	 * mode 为八进制权限（如 0o600）。远程写入未实现（诚实约束）。
+	 */
+	async write(path: string, content: string, options: { mode?: number; signal?: AbortSignal } = {}): Promise<void> {
+		if (this.runner) throw new OpsError("POLICY_DENIED", "远程写入尚未实现：write 档当前仅支持本机目标");
+		await fs.writeFile(path, content, { encoding: "utf8", mode: options.mode ?? 0o644, signal: options.signal })
+			.catch((cause: unknown) => {
+				const errno = (cause as NodeJS.ErrnoException)?.code;
+				throw new OpsError(errno === "EACCES" ? "PERMISSION_DENIED" : "INTERNAL", `写入失败：${path}`, { cause });
+			});
+	}
+
 	/** 远程读取：stat 取大小 → cat 取内容（上限内），复用同一错误语义 */
 	private async readViaRunner(path: string, maxBytes: number): Promise<string> {
 		const runner = this.runner;

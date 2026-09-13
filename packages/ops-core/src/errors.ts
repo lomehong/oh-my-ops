@@ -8,6 +8,7 @@ export type OpsErrorCode =
 	| "PERMISSION_DENIED"
 	| "POLICY_DENIED"
 	| "VAULT_LOCKED"
+	| "VAULT_KEY_EMPTY"
 	| "INTERNAL";
 
 export class OpsError extends Error {
