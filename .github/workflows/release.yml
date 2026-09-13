@@ -77,7 +77,12 @@ jobs:
           name: "oh-my-ops ${{ steps.ver.outputs.version }}"
           body: |
             ## oh-my-ops ${{ steps.ver.outputs.version }}
-            ### 安装（一行命令，推荐）
+            ### 安装（一行命令，多通道自动回退，推荐）
+            ```bash
+            for u in "https://cdn.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://fastly.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://raw.githubusercontent.com/lomehong/oh-my-ops/main/scripts/bootstrap.sh"; do curl -fsSL --retry 3 --connect-timeout 8 "$u" -o /tmp/omo-install.sh && break; done; bash /tmp/omo-install.sh
+            ```
+
+            ### 短版（GitHub 访问稳定时）
             ```bash
             curl -fsSL https://github.com/lomehong/oh-my-ops/releases/latest/download/install.sh | bash
             ```

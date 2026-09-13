@@ -13,6 +13,14 @@
 
 ### 安装
 
+一行命令（自动在 jsDelivr / fastly / GitHub 多通道间回退，适配不稳定网络）：
+
+```bash
+for u in "https://cdn.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://fastly.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://raw.githubusercontent.com/lomehong/oh-my-ops/main/scripts/bootstrap.sh"; do curl -fsSL --retry 3 --connect-timeout 8 "$u" -o /tmp/omo-install.sh && break; done; bash /tmp/omo-install.sh
+```
+
+GitHub 访问稳定时也可用短版：
+
 ```bash
 curl -fsSL https://github.com/lomehong/oh-my-ops/releases/latest/download/install.sh | bash
 ```
@@ -20,7 +28,7 @@ curl -fsSL https://github.com/lomehong/oh-my-ops/releases/latest/download/instal
 指定版本 / 传参：
 
 ```bash
-OMO_VERSION=v0.4.2 curl -fsSL https://github.com/lomehong/oh-my-ops/releases/latest/download/install.sh | bash -s -- --token <yuyi-token>
+OMO_VERSION=v0.4.3 bash /tmp/omo-install.sh --token <yuyi-token>
 ```
 
 开发者从源码安装：
