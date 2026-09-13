@@ -1,5 +1,6 @@
 import { OpsError } from "./errors.ts";
 import { ShellExec, type ExecOptions } from "./exec.ts";
+import type { Runner } from "./runner.ts";
 
 export interface ProcessInfo {
 	pid: number;
@@ -20,8 +21,8 @@ const DEFAULT_LIMIT = 50;
 
 /** 进程列表（只读）：ps 一次性快照，按 CPU 降序。P0 仅本地；远程经 SshPool 于 P1 引入。 */
 export class ProcessManager {
-	private readonly shell: ShellExec;
-	constructor(shell: ShellExec = new ShellExec()) {
+	private readonly shell: Runner;
+	constructor(shell: Runner = new ShellExec()) {
 		this.shell = shell;
 	}
 
