@@ -53,6 +53,16 @@ SYS_DIR="$(dirname "$SYS_OMP")/.."
 SYS_DIR="$(cd "$SYS_DIR" && pwd)"
 [ -f "$SYS_DIR/dist/cli.js" ] || { echo "✗ omp 产物异常：$SYS_DIR/dist/cli.js 不存在"; exit 1; }
 
+# omp 版本门禁：扩展依赖 18.x 宿主 API（getAllTools sourceInfo / typebox 注入）
+OMP_VER=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$SYS_DIR/package.json','utf8')).version||'0')}catch{console.log('0')}" 2>/dev/null || echo 0)
+if [ "$(printf '%s\n' "18.1.18" "$OMP_VER" | sort -V | head -1)" != "18.1.18" ]; then
+  echo "✗ omp 版本过低：$OMP_VER（要求 ≥ 18.1.18）。请先升级："
+  echo "    bun install -g @oh-my-pi/pi-coding-agent@latest   # 或 npm i -g 同名包"
+  echo "  升级后重新运行本安装脚本。"
+  exit 1
+fi
+echo "  系统 omp：$SYS_DIR（v$OMP_VER）"
+
 # ── Yuyi 配置：沿用优先，绝不覆盖已发放凭据
 if [ -z "$TOKEN" ] && [ -f "$YUYI_DIR/agent.json" ]; then
   TOKEN=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$YUYI_DIR/agent.json','utf8')).token||'')}catch{}" 2>/dev/null)
@@ -74,7 +84,6 @@ YUFU_URL="${YUFU_URL:-$DEFAULT_YUFU_URL}"
 
 echo "═══ oh-my-ops 安装 v3 ═══"
 echo "  设备名：$AGENT_NAME"
-echo "  系统 omp：$SYS_DIR"
 echo
 
 # ── 1) ops-pi 扩展（自包含：ops-core 实体拷贝，删解压目录不影响运行）

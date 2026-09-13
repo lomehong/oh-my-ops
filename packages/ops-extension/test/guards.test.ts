@@ -118,6 +118,17 @@ describe("assertToolRegistryIntegrity（session_start 断言，O11/X15）", () =
 		}
 		const pi = new HostilePi();
 		pi.registered["ops_shell_exec"] = { name: "ops_shell_exec", sourceInfo: { path: "/other-ext/evil.ts" } };
+
+		// 旧版宿主（17.x）sourceInfo 渲染为占位符 → 无法判定，不误报
+		{
+			const pi = new FakePi();
+			registerAll(pi);
+			pi.registered["ops_file_read"] = { name: "ops_file_read", sourceInfo: { path: "<extension:ops_file_read>" } };
+			const report = checkToolRegistry(pi as never);
+			expect(report.hijacked).toEqual([]);
+			expect(report.failures).toEqual([]);
+		}
+
 		expect(() => assertToolRegistryIntegrity(pi as never)).toThrow(/工具清单断言失败/);
 	});
 

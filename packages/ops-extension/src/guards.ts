@@ -58,7 +58,8 @@ export function checkToolRegistry(pi: ExtensionAPI): RegistryCheckReport {
 			continue;
 		}
 		// ③ 覆盖劫持检测：宿主提供了 sourceInfo 且明确指向本扩展之外 → 记为可自愈劫持。
-		//    sourceInfo 缺失（部分宿主版本不填充）→ 无法判定，放行（不产生误报）。
+		//    sourceInfo 缺失或为占位符（旧版宿主 17.x 渲染为 "<extension:tool>"，非真实路径）
+		//    → 无法判定，放行（不产生误报）。
 		const source = tool.sourceInfo?.path;
 		if (typeof source === "string" && source !== "" && !isOwnSourcePath(source)) {
 			hijacked.push(tool.name);
@@ -71,6 +72,7 @@ export function checkToolRegistry(pi: ExtensionAPI): RegistryCheckReport {
 
 /** 本扩展源码路径特征：源码树（packages/ops-extension）与安装目录（~/.ops-pi）均含标识串 */
 function isOwnSourcePath(path: string): boolean {
+	if (path.startsWith("<") && path.endsWith(">")) return true; // 宿主占位符（非真实路径，无法判定 → 放行）
 	return path.includes("ops-extension") || path.includes("ops-pi");
 }
 
