@@ -66,13 +66,21 @@ fetch() { # $1=github绝对路径  $2=输出文件
 }
 
 # ── [1/4] 解析版本
-step "解析最新版本…"
 VER="${OMO_VERSION:-}"
 if [ -z "$VER" ]; then
-  VER="$(basename "$(curl -fsSL -o /dev/null -w '%{url_effective}' --retry 3 --connect-timeout 10 "$BASE/releases/latest" 2>/dev/null || true)")"
-  if [ -z "$VER" ] && [ -n "${OMO_MIRROR:-}" ]; then
-    VER="$(basename "$(curl -fsSL -o /dev/null -w '%{url_effective}' "$OMO_MIRROR/$BASE/releases/latest" 2>/dev/null || true)")"
-  fi
+  step "解析最新版本…"
+  # 逐源解析 releases/latest 重定向（直连 → OMO_MIRROR → 内置镜像）
+  sources=()
+  [ -n "${OMO_MIRROR:-}" ] && sources+=("$OMO_MIRROR")
+  sources+=("direct" "https://gh-proxy.com" "https://ghproxy.cn")
+  for src in "${sources[@]}"; do
+    case "$src" in
+      direct) url="$BASE/releases/latest" ;;
+      *)      url="$src/$BASE/releases/latest" ;;
+    esac
+    VER="$(basename "$(curl -fsSL -o /dev/null -w '%{url_effective}' --retry 2 --connect-timeout 8 "$url" 2>/dev/null || true)")"
+    [ -n "$VER" ] && { ok "版本 $VER（via $src）"; break; }
+  done
 fi
 [ -n "$VER" ] || die "无法解析最新版本。手动指定：OMO_VERSION=v0.4.3 重试"
 case "$VER" in v*) ;; *) VER="v$VER" ;; esac
