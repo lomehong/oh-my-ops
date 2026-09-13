@@ -113,6 +113,17 @@ cat > "$BIN_DST" <<OMOEOF
 #!/usr/bin/env bash
 # omo — 运维智能体 CLI（品牌内置镜像 + profile 隔离 + 自愈升级）
 set -euo pipefail
+# 进程探测：不依赖 ps/pgrep（极简容器/无 procps 环境可用）
+rpc_pids() {
+  local f p
+  for f in /proc/[0-9]*/cmdline; do
+    [ -r "\$f" ] || continue
+    if tr '\0' '\n' < "\$f" 2>/dev/null | grep -q "mode rpc"; then
+      p=\${f#/proc/}; echo "\${p%/cmdline}"
+    fi
+  done
+  return 0
+}
 [ -f "\$HOME/.yuyi/env" ] && source "\$HOME/.yuyi/env"
 export OPS_PI_SANDBOX="\${OPS_PI_SANDBOX:-0}"
 export OMO_APP_NAME="omo"
@@ -134,18 +145,30 @@ case "\${1:-}" in
   serve)
     shift; FOREGROUND=false; EXTRA_ARGS=()
     for arg in "\$@"; do case "\$arg" in --foreground) FOREGROUND=true ;; *) EXTRA_ARGS+=("\$arg") ;; esac; done
+    if [ -n "\$(rpc_pids | head -1)" ]; then
+      LIVE=\$(rpc_pids | head -1 || true)
+      echo "[omo] ✓ 已有 serve 在运行（PID \$LIVE），本次不重复启动。停止：kill \$LIVE"
+      exit 0
+    fi
     if [ "\$FOREGROUND" = true ]; then
       exec "\$MIR/dist/cli.js" --profile ops "\${EXT_ARGS[@]}" --mode rpc "\${EXTRA_ARGS[@]}"
     else
-      setsid bash -c 'tail -f /dev/null | exec "\$HOME/.ops-pi/omp/dist/cli.js" --profile ops "\${EXT_ARGS[@]}" --mode rpc "\${EXTRA_ARGS[@]}"' < /dev/null >> /tmp/omo-serve.log 2>&1 &
-      sleep 1; pgrep -f "mode rpc" | tail -1 > /tmp/omo-serve.pid
+      setsid bash -c 'tail -f /dev/null | exec "\$HOME/.ops-pi/omp/dist/cli.js" --profile ops "\${EXT_ARGS[@]}" --mode rpc "\${EXTRA_ARGS[@]}"' >> /tmp/omo-serve.log 2>&1 < /dev/null &
+      sleep 1; { rpc_pids | tail -1 > /tmp/omo-serve.pid; } || true
       echo "[omo] ✓ 服务已启动 PID \$(cat /tmp/omo-serve.pid)"
     fi ;;
   status)
     echo "═══ omo (oh-my-ops) ═══"
     [ -d "\$EXT" ] && echo "  扩展：✓" || echo "  扩展：✗（重跑安装脚本）"
     [ -f "\$MIR/dist/cli.js" ] && echo "  镜像：✓" || echo "  镜像：✗（重跑安装脚本）"
-    [ -f /tmp/omo-serve.pid ] && kill -0 "\$(cat /tmp/omo-serve.pid)" 2>/dev/null && echo "  服务：✓ PID \$(cat /tmp/omo-serve.pid)" || echo "  服务：✗"
+    PID="\$(cat /tmp/omo-serve.pid 2>/dev/null || true)"
+    if [ -n "\$PID" ] && kill -0 "\$PID" 2>/dev/null; then
+      echo "  服务：✓ PID \$PID"
+    elif LIVE=\$(rpc_pids | head -1 || true) && [ -n "\$LIVE" ]; then
+      echo "  服务：✓ PID \$LIVE（pid 文件过期已修正）"; echo "\$LIVE" > /tmp/omo-serve.pid
+    else
+      echo "  服务：✗（omo serve 启动）"
+    fi
     [ -f "\$HOME/.ops-pi/policy.json" ] && echo "  策略：✓" || echo "  策略：⚠ 未配置（变更全拒）"
     grep -q '"token": "[^"]' "\$HOME/.yuyi/agent.json" 2>/dev/null && echo "  Yuyi：✓ 已配置" || echo "  Yuyi：✗ 缺 token（bash scripts/install.sh --token <token> 补上）"
     [ "\${OPS_PI_SANDBOX:-0}" = "1" ] && echo "  沙箱：✓" || echo "  沙箱：⚠" ;;
@@ -154,7 +177,7 @@ case "\${1:-}" in
   help|--help|-h)
     echo "omo — 运维智能体 CLI"
     echo "  omo                      交互式"
-    echo "  omo -p '巡检 web-01'     非交互执行"
+    echo "  omo -p '巡检本机'        非交互执行"
     echo "  omo serve                后台服务（cron/webhook 入口）"
     echo "  omo status               状态"
     echo "  其他参数透传 omp" ;;
@@ -270,3 +293,4 @@ echo "  omo -p '巡检本机'        → 非交互巡检"
 echo "  omo serve                → 后台服务"
 echo "  omo status               → 状态"
 echo "  系统 omp 不受影响；omp 升级后 omo 自动刷新镜像"
+
