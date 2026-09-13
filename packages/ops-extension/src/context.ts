@@ -1,4 +1,4 @@
-import { FileOps, LogCollector, ProcessManager, ShellExec, ReloadableTargetPolicy, SshPool, loadTokenStore, normalizeTargetHost } from "@ops-pi/core";
+import { CredentialVault, FileOps, LogCollector, ProcessManager, ShellExec, ReloadableTargetPolicy, SshPool, loadTokenStore, normalizeTargetHost } from "@ops-pi/core";
 import type { ExecOptions, ExecResult, PolicyRequest, Runner } from "@ops-pi/core";
 import type { AuthorizationView } from "./guards.ts";
 import { standardAuthzView } from "./guards.ts";
@@ -41,6 +41,7 @@ export class OpsContext {
 	readonly log: LogCollector;
 	readonly shell: ShellExec;
 	readonly #pool: SshPool;
+	readonly vault: CredentialVault | undefined;
 	readonly #remote = new Map<string, HostOps>();
 
 	constructor(
@@ -61,6 +62,7 @@ export class OpsContext {
 		this.targetPolicy = new ReloadableTargetPolicy(paths.policyPath);
 		this.tokens = loadTokenStore(paths.tokenPath);
 		this.#pool = new SshPool(config.ssh);
+		this.vault = config.vault?.dbPath ? new CredentialVault(config.vault.dbPath) : undefined;
 	}
 
 	/** 配置（供工具读取 vault 路径等运行时信息） */

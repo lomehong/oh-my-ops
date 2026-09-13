@@ -18,3 +18,4 @@ export { READ, WRITE, EXEC, byAction, tierOf, needsOwnerAuth, createAuthorizedEx
 export type { Tier, ApprovalDecision, AuthzSource, AuthorizationVerdict } from "./approvals.ts";
 export { SshPool, normalizeTargetHost, type SshConfig } from "./ssh.ts";
 export type { Runner } from "./runner.ts";
+export { CredentialVault } from "./vault.ts";

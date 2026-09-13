@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DefaultDenyPolicy, StaticTokenStore, LOCAL_HOST, READ, EXEC } from "@ops-pi/core";
+import { DefaultDenyPolicy, StaticTokenStore, LOCAL_HOST, READ, WRITE, EXEC, needsOwnerAuth } from "@ops-pi/core";
 import type { TargetRule } from "@ops-pi/core";
 import {
 	TIER_TABLE,
@@ -80,6 +80,12 @@ describe("policyRequestFor（工具入参 → PolicyRequest 单一映射）", ()
 	test("ops_k8s_rollout：kind/name → service 段（deployment/api）", () => {
 		expect(policyRequestFor("ops_k8s_rollout", { kind: "deployment", name: "api", action: "restart" }))
 			.toEqual({ host: LOCAL_HOST, service: "deployment/api", action: "restart" });
+	});
+
+	test("P8：write 档入表 + 需 Owner 预授权 + 能力清单同步", () => {
+		registerAll(new FakePi());
+		expect(needsOwnerAuth("ops_file_write", {}, TIER_TABLE)).toBe(true);
+		expect(needsOwnerAuth("ops_vault_store", {}, TIER_TABLE)).toBe(true);
 	});
 
 	test("未登记工具 → host 透传（read 档在判定前短路，此映射仅供一致性）", () => {

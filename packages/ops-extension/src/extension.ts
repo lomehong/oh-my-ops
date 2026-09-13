@@ -10,6 +10,7 @@ import { registerDockerTools, registerK8sTools } from "./tools/docker-k8s.ts";
 import { registerServiceTools } from "./tools/service.ts";
 import { setupHooks } from "./hooks.ts";
 import { registerOpsCommands } from "./commands.ts";
+import { registerWriteTools } from "./tools/write.ts";
 
 /**
  * omo 扩展入口（方案 §7.3）。
@@ -36,5 +37,6 @@ export default function (pi: ExtensionAPI): void {
 	registerReadOnlyTools(pi, ctx);
 
 	registerOpsCommands(pi, ctx);
+	registerWriteTools(pi, ctx, ctx.vault, approval);
 	setupHooks(pi, ctx);
 }

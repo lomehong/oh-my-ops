@@ -1,4 +1,4 @@
-import { evaluateAuthorization, READ, EXEC, tierOf, needsOwnerAuth } from "@ops-pi/core";
+import { evaluateAuthorization, READ, WRITE, EXEC, tierOf, needsOwnerAuth } from "@ops-pi/core";
 import type { ApprovalDecision, Tier, TargetPolicy, TokenStore } from "@ops-pi/core";
 import type { ExtensionAPI, ToolDefinition } from "@oh-my-pi/pi-coding-agent";
 import { policyRequestFor } from "./request.ts";
@@ -27,6 +27,10 @@ export const TIER_TABLE: Readonly<Record<string, Tier | ((args: unknown) => Tier
 		const a = (args as Record<string, unknown> | null)?.action;
 		return a === "status" ? READ : EXEC;
 	},
+
+	// P8 · write
+	ops_file_write: WRITE,
+	ops_vault_store: WRITE,
 
 	// P1 · exec
 	ops_shell_exec: EXEC,
@@ -138,12 +142,14 @@ export function makeApprovalFactory(policy: TargetPolicy, tokens: TokenStore): (
 
 export interface CapabilityLists {
 	read: string[];
+	write: string[];
 	exec: string[];
 }
 
 /** 从 TIER_TABLE 渲染能力清单；action 多态工具渲染为 name(action|…) 形式 */
 export function buildCapabilityLists(): CapabilityLists {
 	const read: string[] = [];
+	const write: string[] = [];
 	const exec: string[] = [];
 	for (const name of Object.keys(TIER_TABLE)) {
 		const entry = TIER_TABLE[name];
@@ -153,9 +159,11 @@ export function buildCapabilityLists(): CapabilityLists {
 			exec.push(`${name}(除 ${readActions.join("/")})`);
 		} else if (entry === READ) {
 			read.push(name);
+		} else if (entry === WRITE) {
+			write.push(name);
 		} else {
 			exec.push(name);
 		}
 	}
-	return { read, exec };
+	return { read, write, exec };
 }

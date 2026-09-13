@@ -148,10 +148,13 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 		parameters: z.object({}),
 		async execute(_toolCallId, params, _signal) {
 			const authz = assertAuthorized("ops_vault_list", params, ctx.authzView);
-			// P1 stub：vault 未实现，返回引导信息
-			const items = ctx.config.vault?.dbPath
-				? ["ops_vault 配置已检测，请实现 CredentialVault 存储后使用此工具"]
-				: ["未配置 vault（.ops-pi/config.json 中 vault.dbPath 未设置）"];
+			if (ctx.vault === undefined) {
+				return { content: [{ type: "text", text: "vault 未配置（.ops-pi/config.json 缺 vault.dbPath）" }], details: { authz } };
+			}
+			if (process.env.OPS_VAULT_PASSPHRASE && !ctx.vault.isUnlocked) {
+				ctx.vault.unlock(process.env.OPS_VAULT_PASSPHRASE); // 惰性解锁
+			}
+			const items = ctx.vault.isUnlocked ? ctx.vault.keys() : ["vault 已锁定：设置 OPS_VAULT_PASSPHRASE 后重试"];
 			return { content: [{ type: "text", text: JSON.stringify(items, null, 2) }], details: { authz } };
 		},
 	});
