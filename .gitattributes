@@ -1,0 +1,8 @@
+# 行尾规范：仓库统一 LF（CI/目标机均为 Linux；Windows 克隆通过此文件 + core.autocrlf=input 保持一致）
+* text=auto eol=lf
+
+# 显式二进制（防止 text=auto 误判）
+*.png binary
+*.gz binary
+*.tgz binary
+*.node binary
