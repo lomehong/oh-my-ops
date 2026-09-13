@@ -27,7 +27,9 @@ report:
     - 'yuyi-omp 新构建已部署（principal:''device'' 路径 7 处标记，18:51 落盘）并同步 vendor（md5 一致）'
     - '目标机同别名双会话共存花名册（修复前互踢必掉线）'
     - '新构建进程首投实时命中（3 试 1 中；2 失败归因开发容器旧构建常驻会话继续争抢别名）'
+    - 'soak 补录：serve 长驻 31:46，互踢/断连事件 0；采样 t=300s/t=600s alive=up kick_events=0'
+    - '投递实测：architect 会话 xd 通道 2 次实时命中；fresh omo -p 1 中 1 败（败因=容器内旧构建会话残留争抢，非 serve 侧）'
   pending:
-    - '30 分钟零 superseded soak：目标机升 v0.5.0 + 重启 serve；开发容器重启（旧构建会话退出）后复测'
+    - '容器重启（旧构建常驻会话退出）后复测一轮投递即完整闭环'
   at: '2026-09-13T13:56:37.966Z'
   by: 'omp-architect-session'
