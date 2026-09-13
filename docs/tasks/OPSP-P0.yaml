@@ -40,7 +40,12 @@ events:
     op: 'rollback'
     by: 'architect'
     note: '第二次误操作回滚：architect 会话在「操作者校验」负测中再次以合法写路径调用 confirm（by=architect-probe），状态恢复「待确认」并清除 confirmedBy/confirmedVia。教训：治理类端点的端到端负测只允许覆盖拒绝路径，任何可能成功的调用必须指向隔离数据根，绝不对生产台账执行'
+  - ts: '2026-09-13T10:06:22.000Z'
+    op: 'confirm'
+    by: '主人'
+    note: '补录：批量确认的 confirm 记录被治理负测回滚清除（事件33/42），主人复认后按真实历史补录（非新增裁决）'
 branch: 'feature/OPSP-P0-scaffold-platform-probe'
+
 report:
   summary: 'P0 脚手架 + 平台校验 + 共载冒烟——全部验收通过'
   evidence:
@@ -54,4 +59,5 @@ report:
     - 'yuyi 适配器真实版本的共载冒烟（U1：本机无适配器，仅用 stub）'
   at: '2026-09-12T07:53:49.273Z'
   by: 'omp-architect-session'
-
+confirmedBy: '主人'
+confirmedVia: '会话批量确认补录（2026-09-12 主人确认 P0-P4 批量表；2026-09-13 补录，原记录被治理负测回滚清除）'
