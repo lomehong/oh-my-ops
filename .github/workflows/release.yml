@@ -59,6 +59,7 @@ jobs:
           cp -r docs/examples "/tmp/${PKG}/examples"
           cp -r scripts   "/tmp/${PKG}/scripts"
           cp README.md    "/tmp/${PKG}/README.md"
+          cp scripts/bootstrap.sh "$GITHUB_WORKSPACE/install.sh"
 
           # 清除不需要的文件
           find "/tmp/${PKG}" -name "*.test.ts" -delete
@@ -68,7 +69,6 @@ jobs:
           tar czf "${PKG}.tar.gz" "${PKG}"
           sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
           mv "${PKG}.tar.gz" "${PKG}.tar.gz.sha256" "$GITHUB_WORKSPACE/"
-          cp scripts/bootstrap.sh "$GITHUB_WORKSPACE/install.sh"
 
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
