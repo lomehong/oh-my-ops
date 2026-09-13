@@ -14,20 +14,19 @@
 ### 安装
 
 ```bash
-# 用户：下载 Release（推荐）
-curl -sL https://github.com/lomehong/oh-my-ops/releases/download/v0.3.0/oh-my-ops-v0.3.0.tar.gz -o oh-my-ops.tar.gz
-tar xzf oh-my-ops.tar.gz && cd oh-my-ops-v0.3.0
-bash scripts/install.sh
-
-# 开发者：从源码
-git clone https://github.com/lomehong/oh-my-ops.git && cd oh-my-ops
-bash scripts/install.sh
+curl -fsSL https://github.com/lomehong/oh-my-ops/releases/latest/download/install.sh | bash
 ```
 
-安装一条命令完成，**无需 sudo、无需任何补丁步骤**（omo 品牌已内置）：
+指定版本 / 传参：
 
 ```bash
-tar xzf oh-my-ops-v0.3.0.tar.gz && cd oh-my-ops-v0.3.0
+OMO_VERSION=v0.4.2 curl -fsSL https://github.com/lomehong/oh-my-ops/releases/latest/download/install.sh | bash -s -- --token <yuyi-token>
+```
+
+开发者从源码安装：
+
+```bash
+git clone https://github.com/lomehong/oh-my-ops.git && cd oh-my-ops
 bash scripts/install.sh
 ```
 
@@ -39,7 +38,7 @@ bash scripts/install.sh
 4. 初始化策略目录（缺省：变更类操作全拒）+ Yuyi 通讯配置（自动沿用已有 token/设备名）
 
 前置条件仅一个：系统已安装 [oh-my-pi](https://github.com/can1357/oh-my-pi) ≥ 18.1.18。
-`omo` 即 omo 完整形态；裸 `omp` 命令完全不受影响。卸载：`bash scripts/install.sh --uninstall`。
+安装后 `omo` 即完整形态；裸 `omp` 命令完全不受影响。卸载：`bash scripts/install.sh --uninstall`。
 
 ## 日常使用
 

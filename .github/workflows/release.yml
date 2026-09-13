@@ -68,6 +68,7 @@ jobs:
           tar czf "${PKG}.tar.gz" "${PKG}"
           sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
           mv "${PKG}.tar.gz" "${PKG}.tar.gz.sha256" "$GITHUB_WORKSPACE/"
+          cp scripts/bootstrap.sh "$GITHUB_WORKSPACE/install.sh"
 
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
@@ -76,8 +77,12 @@ jobs:
           name: "oh-my-ops ${{ steps.ver.outputs.version }}"
           body: |
             ## oh-my-ops ${{ steps.ver.outputs.version }}
+            ### 安装（一行命令，推荐）
+            ```bash
+            curl -fsSL https://github.com/lomehong/oh-my-ops/releases/latest/download/install.sh | bash
+            ```
 
-            ### 安装
+            ### 手动安装（等价）
             ```bash
             curl -L "https://github.com/lomehong/oh-my-ops/releases/download/${{ steps.ver.outputs.version }}/oh-my-ops-${{ steps.ver.outputs.version }}.tar.gz" | tar xz
             cd oh-my-ops-*
@@ -90,7 +95,7 @@ jobs:
             omo -p "Use ops_file_read to read /etc/hostname"
             ```
           draft: false
-          prerelease: false
           files: |
+            install.sh
             oh-my-ops-*.tar.gz
             oh-my-ops-*.tar.gz.sha256
