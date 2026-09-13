@@ -107,6 +107,7 @@ set -euo pipefail
 [ -f "\$HOME/.yuyi/env" ] && source "\$HOME/.yuyi/env"
 export OPS_PI_SANDBOX="\${OPS_PI_SANDBOX:-0}"
 export OMO_APP_NAME="OpsPi"
+export OMO_BIN="omo"   # 命令提示用真实 CLI 名（update/models/plugin 提示可照敲）
 export OMO_TIPS=\$'/ops-inspect <主机> 执行标准巡检（只读）\n/ops-health 十秒健康快照；/ops-status 查看策略/沙箱/凭据状态\n只读 ops 工具自动放行；变更类需 Owner 预授权（policy.json）\n无人值守下生产目标变更一律拒绝——这是设计，不是故障\nomo serve 常驻后，cron/webhook 可直接触发巡检与诊断\nPress ctrl+r to search your prompt history\nCtrl+D exits but keeps your draft saved'
 MIR="\$HOME/.ops-pi/omp"
 EXT="\$HOME/.ops-pi/extension/ops-pi"
