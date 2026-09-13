@@ -1,6 +1,6 @@
 id: 'OPSP-P9'
 title: '沙箱隔离落地（§7.1）'
-state: '待执行'
+state: '待确认'
 level: 'L2'
 created: '2026-09-13T10:05:09.360Z'
 accept:
@@ -12,3 +12,24 @@ events:
     op: 'create'
     by: 'omp-architect-session'
     note: '沙箱隔离落地（§7.1）'
+  - ts: '2026-09-13T10:52:00.139Z'
+    op: 'claim'
+    by: 'omp-architect-session'
+    note: 'branch=feature/OPSP-P7-sshpool-remote'
+  - ts: '2026-09-13T10:52:00.215Z'
+    op: 'report'
+    by: 'omp-architect-session'
+    note: 'P9 沙箱隔离——实现完成，bubblewrap 白名单写入 + fail-closed，验收通过'
+branch: 'feature/OPSP-P7-sshpool-remote'
+report:
+  summary: 'P9 沙箱隔离——实现完成，bubblewrap 白名单写入 + fail-closed，验收通过'
+  evidence:
+    - '决策记录：bubblewrap 用户态命名空间（弃容器化：零守护/零镜像依赖，与一行安装原则一致）'
+    - 'SandboxedShell：enabled + bwrap 可用 → / 只读绑定 + cwd 可写 + /tmp tmpfs + unshare ipc；不可用 → SANDBOX_UNAVAILABLE fail-closed'
+    - '作用域：ops_shell_exec/script（任意命令=威胁面）；结构化工具（service/docker/k8s）argv 固定不走沙箱'
+    - 'session_start 与 ops-status 面板真实探测（probeBwrap 缓存）'
+    - '测试：sandbox.test 4 用例（wrap 结构/透传/fail-closed/真实隔离正负测）；tsc 0；bun 150/150；node 88/88'
+  pending:
+    - '容器环境无 bwrap：真实隔离负测在目标机执行（11-sandbox.sh）'
+  at: '2026-09-13T10:52:00.215Z'
+  by: 'omp-architect-session'

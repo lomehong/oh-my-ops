@@ -9,6 +9,7 @@ export type OpsErrorCode =
 	| "POLICY_DENIED"
 	| "VAULT_LOCKED"
 	| "VAULT_KEY_EMPTY"
+	| "SANDBOX_UNAVAILABLE"
 	| "INTERNAL";
 
 export class OpsError extends Error {

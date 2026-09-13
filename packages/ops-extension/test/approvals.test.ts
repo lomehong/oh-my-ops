@@ -155,8 +155,8 @@ describe("档位表与授权需求", () => {
 });
 
 describe("buildCapabilityLists（提示词 = TIER_TABLE 零漂移）", () => {
-	const { read, exec } = buildCapabilityLists();
-	const all = [...read, ...exec];
+	const { read, write, exec } = buildCapabilityLists();
+	const all = [...read, ...write, ...exec];
 
 	test("TIER_TABLE 声明的每个工具都出现在能力清单中（提示词不宣告未实现工具）", () => {
 		for (const name of Object.keys(TIER_TABLE)) {
@@ -169,6 +169,13 @@ describe("buildCapabilityLists（提示词 = TIER_TABLE 零漂移）", () => {
 			const name = entry.includes("(") ? entry.slice(0, entry.indexOf("(")) : entry;
 			expect(Object.hasOwn(TIER_TABLE, name)).toBe(true);
 		}
+	});
+
+	test("P8：write 档工具归 write 组，不与 read/exec 混列", () => {
+		expect(write).toContain("ops_file_write");
+		expect(write).toContain("ops_vault_store");
+		expect(read).not.toContain("ops_file_write");
+		expect(exec).not.toContain("ops_vault_store");
 	});
 
 	test("read/exec 无重复：一个工具只归属一档（action 多态除外，其以注解形式双列）", () => {

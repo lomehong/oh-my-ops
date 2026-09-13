@@ -1,6 +1,7 @@
 import { assertToolRegistryIntegrity, onToolCall } from "./guards.ts";
 import { assertPlatformAtSessionStart } from "./platform.ts";
 import { buildomoSystemPrompt } from "./commands.ts";
+import { probeBwrap } from "./sandbox.ts";
 import { LOCAL_HOST } from "@ops-pi/core";
 import type { OpsContext } from "./context.ts";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
@@ -21,8 +22,10 @@ export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
 		if (!ctx.targetPolicy.isConfigured) {
 			sessionCtx.ui.notify("ops-pi：未配置目标策略（.ops-pi/policy.json）——变更类操作一律拒绝", "warning");
 		}
-		if (process.env.OPS_PI_SANDBOX !== "1") {
-			sessionCtx.ui.notify("ops-pi：未检测到沙箱——运行于进程级隔离（§7.1）", "warning");
+		if (process.env.OPS_PI_SANDBOX === "1") {
+			sessionCtx.ui.notify(probeBwrap() ? "ops-pi：沙箱已启用（bubblewrap）" : "ops-pi：沙箱已启用但 bwrap 不可用——本地 shell 命令将被 fail-closed 拒绝", probeBwrap() ? "info" : "warning");
+		} else {
+			sessionCtx.ui.notify("ops-pi：沙箱未启用——运行于进程级隔离（§7.1）", "warning");
 		}
 
 		// ④ 品牌标识

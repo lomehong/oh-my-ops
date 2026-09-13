@@ -2,6 +2,7 @@ import { LOCAL_HOST } from "@ops-pi/core";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { OpsContext } from "./context.ts";
 import { buildCapabilityLists } from "./approvals.ts";
+import { probeBwrap } from "./sandbox.ts";
 
 /**
  * omo 系统提示词——在 `before_agent_start` 中注入。
@@ -96,7 +97,7 @@ export function registerOpsCommands(pi: ExtensionAPI, ctx: OpsContext): void {
 		handler: async (_args, cmdCtx) => {
 			const parts = [
 				`策略配置：${ctx.targetPolicy.isConfigured ? "✓ 已加载" : "✗ 未配置（变更类操作全拒）"}`,
-				`沙箱：${process.env.OPS_PI_SANDBOX === "1" ? "✓ 已启用" : "⚠ 未检测到（进程级隔离）"}`,
+				`沙箱：${process.env.OPS_PI_SANDBOX === "1" ? (probeBwrap() ? "✓ 已启用（bubblewrap）" : "✗ 已启用但 bwrap 不可用（本地 shell 将 fail-closed 拒绝）") : "⚠ 未启用（进程级隔离）"}`,
 				`Vault：${ctx.config?.vault?.dbPath ? "✓ 已配置" : "✗ 未配置"}`,
 			];
 			cmdCtx.ui.notify(`omo 状态：\n${parts.join("\n")}`, "info");

@@ -1,5 +1,6 @@
 import { CredentialVault, FileOps, LogCollector, ProcessManager, ShellExec, ReloadableTargetPolicy, SshPool, loadTokenStore, normalizeTargetHost } from "@ops-pi/core";
 import type { ExecOptions, ExecResult, PolicyRequest, Runner } from "@ops-pi/core";
+import { SandboxedShell } from "./sandbox.ts";
 import type { AuthorizationView } from "./guards.ts";
 import { standardAuthzView } from "./guards.ts";
 import type { OpsConfig } from "./setup.ts";
@@ -51,7 +52,7 @@ export class OpsContext {
 			files: new FileOps(),
 			process: new ProcessManager(),
 			log: new LogCollector(),
-			shell: new ShellExec(),
+			shell: new SandboxedShell(new ShellExec(), { enabled: process.env.OPS_PI_SANDBOX === "1", writableDir: process.cwd() }),
 		},
 	) {
 		this.files = l1.files;
