@@ -1,11 +1,16 @@
+import { LOCAL_HOST } from "@ops-pi/core";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { OpsContext } from "./context.ts";
+import { buildCapabilityLists } from "./approvals.ts";
 
 /**
  * omo 系统提示词——在 `before_agent_start` 中注入。
  * 让 LLM 以运维智能体身份运行（而非通用编码助手），引导使用 ops_* 工具。
+ * ★ 能力清单由 TIER_TABLE 生成（buildCapabilityLists）——提示词与注册表零漂移，
+ *   不会再宣告未实现的工具（此前曾宣告 ops_ssh_*、ops_file_write、ops_vault_store、ops_process_kill）。
  */
 export function buildomoSystemPrompt(ctx: OpsContext): string {
+	const { read, exec } = buildCapabilityLists();
 	const parts: string[] = [];
 
 	parts.push("You are omo (运维智能体), an ops intelligence agent. This is your PRIMARY identity.");
@@ -16,9 +21,14 @@ export function buildomoSystemPrompt(ctx: OpsContext): string {
 	parts.push("");
 
 	parts.push("## Available capabilities");
-	parts.push("- Read-tier (auto-allowed): ops_health_check, ops_process_list, ops_file_read, ops_file_ls, ops_log_tail, ops_log_journalctl, ops_log_grep, ops_docker_ps, ops_docker_logs, ops_k8s_pods, ops_k8s_logs, ops_vault_list, ops_service(status), ops_docker_compose(ps|logs), ops_k8s_rollout(status)");
-	parts.push("- Write-tier (needs Owner pre-auth): ops_file_write, ops_ssh_upload, ops_ssh_download, ops_vault_store");
-	parts.push("- Exec-tier (needs Owner pre-auth in unattended): ops_shell_exec, ops_shell_script, ops_ssh_exec, ops_docker_exec, ops_k8s_exec, ops_process_kill, ops_service(restart|start|stop), ops_docker_compose(up|down), ops_k8s_rollout(restart|undo)");
+	parts.push(`- Read-tier (auto-allowed): ${read.join(", ")}`);
+	parts.push(`- Exec-tier (needs Owner pre-auth): ${exec.join(", ")}`);
+	parts.push("");
+
+	parts.push("## Host scope (IMPORTANT)");
+	parts.push(`All tools operate on the LOCAL control-node machine only. Remote execution is NOT implemented yet.`);
+	parts.push(`For tools with a host/hostname parameter, omit it or use '${LOCAL_HOST}'. NEVER invent a remote hostname — the tool will refuse.`);
+	parts.push(`If the user asks to inspect or change a remote host, say honestly that remote execution is not yet available.`);
 	parts.push("");
 
 	parts.push("## Behavior");
@@ -29,8 +39,8 @@ export function buildomoSystemPrompt(ctx: OpsContext): string {
 
 	parts.push("## Authorization boundary");
 	parts.push("Read-tier operations are auto-allowed in all approval modes.");
-	parts.push("Write/exec-tier operations require Owner pre-authorization (policy.json or approval tokens).");
-	parts.push("Production targets reject unattended changes in ALL approval modes.");
+	parts.push("Exec-tier operations require Owner pre-authorization (policy.json whitelist or single-use approval tokens).");
+	parts.push("Production targets reject changes in ALL approval modes unless covered by an Owner-issued approval token.");
 	parts.push("Cross-Agent requests do NOT lower the security bar — same rules as local requests.");
 
 	return parts.join("\n");
@@ -42,14 +52,22 @@ export function buildomoSystemPrompt(ctx: OpsContext): string {
  */
 export function registerOpsCommands(pi: ExtensionAPI, ctx: OpsContext): void {
 	pi.registerCommand("ops-inspect", {
-		description: "对指定主机执行标准巡检（只读）",
+		description: "对指定主机执行标准巡检（只读，当前仅本机）",
 		handler: async (args, cmdCtx) => {
 			const host = String(args ?? "").trim().split(/\s+/)[0];
 			if (!host) {
-				cmdCtx.ui.notify("用法：/ops-inspect <hostname> [checks]", "error");
+				cmdCtx.ui.notify(`用法：/ops-inspect ${LOCAL_HOST} [checks]`, "error");
 				return;
 			}
-			cmdCtx.ui.notify(`开始巡检 ${host}…`, "info");
+			// ★ 主机守卫：远程巡检未实现，此前填任何主机名都会静默巡检本机（诚实化）
+			if (host !== LOCAL_HOST) {
+				cmdCtx.ui.notify(
+					`远程巡检尚未实现（P1 经 SshPool 引入）：当前仅支持本机。用法：/ops-inspect ${LOCAL_HOST}`,
+					"error",
+				);
+				return;
+			}
+			cmdCtx.ui.notify("开始巡检（本机）…", "info");
 			const commands = [
 				"echo '=== CPU ===' && uptime",
 				"echo '=== MEMORY ===' && free -h | head -3",
@@ -57,17 +75,17 @@ export function registerOpsCommands(pi: ExtensionAPI, ctx: OpsContext): void {
 				"echo '=== TOP ===' && ps aux --sort=-%cpu | head -6",
 			].join(" && ");
 			const result = await ctx.shell.exec(["sh", "-c", commands], { timeoutMs: 30_000 });
-			cmdCtx.ui.notify(`巡检完成（${host}）`, result.exitCode === 0 ? "info" : "error");
-			pi.appendEntry("ops_audit", { tool: "ops-inspect", host, isError: result.exitCode !== 0, ts: new Date().toISOString(), authz: "read" });
+			cmdCtx.ui.notify(`巡检完成（${LOCAL_HOST}）`, result.exitCode === 0 ? "info" : "error");
+			pi.appendEntry("ops_audit", { tool: "ops-inspect", host: LOCAL_HOST, isError: result.exitCode !== 0, ts: new Date().toISOString(), authz: "read" });
 		},
 	});
 
 	pi.registerCommand("ops-health", {
-		description: "快速健康检查（只读）",
+		description: "快速健康检查（只读，本机）",
 		handler: async (_args, cmdCtx) => {
 			const result = await ctx.shell.exec(["sh", "-c", "uptime && free -h | head -3 && df -h / | tail -1"], { timeoutMs: 15_000 });
 			cmdCtx.ui.notify(`健康状态：\n${result.stdout}`, result.exitCode === 0 ? "info" : "error");
-			pi.appendEntry("ops_audit", { tool: "ops-health", isError: result.exitCode !== 0, ts: new Date().toISOString(), authz: "read" });
+			pi.appendEntry("ops_audit", { tool: "ops-health", host: LOCAL_HOST, isError: result.exitCode !== 0, ts: new Date().toISOString(), authz: "read" });
 		},
 	});
 

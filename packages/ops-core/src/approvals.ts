@@ -38,20 +38,62 @@ export function needsOwnerAuth(toolName: string, args: unknown, table: Readonly<
 }
 
 /**
- * 高危工具授权判定（方案 §7.4.2，§7.4.4 规范 1/2）。
+ * 授权来源（③ 复核通过后返回，落 details.authz 供审计）：
+ *   read   = 只读档（免授权判定）
+ *   policy = 命中 policy.json 预授权白名单
+ *   token  = 消费了 Owner 批准令牌（单次）
+ *   none   = 未授权（仅出现在未放行即抛错的路径）
+ */
+export type AuthzSource = "read" | "policy" | "token" | "none";
+
+/** 单一事实源判定结果：①-a 审批层 / ①-b 兜底层 / ③ execute 复核层共用同一函数与语义 */
+export interface AuthorizationVerdict {
+	allowed: boolean;
+	source: AuthzSource;
+	/** source=token 时为命中的令牌 id */
+	tokenId?: string;
+	/** 拒绝原因分类（供审计 reasonClass 与 ①-b 拒绝消息） */
+	reason?: "guard-production" | "guard-unattended";
+}
+
+/**
+ * ★ 授权判定单一事实源（§7.4.2 定案顺序）：
+ *   1. Owner 批准令牌命中 → 放行（明示批准 > 一切默认拒绝，含生产标记——D4/A3）
+ *   2. policy.json 预授权白名单命中 → 放行（production 规则本身不授予放行，故此步天然不含生产目标）
+ *   3. 生产目标 → 拒（guard-production；可被令牌在步骤 1 放行）
+ *   4. 其余 → 拒（guard-unattended）
+ * 纯判定（tokens.find 允许 mtime 重读，但不消费）；消费只能发生在 ③ 复核通过后。
+ */
+export function evaluateAuthorization(policy: TargetPolicy, tokens: TokenStore, request: PolicyRequest): AuthorizationVerdict {
+	const found = tokens.find(request);
+	if (found.valid) return { allowed: true, source: "token", tokenId: found.token.id };
+	if (policy.allows(request)) return { allowed: true, source: "policy" };
+	if (policy.isProduction(request)) return { allowed: false, source: "none", reason: "guard-production" };
+	return { allowed: false, source: "none", reason: "guard-unattended" };
+}
+
+/**
+ * 审批层（①-a）授权工厂（方案 §7.4.2，§7.4.4 规范 1/2）。
  * ★ 纯函数：宿主一次调用会求值 3 次（X21），不得有副作用/令牌消耗——消费在 ③ execute 复核通过后进行。
- *  命中预授权/令牌 → { policy:"allow" } 任何模式放行
- *  生产目标        → { policy:"deny"  } 任何模式硬拒（X3/X8）
+ *  令牌/预授权命中 → { policy:"allow" } 任何模式放行（含无人值守）
+ *  生产目标无令牌   → { policy:"deny"  } 任何模式硬拒（X3/X8）
  *  其他            → { tier:"exec" }   交平台审批；无人值守由 ①-b 兜底拒绝
  */
 export function createAuthorizedExec(policy: TargetPolicy, tokens: TokenStore): (args: unknown) => ApprovalDecision {
 	return (args: unknown): ApprovalDecision => {
 		const request = toPolicyRequest(args);
 		if (request === null) return { tier: "exec" };
-		const found = tokens.find(request);
-		if (found.valid) return { tier: "exec", policy: "allow", reason: `Owner 批准令牌 ${found.token.id}` };
-		if (policy.allows(request)) return { tier: "exec", policy: "allow", reason: `命中预授权 ${describeTarget(request)}` };
-		if (policy.isProduction(request)) return { tier: "exec", policy: "deny", reason: "生产目标禁止无人值守变更" };
+		const verdict = evaluateAuthorization(policy, tokens, request);
+		if (verdict.allowed) {
+			return {
+				tier: "exec",
+				policy: "allow",
+				reason: verdict.source === "token" ? `Owner 批准令牌 ${verdict.tokenId}` : `命中预授权 ${describeTarget(request)}`,
+			};
+		}
+		if (verdict.reason === "guard-production") {
+			return { tier: "exec", policy: "deny", reason: "生产目标禁止无人值守变更（如需放行须 Owner 批准令牌）" };
+		}
 		return { tier: "exec" };
 	};
 }

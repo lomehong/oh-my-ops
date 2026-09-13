@@ -1,6 +1,7 @@
 import { assertToolRegistryIntegrity, onToolCall } from "./guards.ts";
 import { assertPlatformAtSessionStart } from "./platform.ts";
 import { buildomoSystemPrompt } from "./commands.ts";
+import { LOCAL_HOST } from "@ops-pi/core";
 import type { OpsContext } from "./context.ts";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
@@ -10,8 +11,11 @@ export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
 		// ① 平台 ctx 侧能力校验（X15）
 		assertPlatformAtSessionStart(sessionCtx);
 
-		// ② 工具清单断言（O11/X15）
-		assertToolRegistryIntegrity(pi);
+		// ② 工具清单断言（O11/X15）——被共载扩展覆盖的 ops_ 工具先自愈（重注册 last-wins），复检失败才拒启
+		const repaired = assertToolRegistryIntegrity(pi);
+		if (repaired.length > 0) {
+			sessionCtx.ui.notify(`ops-pi：检测到 ${repaired.length} 个 ops_* 工具被共载扩展覆盖，已重新注册自愈（${repaired.join(", ")}）`, "warning");
+		}
 
 		// ③ 降级可发现性（§7.4.3）
 		if (!ctx.targetPolicy.isConfigured) {
@@ -26,12 +30,20 @@ export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
 		sessionCtx.ui.notify("omo 运维智能体已加载", "info");
 
 		// ⑤ 巡检轮询（受管定时器，session_shutdown 自动清理）
+		// 说明：命令为硬编码只读本地探针，不经 LLM、不经审批流；仍落审计条目保证可发现性。
 		if (ctx.config?.health?.autoPollIntervalMs) {
 			sessionCtx.setInterval(async () => {
 				const report = await ctx.shell.exec(
 					["sh", "-c", "uptime && free -h | head -3 && df -h / | tail -1"],
 					{ timeoutMs: 30_000 },
 				);
+				pi.appendEntry("ops_audit", {
+					tool: "ops_health_poll(auto)",
+					host: LOCAL_HOST,
+					isError: report.exitCode !== 0,
+					ts: new Date().toISOString(),
+					authz: "read",
+				});
 				if (report.exitCode === 0) {
 					pi.sendUserMessage(`[自动巡检] ${report.stdout}`, { deliverAs: "followUp" });
 				}
@@ -68,6 +80,7 @@ export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
 			toolCallId: event.toolCallId,
 			isError: event.isError,
 			ts: new Date().toISOString(),
+			// authz 来源由 assertAuthorized 返回值落 details（read|policy|token）；被拒调用记 blocked
 			authz: (details?.authz as string) ?? (event.isError ? "blocked" : "unknown"),
 			reasonClass: reason?.startsWith("[ERR_PERMISSION]") ? "ERR_PERMISSION"
 				: reason?.startsWith("[ERR_POLICY]") ? "ERR_POLICY"

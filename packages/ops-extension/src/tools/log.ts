@@ -24,10 +24,12 @@ export function registerLogTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			const path = String(p.path ?? "");
 			const lines = Math.min(Number(p.lines ?? 100), 5000);
 			if (!path) throw new Error("[INTERNAL] 缺少 path");
+			// ★ 此前漏接 assertAuthorized——补齐统一授权接线（read 档免判定，但保持单一入口与审计一致性）
+			const authz = assertAuthorized("ops_log_tail", p, ctx.authzView);
 			const result = await ctx.log.tailFile(path, { lines }, { signal, timeoutMs: 15_000 });
 			return {
 				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-				details: { authz: "read" },
+				details: { authz },
 			};
 		},
 	});
@@ -47,6 +49,7 @@ export function registerLogTools(pi: ExtensionAPI, ctx: OpsContext): void {
 		}),
 		async execute(_toolCallId, params, signal) {
 			const p = params as Record<string, unknown>;
+			const authz = assertAuthorized("ops_log_journalctl", p, ctx.authzView);
 			const result = await ctx.log.journalctl({
 				unit: p.unit as string | undefined,
 				since: p.since as string | undefined,
@@ -55,7 +58,7 @@ export function registerLogTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			}, { signal });
 			return {
 				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-				details: { authz: "read" },
+				details: { authz },
 			};
 		},
 	});
@@ -74,6 +77,7 @@ export function registerLogTools(pi: ExtensionAPI, ctx: OpsContext): void {
 		}),
 		async execute(_toolCallId, params, signal) {
 			const p = params as Record<string, unknown>;
+			const authz = assertAuthorized("ops_log_grep", p, ctx.authzView);
 			const result = await ctx.log.grep(
 				String(p.pattern ?? ""),
 				(p.paths ?? []) as string[],
@@ -82,7 +86,7 @@ export function registerLogTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			);
 			return {
 				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-				details: { authz: "read" },
+				details: { authz },
 			};
 		},
 	});

@@ -6,8 +6,10 @@ import { ShellExec } from "../src/exec.ts";
 
 describe("LogCollector", () => {
 	const log = new LogCollector();
+	// tail/grep 为 POSIX 命令；win32 无此二进制
+	const POSIX_ONLY = process.platform === "win32" ? "win32：依赖 POSIX 命令（tail/grep）" : false;
 
-	it("tailFile：读取末尾 N 行", async () => {
+	it("tailFile：读取末尾 N 行", { skip: POSIX_ONLY }, async () => {
 		const path = "/tmp/ops-log-test-tail.txt";
 		const content = Array.from({ length: 20 }, (_, i) => `line-${i}`).join("\n") + "\n";
 		fs.writeFileSync(path, content);
@@ -26,7 +28,7 @@ describe("LogCollector", () => {
 		assert.ok(hasJournalctl ? result.lines.length >= 0 : true);
 	});
 
-	it("grep：多文件正则搜索", async () => {
+	it("grep：多文件正则搜索", { skip: POSIX_ONLY }, async () => {
 		const file1 = "/tmp/ops-log-test-a.log";
 		const file2 = "/tmp/ops-log-test-b.log";
 		fs.writeFileSync(file1, "error: connection refused\nok: success\nerror: timeout\n");

@@ -57,11 +57,11 @@ omo
 
 ### 对指定服务执行重启
 
-前提：`~/.ops-pi/policy.json` 中已配置该主机 + 服务。
+前提：`.ops-pi/policy.json` 中已用 `@local` 规则预授权该服务（当前仅本机；远程 P1 经 SshPool 引入）。
 
 ```bash
 omo --no-session --approval-mode write \
-  -p "重启 web-01 上的 nginx 服务，确认服务已恢复"
+  -p "重启本机 nginx 服务，确认服务已恢复"
 ```
 
 ### 后台服务模式（健康巡检轮询）
@@ -84,40 +84,42 @@ omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 
 ### 目标策略（policy.json）
 
-路径：`~/.ops-pi/policy.json`
+路径：`<工作目录>/.ops-pi/policy.json`（默认；可在 `.ops-pi/config.json` 用 `policyPath`/`tokenPath` 重定向）。
 
-控制「允许对哪些主机/服务执行什么操作」。**缺省全拒**。
+控制「允许对本机哪些服务执行什么操作」。**缺省全拒**；`host` 一律填 `@local`（当前所有工具在控制节点本机执行，`@@` 非法 hostname 字符，无伪造冲突）。文件保存后热加载，下次判定即生效。
 
 ```json
 {
   "targets": [
     {
-      "host": "web-01",
+      "host": "@local",
       "services": ["nginx"],
       "actions": ["restart", "status"]
     },
     {
-      "host": "staging-01",
-      "services": ["app"],
-      "actions": ["restart"],
+      "host": "@local",
+      "actions": ["shell"],
       "expiresAt": "2027-06-30T00:00:00Z"
     }
   ]
 }
 ```
 
+- `actions: ["shell"]` 授权本机命令执行（`ops_shell_exec`/`ops_shell_script`）；service 维度工具按 `start/stop/restart/status/…` 匹配。
+- `production: true` 只做生产标记：本身不授予放行，无人值守变更被 `guard-production` 拒，放行只能凭批准令牌。
+
 ### 批准令牌（approval-token.json）
 
-路径：`~/.ops-pi/approval-token.json`
+路径：`<工作目录>/.ops-pi/approval-token.json`（默认同上可重定向）。
 
-高危敏感操作的**单次/限时**明示批准。
+高危敏感操作的**单次/限时**明示批准。`scope` 逐段前缀匹配（`@local` ⊂ 本机全部；`@local/postgres` ⊂ 该服务任意动作；`@local/postgres/restart` 精确到动作）。令牌在 execute 复核通过后消费，`consumedAt` 写回文件，跨会话不可重放。
 
 ```json
 {
   "tokens": [
     {
       "id": "T-1",
-      "scope": "prod-db/postgres/restart",
+      "scope": "@local/postgres/restart",
       "issuedBy": "主人",
       "issuedAt": "2026-09-12T00:00:00Z",
       "expiresAt": "2026-09-13T00:00:00Z"
@@ -133,36 +135,44 @@ omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 | 配置项 | 位置 | 必要性 |
 |---|---|---|
 | `approvalMode` | omp 设置（**禁止 yolo**） | 必须 |
-| `policy.json` | `~/.ops-pi/policy.json` | 强烈建议 |
-| `approval-token.json` | `~/.ops-pi/approval-token.json` | 生产变更需要 |
+| `policy.json` | `.ops-pi/policy.json`（工作目录） | 强烈建议 |
+| `approval-token.json` | `.ops-pi/approval-token.json`（工作目录） | 生产变更需要 |
 | 沙箱 | 容器/网络策略 | 建议 |
 
 ## 工具清单
 
+与 `TIER_TABLE`（`packages/ops-extension/src/approvals.ts`）一致——该表同时生成系统提示词与启动期清单断言，提示词宣告与实际注册零漂移。
+
 | 档位 | 工具 | 说明 |
 |---|---|---|
-| **read**（自动放行） | `ops_docker_ps` `ops_docker_logs` `ops_k8s_pods` `ops_k8s_logs` `ops_process_list` `ops_log_tail` `ops_log_journalctl` `ops_log_grep` `ops_file_read` `ops_file_ls` `ops_health_check` `ops_health_poll` `ops_vault_list` `ops_docker_compose(ps\|logs)` `ops_k8s_rollout(status)` `ops_service(status)` | 只读诊断 |
-| **write**（需批准） | `ops_file_write` `ops_ssh_upload` `ops_ssh_download` `ops_vault_store` | 落盘/传输/凭据 |
-| **exec**（需批准） | `ops_shell_exec` `ops_shell_script` `ops_ssh_exec` `ops_docker_exec` `ops_k8s_exec` `ops_process_kill` `ops_docker_compose(up\|down\|restart)` `ops_k8s_rollout(restart\|undo)` `ops_service(start\|stop\|restart\|enable\|disable)` | 变更/执行 |
+| **read**（自动放行） | `ops_file_read` `ops_file_ls` `ops_process_list` `ops_log_tail` `ops_log_journalctl` `ops_log_grep` `ops_health_check` `ops_health_poll` `ops_vault_list` `ops_docker_ps` `ops_docker_logs` `ops_docker_compose(ps\|logs)` `ops_k8s_pods` `ops_k8s_logs` `ops_k8s_rollout(status)` `ops_service(status)` | 只读诊断 |
+| **exec**（需批准） | `ops_shell_exec` `ops_shell_script` `ops_docker_exec` `ops_docker_compose(除 ps\|logs)` `ops_k8s_exec` `ops_k8s_rollout(除 status)` `ops_service(start\|stop\|restart\|enable\|disable)` | 变更/执行 |
+
+> SSH/vault 写路径等工具于实现时加入 `TIER_TABLE`（提示词随之更新，不会提前宣告）。
 
 ## 斜杠命令（只读）
 
 | 命令 | 说明 |
 |---|---|
-| `/ops-inspect <host>` | 标准巡检 |
+| `/ops-inspect [host]` | 标准巡检（仅本机；填其他主机名会被诚实化拒绝） |
 | `/ops-health` | 快速健康检查 |
 | `/ops-status` | ops-pi 运行状态 |
 
 ## 安全模型
 
+授权判定走 core 的 `evaluateAuthorization` 单一事实源，审批层（①-a）/ 兜底层（①-b）/ execute 复核（③）三层共用同一顺序：**令牌 → policy 预授权 → 生产拒绝 → 其余拒绝**；工具入参经 `policyRequestFor` 统一映射（`host=@local`），三层看到的请求逐字段一致。
+
 | 层 | 防什么 | 怎么工作 | 可否被 yolo 关闭 |
 |---|---|---|---|
 | **沙箱** | 容器/网络/凭据 | 容器 + 挂载/网络策略 | — |
-| **宿主审批** | 「要不要人点头」 | `approval` 档位 + `approvalMode` | yolo 可关 |
-| **①-b 无人值守兜底** | 无人值守默认拒绝 | `tool_call` 内 `!hasUI && !preauth → block` | 不可关 |
+| **①-a 宿主审批** | 「要不要人点头」 | `approval` 工厂：预授权 → `allow`；生产 → `deny`；其余按档位交平台 | yolo 可关（预授权/生产判定不受影响） |
+| **①-b 无人值守兜底** | 无人值守默认拒绝 | `tool_call` 内 `!hasUI && exec档 && 无令牌/预授权 → block` | 不可关 |
 | **② 内容硬拒** | 灾难性命令 | 纯同步正则（`rm -rf /`、`sudo rm`、`curl\|bash` 等） | 不可关 |
-| **③ 目标策略** | 打错机器/越权服务 | L1 `targetPolicy` defaultDeny | 不可关 |
-| **execute 复核** | 入参篡改 | execute 首行独立重算全部维度 | 不可关 |
+| **③ 目标策略** | 越权目标/服务 | `targetPolicy` defaultDeny（`@local` 维度，mtime 热加载） | 不可关 |
+| **execute 复核** | 入参篡改 | execute 首行独立重算（X19），通过后才消费令牌（单次批准） | 不可关 |
+| **注册表自愈** | 共载扩展覆盖 ops_*（last-wins 劫持） | session_start 检测 sourceInfo，重注册自愈，失败拒启 | 不可关 |
+
+每次 ops_* 调用（含被拒调用）在 `tool_execution_end` 落 `ops_audit` 审计条目，`authz` 记录授权来源（`read`/`policy`/`token`/`blocked`）。
 
 ## 开发
 

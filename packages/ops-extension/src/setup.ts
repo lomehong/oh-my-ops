@@ -10,11 +10,17 @@ export interface OpsConfig {
 	health?: { autoPollIntervalMs?: number };
 }
 
+/** loadConfig 的返回：路径字段已保证有值（缺省 → cwd/.ops-pi/），供 OpsContext 直接使用 */
+export interface LoadedOpsConfig extends OpsConfig {
+	policyPath: string;
+	tokenPath: string;
+}
+
 const DEFAULT_POLICY_PATH = ".ops-pi/policy.json";
 const DEFAULT_TOKEN_PATH = ".ops-pi/approval-token.json";
 
 /** 配置加载（方案 §7.3）：扩展加载时同步读取（早于 session_start）。 */
-export function loadConfig(cwd: string): OpsConfig {
+export function loadConfig(cwd: string): LoadedOpsConfig {
 	const configPath = path.join(cwd, ".ops-pi", "config.json");
 	let raw: Record<string, unknown> = {};
 	try {

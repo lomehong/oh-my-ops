@@ -5,20 +5,22 @@ import { ShellExec } from "../src/exec.ts";
 
 describe("ShellExec", () => {
 	const shell = new ShellExec();
+	// 本套件面向 POSIX 运维目标；win32 无 echo/false/sleep 等命令（sh 可经 PATH 提供的用例保留）
+	const POSIX_ONLY = process.platform === "win32" ? "win32：依赖 POSIX 命令（echo/false/sleep）" : false;
 
-	it("参数数组执行并返回 stdout/exitCode", async () => {
+	it("参数数组执行并返回 stdout/exitCode", { skip: POSIX_ONLY }, async () => {
 		const result = await shell.exec(["echo", "hello-ops"]);
 		assert.equal(result.exitCode, 0);
 		assert.equal(result.stdout.trim(), "hello-ops");
 		assert.ok(result.durationMs >= 0);
 	});
 
-	it("命令字符串按空白拆分为 argv（仍不经 shell）", async () => {
+	it("命令字符串按空白拆分为 argv（仍不经 shell）", { skip: POSIX_ONLY }, async () => {
 		const result = await shell.exec("echo a b");
 		assert.equal(result.stdout.trim(), "a b");
 	});
 
-	it("非零退出码透传且不抛错（由调用方据 code 分支）", async () => {
+	it("非零退出码透传且不抛错（由调用方据 code 分支）", { skip: POSIX_ONLY }, async () => {
 		const result = await shell.exec(["false"]);
 		assert.equal(result.exitCode, 1);
 	});
@@ -32,7 +34,7 @@ describe("ShellExec", () => {
 		await assert.rejects(shell.exec(["definitely-not-a-command-xyz"]), OpsError);
 	});
 
-	it("超时被终止 → TIMEOUT", async () => {
+	it("超时被终止 → TIMEOUT", { skip: POSIX_ONLY }, async () => {
 		await assert.rejects(shell.exec(["sleep", "5"], { timeoutMs: 200 }), /超时/);
 	});
 
@@ -43,7 +45,7 @@ describe("ShellExec", () => {
 		assert.ok(Buffer.byteLength(result.stdout) < 2000);
 	});
 
-	it("shell 元字符按字面量处理（防注入）", async () => {
+	it("shell 元字符按字面量处理（防注入）", { skip: POSIX_ONLY }, async () => {
 		const result = await shell.exec(["echo", "a; touch /tmp/pii-injection-proof; b"]);
 		// 若经 shell，`touch` 会被执行；字面量输出则证明未经过 shell
 		assert.ok(result.stdout.includes("a; touch"));

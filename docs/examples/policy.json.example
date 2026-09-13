@@ -1,20 +1,30 @@
 {
   "$comment": "OpsPi 目标策略模板（Owner 编辑，defaultDeny）",
-  "$comment2": "production: true 的目标在无人值守下由 ①-b 兜底层拒绝（任何 approvalMode）",
+  "$comment1": "host 一律填 '@local'：当前所有 ops_* 工具在控制节点本机执行（远程 P1 经 SshPool 引入）；",
+  "$comment1b": "'@@' 非法 hostname 字符，不存在与真实主机名伪造冲突。工具入参里的 host/hostname 仅做诚实化校验，不参与策略匹配。",
+  "$comment2": "action 维度示例：service 用 start/stop/restart/status/enable/disable；shell 用 'shell'（授权本机命令执行）；docker exec 用 'exec'。",
+  "$comment3": "production: true 只做生产标记——本身不授予任何放行，无人值守变更由 ①-b 拒（guard-production）；放行须批准令牌（approval-token.json）。",
+  "$comment4": "expiresAt 到期规则自动失效；文件保存后 mtime 热加载，下次判定即生效（无需重启会话）。",
   "targets": [
     {
-      "host": "web-01",
+      "$comment": "本机 nginx 服务：status 只读自动放行；restart 需审批/预授权",
+      "host": "@local",
       "services": ["nginx"],
       "actions": ["restart", "status"],
       "expiresAt": "2027-12-31T23:59:59Z",
       "production": false
     },
     {
-      "host": "staging-01",
-      "services": ["app"],
-      "actions": ["restart", "status"],
-      "expiresAt": "2027-06-30T00:00:00Z",
-      "production": false
+      "$comment": "本机 shell 白名单：actions=['shell'] 精确授权 ops_shell_exec / ops_shell_script",
+      "host": "@local",
+      "actions": ["shell"],
+      "expiresAt": "2027-12-31T23:59:59Z"
+    },
+    {
+      "$comment": "本机生产数据库：仅标记，无放行——变更只能凭 Owner 批准令牌",
+      "host": "@local",
+      "services": ["postgres"],
+      "production": true
     }
   ]
 }
