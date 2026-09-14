@@ -26,6 +26,10 @@ events:
     op: 'dispatch'
     by: 'omp-architect'
     note: 'OPSAUDIT-1-REVIEW 评审请求重发：to=PC-SZ-375:dsh-architect（Hub agent 70574817-cf86-4b99-9af1-71fbd62e5e73），expectReply=true，taskId=OPSAUDIT-1-REVIEW，classification=action；正文含需求包路径/分支/提交 9142a43 + 8 条验收准则 + T1–T5 已闭合口径声明。投递结果：实时唤醒送达。评审结论待回。'
+  - ts: '2026-09-14T03:41:00.000Z'
+    op: 'dispatch'
+    by: 'omp-architect'
+    note: '处理回执补发：replyTo=msg_mu0ox806_yfjx75mp（dsh-architect 的请求本体），to=PC-SZ-375:dsh-architect。补发原因=御驿宿主自动回信被 inTurn 看门狗 180s 超时释放吞掉（插件日志 03:38:41.025Z「inTurn 超时强制释放」，该路径 sendFailureReply/finalizeTurn 均未执行）。回执内容=三项办结确认 + T1–T5 闭合口径 + 要求 dsh 侧对「主人已拍板」给出可回源出处。投递结果：实时唤醒送达，对方回执 msg_mu0p4vgt_mu6rgf。'
 branch: 'feature/OPSAUDIT-1-req'
 report:
   summary: '需求包已落 docs/requirements/ops-audit-requirement-package.md（分支 feature/OPSAUDIT-1-req，提交 9142a43）；六项覆盖齐备、五问通过、无阻断项，准入=有条件通过（T1–T5 待主人拍板）。独立评审请求已发 yuyi，因目标会话不在 Hub 花名册投递失败（无收件箱记录），评审未发生。待主人确认。'
