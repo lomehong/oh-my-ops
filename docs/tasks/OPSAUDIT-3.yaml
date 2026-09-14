@@ -24,6 +24,10 @@ events:
     op: 'dispatch'
     by: 'omp-architect'
     note: '实现评审请求投递：to=PC-SZ-375:dsh-architect（独立窗口），expectReply=true，taskId=OPSAUDIT-3-REVIEW，classification=action；评审对象=分支 feature/OPSAUDIT-3-impl 提交区间 82ad530..da25b08；8 条准则（范围一致/六步链路对齐/信封与字段纪律/红线（写入侧零改+无注入面）/测试质量/探针有效性/未兑现登记/结论回信）。路由依据=主人两轮既定偏好（独立评审投 dsh）+ architect-implement「实现评审宜非编码会话」。投递结果：实时唤醒送达。'
+  - ts: '2026-09-14T06:14:00.000Z'
+    op: 'review-received'
+    by: 'dsh-architect'
+    note: '实现评审结论直答（Hub 验证发送方 70574817，亲复跑非采信自述）：通过、可报请主人确认落定。8 条准则逐条 ✅（改动面 8 文件恰为申报；六步链路/先读后写/fail-soft 对齐；信封与字段纪律；hooks.ts 区间 diff 实测空+无注入面触点；单测断言行为与口径且亲复跑 bun 15/15、typecheck 0 错、platform.test 抽查 8 pass；探针能抓三类真实回归；U2/suite-map 登记在案）。评审人建议后续「冲突路径演练（阶段 3 最后一环）」——方案外新工作，待主人裁决是否立项。'
 branch: 'feature/OPSAUDIT-3-impl'
 report:
   summary: '/ops-audit 实现完成（自报）：src/audit-view.ts 三纯函数（112 行）+ commands.ts ops-audit 注册（先读后写/fail-soft）+ 单测 15 用例 + runtime 数据面探针（真实 omp 会话 2/2 过）+ README 一行。证据：bun 单测 15/15；npm test 181 pass/1 skip(bwrap 环境性)/0 fail；typecheck 双包 0 错；git diff 9142a43..HEAD -- src/hooks.ts 空（写入侧零改）。提交 87af224/b29e5a1/bd98643。未兑现：U2 人工冒烟（待交互会话）+ suite-map 补录（知识任务）。自报 ≠ 完成，待实现评审 + 主人确认'
@@ -31,6 +35,8 @@ report:
     - 'docs/designs/ops-audit-command-design-执行记录.md：对照自检三表（对齐度/测试证据/未兑现）'
     - 'runtime 探针实测：bash test/runtime/12-ops-audit.sh → 2 过/0 败（count=2，报告头含可读范围声明）'
   pending:
-    - '实现评审（architect-review，宜非编码会话）+ 主人 confirm；U2 人工冒烟回填 evidence'
+    - 'dsh 实现评审直答：通过（亲复跑 bun 15/15 + typecheck 0 错 + platform 抽查 8 pass）；待主人 confirm 落定'
+    - '评审人建议「冲突路径演练（阶段 3 最后一环）」——方案外，待主人裁决是否立项'
+    - 'U2 人工冒烟（待交互会话）+ suite-map 补录（知识任务，不阻断）'
   at: '2026-09-14T06:07:06.582Z'
   by: 'omp-architect'
