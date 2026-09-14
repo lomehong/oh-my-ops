@@ -21,7 +21,11 @@ OMO_DIR="$HOME/.omo"
 HOME_DIR="$OMO_DIR/home"
 RUNTIME="$OMO_DIR/runtime/omp-single"
 EXT_DIR="$OMO_DIR/extensions"
-BIN_DST="$HOME/.local/bin/omo"
+if [ -d /usr/local/bin ] && [ -w /usr/local/bin ]; then
+  BIN_DST="/usr/local/bin/omo"          # root/管理员：系统级标准 PATH
+else
+  BIN_DST="$HOME/.local/bin/omo"        # 普通用户：用户级 PATH（安装器自动补 profile）
+fi
 YUYI_DIR="$REAL_HOME/.yuyi"
 YUYI_SRC="$REPO_ROOT/vendor/yuyi-omp-extension.js"
 OLD_OPS_DIR="$REAL_HOME/.ops-pi"
@@ -62,11 +66,11 @@ if [[ "$UNINSTALL" == true ]]; then
   read -r -p "  确认删除？[y/N] " ans
   case "$ans" in y|Y) ;; *) echo "[uninstall] 已取消"; exit 0 ;; esac
   rm -rf "$OMO_DIR"
-  if [ -f "$BIN_DST" ] && grep -q "OMO_LAUNCHER_V4" "$BIN_DST" 2>/dev/null; then
-    rm -f "$BIN_DST"; echo "  ✓ 已移除 $BIN_DST"
-  elif [ -f "$BIN_DST" ]; then
-    echo "  ⚠ $BIN_DST 非本产品启动器，未删除（请自行处理）"
-  fi
+  for L in /usr/local/bin/omo "$HOME/.local/bin/omo"; do
+    [ -f "$L" ] || continue
+    if grep -q "OMO_LAUNCHER_V4" "$L" 2>/dev/null; then rm -f "$L"; echo "  ✓ 已移除 $L"
+    else echo "  ⚠ $L 非本产品启动器，未删除"; fi
+  done
   echo "[uninstall] ✓ 已移除（$YUYI_DIR 的 token/凭据保留）"
   exit 0
 fi
@@ -104,30 +108,34 @@ echo "  设备名：$AGENT_NAME"
 echo "  私有域：$OMO_DIR"
 echo
 
-# ── 1) 私有 bun（T3：官方脚本直连 → npmmirror zip 回退；落 ~/.omo/bin，不装系统级）
-echo "[1/5] 私有 bun（$OMO_BUN_VERSION）…"
-BUN_BIN="$OMO_DIR/bin/bun"
-bun_ok() { [ -x "$BUN_BIN" ] && v="$("$BUN_BIN" --version 2>/dev/null || true)" && case "$v" in 1.4.*) return 0 ;; esac; return 1; }
-if bun_ok; then
-  echo "  ↺ 已有 bun $("$BUN_BIN" --version)（$BUN_BIN），跳过"
+# ── 1) bun：机器上已有 → 直接用（不改动）；没有 → 自动做标准用户级安装（~/.bun，随 profile 进 PATH）。
+#    bun 是共享基础工具，不属于 omo 私有域；omo 自身运行不依赖它（omp-single 为自包含单文件）。
+if command -v bun >/dev/null 2>&1; then
+  echo "  ✓ 检测到系统 bun $(bun --version 2>/dev/null || echo '?')——直接使用，不改动"
 else
-  ok_installed=false
-  if curl -fsSL --max-time 90 "$BUN_OFFICIAL" | BUN_INSTALL="$OMO_DIR" bash -s -- "bun-v$OMO_BUN_VERSION" 2>/dev/null && bun_ok; then
-    ok_installed=true; echo "  ✓ bun $("$BUN_BIN" --version)（官方脚本 → $BUN_BIN）"
+  echo "  未检测到 bun → 自动安装（标准用户级 ~/.bun；官方脚本 → npmmirror 回退）…"
+  installed=false
+  if curl -fsSL --max-time 90 "$BUN_OFFICIAL" | bash -s -- "bun-v$OMO_BUN_VERSION" 2>/dev/null && command -v bun >/dev/null 2>&1; then
+    installed=true; echo "  ✓ bun $(bun --version)（官方脚本）"
   fi
-  if [ "$ok_installed" = false ]; then
+  if [ "$installed" = false ]; then
     echo "  ↺ 官方通道失败，回退 npmmirror zip…"
     TMPZ="$(mktemp -d)"
     if curl -fsSL --max-time 300 "$BUN_MIRROR_ZIP" -o "$TMPZ/bun.zip" \
        && zip_extract "$TMPZ/bun.zip" "$TMPZ" \
        && [ -f "$TMPZ/bun-linux-x64/bun" ]; then
-      mkdir -p "$OMO_DIR/bin"
-      mv "$TMPZ/bun-linux-x64/bun" "$BUN_BIN"; chmod +x "$BUN_BIN"
-      ok_installed=true; echo "  ✓ bun $("$BUN_BIN" --version)（npmmirror → $BUN_BIN）"
+      mkdir -p "$HOME/.bun/bin"
+      mv "$TMPZ/bun-linux-x64/bun" "$HOME/.bun/bin/bun"; chmod +x "$HOME/.bun/bin/bun"
+      export PATH="$HOME/.bun/bin:$PATH"
+      if ! grep -qs '.bun/bin' "$HOME/.bashrc" "$HOME/.profile" 2>/dev/null; then
+        printf '\nexport PATH="$HOME/.bun/bin:$PATH"\n' >> "$HOME/.bashrc"
+      fi
+      installed=true; echo "  ✓ bun $(bun --version)（npmmirror → ~/.bun/bin）"
     fi
     rm -rf "$TMPZ"
-    bun_ok || { echo "✗ bun 自动安装失败（官方与镜像通道均不可达）。可手动：curl -fsSL https://bun.sh/install | bash"; exit 1; }
   fi
+  command -v bun >/dev/null 2>&1 || { echo "✗ bun 自动安装失败（官方与镜像通道均不可达）。可手动：curl -fsSL https://bun.sh/install | bash"; exit 1; }
+  echo "  ✓ bun 就绪"
 fi
 
 # ── 2) 布局 runtime + 扩展
@@ -340,5 +348,17 @@ echo "  私有域：$OMO_DIR（卸载：bash scripts/install.sh --uninstall）"
 echo "  原生 omp 与 ~/.omp 零接触；版本契约随 omo 发布"
 case ":$PATH:" in
   *":$(dirname "$BIN_DST"):"*) ;;
-  *) echo "  ⚠ $(dirname "$BIN_DST") 不在 PATH——请将其加入 PATH 后使用 omo" ;;
+  *)
+    LINE='export PATH="$HOME/.local/bin:$PATH"'
+    added=false
+    for rc in "$HOME/.bashrc" "$HOME/.profile"; do
+      [ -f "$rc" ] || continue
+      grep -qs '.local/bin' "$rc" || { printf '\n%s\n' "$LINE" >> "$rc"; added=true; break; }
+    done
+    [ -f "$HOME/.bashrc" ] || { printf '\n%s\n' "$LINE" > "$HOME/.bashrc"; added=true; }
+    if [ "$added" = true ]; then
+      echo "  ✓ 已将 $(dirname "$BIN_DST") 写入 ~/.bashrc PATH（当前 shell 需 source ~/.bashrc 或重开终端）"
+    else
+      echo "  ⚠ $(dirname "$BIN_DST") 不在 PATH，且未找到可写 profile——请手动加入"
+    fi ;;
 esac
