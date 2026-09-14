@@ -20,6 +20,10 @@ events:
     op: 'report'
     by: 'omp-architect'
     note: '自包含安装器实现完成（自报）：① 构建管线 build-omp-runtime.sh + embed-pi-natives.mjs（pin 18.1.18 sha256 → embedded-addon 生成 → 品牌 patch → bun compile；实测出 471MB omp-single，--version=omp/18.1.18）② install.sh v4（~/.omo 私有域/HOME 重定向隔离/bun 自动装官方+镜像锁 1.4.2/semver 校验/策略与 AGENTS.md 迁移/卸载确认+marker 防误删/omo upgrade）③ release.yml：构建 omp-single 岗 + 打包含 omp-single + L2 门含 audit-view ④ README 安装/升级/卸载段重写。证据：安装契约冒烟 7/7（A1/A2/A3/A5）；semver 10 用例；npm test 181 pass/1 skip/0 fail；typecheck 0 错；12 探针 2/2。提交链：S1 0d2d6e6 → S2/S3 130373c → S4 后续。自报 ≠ 完成，待实现评审 + 主人确认'
+  - ts: '2026-09-14T07:52:00.000Z'
+    op: 'dispatch'
+    by: 'omp-architect'
+    note: '实现评审请求投递：to=PC-SZ-375:dsh-architect（独立窗口，既定路由），expectReply=true，taskId=OMOINSTALL-3-REVIEW，classification=action；评审对象=分支 feature/OMOINSTALL-3-impl 实现提交 0d2d6e6/130373c/7367c8c；8 条准则（范围一致/管线对齐/安装器对齐/纪律红线/证据真实性/CI 正确性/未兑现登记/结论回信不改仓）。投递结果：实时唤醒送达。'
 branch: 'feature/OMOINSTALL-3-impl'
 report:
   summary: '自包含安装器实现完成（自报）：① 构建管线 build-omp-runtime.sh + embed-pi-natives.mjs（pin 18.1.18 sha256 → embedded-addon 生成 → 品牌 patch → bun compile；实测出 471MB omp-single，--version=omp/18.1.18）② install.sh v4（~/.omo 私有域/HOME 重定向隔离/bun 自动装官方+镜像锁 1.4.2/semver 校验/策略与 AGENTS.md 迁移/卸载确认+marker 防误删/omo upgrade）③ release.yml：构建 omp-single 岗 + 打包含 omp-single + L2 门含 audit-view ④ README 安装/升级/卸载段重写。证据：安装契约冒烟 7/7（A1/A2/A3/A5）；semver 10 用例；npm test 181 pass/1 skip/0 fail；typecheck 0 错；12 探针 2/2。提交链：S1 0d2d6e6 → S2/S3 130373c → S4 后续。自报 ≠ 完成，待实现评审 + 主人确认'
