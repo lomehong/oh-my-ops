@@ -3,6 +3,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { OpsContext } from "./context.ts";
 import { buildCapabilityLists } from "./approvals.ts";
 import { probeBwrap } from "./sandbox.ts";
+import { formatAuditReport, parseAuditLimit, toAuditViews } from "./audit-view.ts";
 
 /**
  * omo 系统提示词——在 `before_agent_start` 中注入。
@@ -99,6 +100,33 @@ export function registerOpsCommands(pi: ExtensionAPI, ctx: OpsContext): void {
 				`Vault：${ctx.config?.vault?.dbPath ? "✓ 已配置" : "✗ 未配置"}`,
 			];
 			cmdCtx.ui.notify(`omo 状态：\n${parts.join("\n")}`, "info");
+		},
+	});
+
+	pi.registerCommand("ops-audit", {
+		description: "回看当前会话分支最近 n 条 ops_audit 审计条目（只读；留空=20，上限 200）",
+		handler: async (args, cmdCtx) => {
+			const parsed = parseAuditLimit(args);
+			// 自审计（B6/E2 先例）：命令路径不产生 tool_execution_end；先读后写——本次输出不含本条目
+			const auditSelf = (isError: boolean) =>
+				pi.appendEntry("ops_audit", { tool: "ops-audit", isError, ts: new Date().toISOString(), authz: "read" });
+			if (!parsed.ok) {
+				cmdCtx.ui.notify(parsed.reason, "error");
+				auditSelf(true);
+				return;
+			}
+			try {
+				const branch = cmdCtx.sessionManager.getBranch();
+				const views = toAuditViews(Array.isArray(branch) ? branch : []);
+				cmdCtx.ui.notify(formatAuditReport(views, parsed.n, parsed.truncated), "info");
+			} catch (error) {
+				// fail-soft（方案 §4 异常行）：读取面任何异常显式提示，不崩会话
+				const msg = error instanceof Error ? error.message : String(error);
+				cmdCtx.ui.notify(`ops-audit 读取失败：${msg}`, "error");
+				auditSelf(true);
+				return;
+			}
+			auditSelf(false);
 		},
 	});
 

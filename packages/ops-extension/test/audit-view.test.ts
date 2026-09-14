@@ -149,7 +149,7 @@ describe("formatAuditReport（B3/B7/T1：倒序切片、- 填充、截断、空�
 	});
 
 	test("truncated 标记 → 头部声明截断（T1）", () => {
-		const out = formatAuditReport([auditEntry({ tool: "a", ts: t(1) })], 200, true);
+		const out = formatAuditReport(toAuditViews([auditEntry({ tool: "a", ts: t(1) })]), 200, true);
 		expect(out).toContain("已截断至 200 条上限");
 	});
 });
