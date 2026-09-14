@@ -131,5 +131,5 @@
 | E8 | 分支内可读性**实测**：`turn_end` 读 `getBranch()`，分支中 `ops_audit` 条目数 = 1，`layer` 字段保留 | 方案 §3.1 **X18**；探针 `docs/reports/probes/v42-layer-audit-probe.ts` |
 | E9 | 被 `tool_call` 阻断的调用**无 `tool_result`**（序列 `tool_call → tool_execution_start → tool_execution_end`）→ 审计必须覆盖「执行 + 拒绝」两类 | 方案 §3.1 **X11**；方案 §7.8 说明 |
 | E10 | 当前实现**无 `layer` 字段**：拒绝层级以 `reasonClass`（`ERR_PERMISSION`/`ERR_POLICY`，按原因文本前缀分类）+ `reason` 原文表达 | `grep -rn "layer" packages/ops-extension/src/` 零命中；E1 字段表；方案 §7.4.5「按前缀分类」 |
-| E11 | 现状回看手段 = 人工 `grep` 会话 JSONL（runtime 探针即如此取证） | `packages/ops-extension/test/runtime/05-service-policy.sh:143-151` |
+| E11 | 现状回看手段 = 人工 `grep` 会话 JSONL（runtime 探针即如此取证） | `packages/ops-extension/test/runtime/05-service-policy.sh:147-152` |
 | E12 | 只读命令先例与展示通道：`/ops-inspect`、`/ops-health`、`/ops-status` 经 `cmdCtx.ui.notify(...)` 输出；README 有「斜杠命令（只读）」表 | `packages/ops-extension/src/commands.ts:44-100`；`README.md`「斜杠命令（只读）」 |
