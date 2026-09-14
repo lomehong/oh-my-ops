@@ -24,6 +24,10 @@ events:
     op: 'report'
     by: 'omp-architect'
     note: 'H3/H4 探针双 ✅（报告 docs/reports/omo-install-probes.md）+ 技术方案草稿落 docs/designs/omo-install-selfcontained-design.md：xd://architect_design 自检 60/60。方案要点：构建管线（pin 18.1.18 sha256 → embedded-addon 生成 → 品牌 patch → bun compile 单文件）；安装器 ~/.omo 私有域（HOME 重定向隔离，H4 实证）；bun 自动装锁 1.4.x；vlatest semver 校验；自愈废除、升级/卸载显式化。待确认 C1（471MB vs 瘦身 ~290MB）C2（PATH 指引口径）不阻塞。待实现评审+主人确认（自报 ≠ 完成）'
+  - ts: '2026-09-14T07:30:00.000Z'
+    op: 'dispatch'
+    by: 'omp-architect'
+    note: '设计评审请求投递：to=PC-SZ-375:dsh-architect（独立窗口，既定路由），expectReply=true，taskId=OMOINSTALL-2-REVIEW，classification=action；评审对象=docs/designs/omo-install-selfcontained-design.md @0640ace（分支 feature/OMOINSTALL-2-design）；8 条准则（T 拍板口径/四要素归属/链路机制对齐探针/Gap/风险验证/六维度/评分结论/不改本仓）。投递结果：实时唤醒送达。'
 branch: 'feature/OMOINSTALL-2-design'
 report:
   summary: 'H3/H4 探针双 ✅（报告 docs/reports/omo-install-probes.md）+ 技术方案草稿落 docs/designs/omo-install-selfcontained-design.md：xd://architect_design 自检 60/60。方案要点：构建管线（pin 18.1.18 sha256 → embedded-addon 生成 → 品牌 patch → bun compile 单文件）；安装器 ~/.omo 私有域（HOME 重定向隔离，H4 实证）；bun 自动装锁 1.4.x；vlatest semver 校验；自愈废除、升级/卸载显式化。待确认 C1（471MB vs 瘦身 ~290MB）C2（PATH 指引口径）不阻塞。待实现评审+主人确认（自报 ≠ 完成）'
