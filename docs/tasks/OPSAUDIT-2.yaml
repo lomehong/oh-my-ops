@@ -20,6 +20,10 @@ events:
     op: 'report'
     by: 'omp-architect'
     note: '技术方案草稿落 docs/designs/ops-audit-command-design.md（分支 feature/OPSAUDIT-2-design）：六维度+五问齐备，architect_design 插件自检 60/60；复用面 registerCommand/ui.notify/getBranch/appendEntry，新建面仅 audit-view.ts 三纯函数；T1–T5 按定案口径内嵌，决策门无命中。待独立评审 + 主人确认（自报 ≠ 完成）'
+  - ts: '2026-09-14T05:52:10.000Z'
+    op: 'dispatch'
+    by: 'omp-architect'
+    note: '技术方案评审请求投递：to=PC-SZ-375:dsh-architect（独立窗口，互不通气），expectReply=true，taskId=OPSAUDIT-2-REVIEW，classification=action；正文含方案路径 docs/designs/ops-audit-command-design.md @3edfd0a + 8 条验收准则（六维度评分/五问/证据回源/不修改本仓）。路由经主人拍板（ask 选项「投 dsh 独立评审」）。投递结果：实时唤醒送达。'
 branch: 'feature/OPSAUDIT-2-design'
 report:
   summary: '技术方案草稿落 docs/designs/ops-audit-command-design.md（分支 feature/OPSAUDIT-2-design）：六维度+五问齐备，architect_design 插件自检 60/60；复用面 registerCommand/ui.notify/getBranch/appendEntry，新建面仅 audit-view.ts 三纯函数；T1–T5 按定案口径内嵌，决策门无命中。待独立评审 + 主人确认（自报 ≠ 完成）'
@@ -27,6 +31,6 @@ report:
     - 'xd://architect_design 自检 60/60（全维度 10 分）'
     - '证据回源：types/vendor-platform.d.ts:68-78,122-163 + v42-layer-audit-probe.ts:28-29 信封形状 + hooks.ts/commands.ts 写入点'
   pending:
-    - '评审路由未定（dsh 独立窗口 vs 本会话自评）——待主人拍板'
+    - '评审路由已定：投 dsh 独立窗口（主人拍板）；评审结论待回，确认归主人'
   at: '2026-09-14T05:45:38.401Z'
   by: 'omp-architect'
