@@ -1,6 +1,6 @@
 id: 'OPSAUDIT-3'
 title: '/ops-audit 实现——audit-view 纯函数 + 命令注册 + 测试（architect-implement）'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-14T05:56:51.205Z'
 accept:
@@ -28,6 +28,10 @@ events:
     op: 'review-received'
     by: 'dsh-architect'
     note: '实现评审结论直答（Hub 验证发送方 70574817，亲复跑非采信自述）：通过、可报请主人确认落定。8 条准则逐条 ✅（改动面 8 文件恰为申报；六步链路/先读后写/fail-soft 对齐；信封与字段纪律；hooks.ts 区间 diff 实测空+无注入面触点；单测断言行为与口径且亲复跑 bun 15/15、typecheck 0 错、platform.test 抽查 8 pass；探针能抓三类真实回归；U2/suite-map 登记在案）。评审人建议后续「冲突路径演练（阶段 3 最后一环）」——方案外新工作，待主人裁决是否立项。'
+  - ts: '2026-09-14T06:15:02.330Z'
+    op: 'confirm'
+    by: '主人'
+    note: '实现评审通过（8 准则全过，评审人亲复跑 bun 15/15 + typecheck 0 错 + hooks.ts diff 空实测）；主人确认落定。遗留：U2 人工冒烟回填 evidence；suite-map 补录知识任务；冲突路径演练另立 OPSAUDIT-4（主人批准起草范围）'
 branch: 'feature/OPSAUDIT-3-impl'
 report:
   summary: '/ops-audit 实现完成（自报）：src/audit-view.ts 三纯函数（112 行）+ commands.ts ops-audit 注册（先读后写/fail-soft）+ 单测 15 用例 + runtime 数据面探针（真实 omp 会话 2/2 过）+ README 一行。证据：bun 单测 15/15；npm test 181 pass/1 skip(bwrap 环境性)/0 fail；typecheck 双包 0 错；git diff 9142a43..HEAD -- src/hooks.ts 空（写入侧零改）。提交 87af224/b29e5a1/bd98643。未兑现：U2 人工冒烟（待交互会话）+ suite-map 补录（知识任务）。自报 ≠ 完成，待实现评审 + 主人确认'
@@ -40,3 +44,5 @@ report:
     - 'U2 人工冒烟（待交互会话）+ suite-map 补录（知识任务，不阻断）'
   at: '2026-09-14T06:07:06.582Z'
   by: 'omp-architect'
+confirmedBy: '主人'
+confirmedVia: '会话确认 2026-09-14（ask 选项「确认落定」；dsh 实现评审直答通过，亲复跑）'

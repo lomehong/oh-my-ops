@@ -1,0 +1,14 @@
+id: 'OPSAUDIT-4'
+title: '冲突路径演练——/ops-audit 实弹观测被拒/令牌/兜底路径（阶段 3 收口）'
+state: '待执行'
+level: 'L1'
+created: '2026-09-14T06:15:13.736Z'
+accept:
+  - '演练按主人批准的范围执行，全程证据落 docs/reports/（真实命令与输出）'
+  - 'A4 闭环实测：被拒调用条目经 /ops-audit 在当前分支可读且字段可辨（authz=blocked/reasonClass/reason）'
+  - '演练记录含与既有探针（05②⑤⑥）的一致性对账 + 未决项登记；结果回填台账 evidence'
+events:
+  - ts: '2026-09-14T06:15:13.737Z'
+    op: 'create'
+    by: 'omp-architect'
+    note: '冲突路径演练——/ops-audit 实弹观测被拒/令牌/兜底路径（阶段 3 收口）'
