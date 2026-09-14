@@ -25,6 +25,7 @@ step() { printf '\n%s▸ %s%s\n' "$B" "$1" "$N"; }
 ok()   { printf '%s  ✓ %s%s\n' "$G" "$1" "$N"; }
 warn() { printf '%s  ⚠ %s%s\n' "$Y" "$1" "$N"; }
 die()  { printf '%s  ✗ %s%s\n' "$R" "$1" "$N" >&2; exit 1; }
+if ! grep -q "bootstrap-end" "$0" 2>/dev/null; then echo "  ✗ 脚本下载不完整（网络截断？）请重试" >&2; exit 1; fi
 
 # ── 下载：多源回退（直连 → OMO_MIRROR → 内置镜像），重试 + 进度条
 CURL_QUIET=""; [ -t 2 ] && CURL_QUIET="--progress-bar" || CURL_QUIET="-sS"
@@ -123,3 +124,4 @@ printf '\n%s═══ ✓ omo 安装完成（%s，耗时 %ss）═══%s\n' "$
 printf '  %somo%s               交互式\n' "$B" "$N"
 printf '  %somo -p %s巡检本机%s  非交互巡检\n' "$B" "$D" "$N"
 printf '  %somo status%s         状态\n' "$B" "$N"
+# bootstrap-end
