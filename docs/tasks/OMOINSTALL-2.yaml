@@ -16,4 +16,8 @@ events:
     op: 'claim'
     by: 'omp-architect'
     note: 'branch=feature/OMOINSTALL-2-design'
+  - ts: '2026-09-14T07:22:00.000Z'
+    op: 'evidence'
+    by: 'omp-architect'
+    note: 'H3/H4 探针双 ✅（报告落 docs/reports/omo-install-probes.md）：H3=omp 单文件可执行构建可行（bun compile + 生成 embedded-addon.js 嵌入 pi-natives 双 variant；omp-single 471MB；--version 与 ops 扩展全链路行为一致），H3 探针通过→T1 单文件路线成立；H4=状态目录严格随 $HOME 重定向（fakehome 实测全部落 fakehome/.omp，真实 ~/.omp 零写入）→ 隔离方案=启动器 HOME 指向 ~/.omo，无需 fork 改 omp。设计前置硬门已过，进入 architect-design。'
 branch: 'feature/OMOINSTALL-2-design'
