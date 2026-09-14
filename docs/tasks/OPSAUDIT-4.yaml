@@ -1,6 +1,6 @@
 id: 'OPSAUDIT-4'
 title: '冲突路径演练——/ops-audit 实弹观测被拒/令牌/兜底路径（阶段 3 收口）'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-14T06:15:13.736Z'
 accept:
@@ -44,6 +44,10 @@ events:
     op: 'report'
     by: 'omp-architect'
     note: '冲突路径演练完成（自报）：D-1 实弹于 logstash-124（v0.7.0 自包含安装器，主人实操）——被拒调用留痕 + /ops-audit 回看 + 自审计闭环 + 参数防御，全部通过；演练报告 docs/reports/ops-audit-conflict-drill.md（含 D-2/D-3 降级引用与三层对账）。阶段 3 试点功能面完成。自报 ≠ 完成，待主人确认收口'
+  - ts: '2026-09-14T08:59:46.685Z'
+    op: 'confirm'
+    by: '主人'
+    note: '阶段 3 试点收口：/ops-audit（OPSAUDIT-1~3）+ 自包含安装器（OMOINSTALL-1~3）+ 真实环境 D-1 实测全链闭环'
 branch: 'feature/OPSAUDIT-4-drill'
 report:
   summary: '冲突路径演练完成（自报）：D-1 实弹于 logstash-124（v0.7.0 自包含安装器，主人实操）——被拒调用留痕 + /ops-audit 回看 + 自审计闭环 + 参数防御，全部通过；演练报告 docs/reports/ops-audit-conflict-drill.md（含 D-2/D-3 降级引用与三层对账）。阶段 3 试点功能面完成。自报 ≠ 完成，待主人确认收口'
@@ -53,3 +57,5 @@ report:
     - '主人 confirm OPSAUDIT-4 收口（阶段 3 完结）；suite-map 补录与安装器经验回灌（知识任务，待主人点头）'
   at: '2026-09-14T08:58:10.577Z'
   by: 'omp-architect'
+confirmedBy: '主人'
+confirmedVia: '会话确认 2026-09-14（ask「确认收口」；D-1 实弹通过，演练报告 a557f2b）'
