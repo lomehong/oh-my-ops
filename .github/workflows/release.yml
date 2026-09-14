@@ -16,7 +16,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.2   # 与安装器锁版一致（T3），消除构建/运行时版本分裂
 
       - uses: actions/setup-node@v4
         with:
@@ -40,6 +40,10 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2   # 构建 omp-single 运行时（与测试/安装器锁版一致）
 
       - name: 提取版本号
         id: ver
