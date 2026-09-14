@@ -20,6 +20,10 @@ events:
     op: 'report'
     by: 'omp-architect'
     note: 'yuyi 配置桥接修复完成并发 v0.7.4（自报）：① 启动器 set -a 包裹 source（修复：HOME 重定向下裸 KEY=VALUE 未进子进程 → 插件落单机模式）；② install.sh 预读旧受管键、无显式参数以旧值为默认（防重装丢 token/自定义 hub）。制品核验五项通过（set -a 桥接/预读/旧值并入/上轮修复/o,p-single）。桩验：子进程可见 YUYI_TOKEN/YUYI_HUB；env 文件保留 token/custom hub/unknown keys。待主人在 logstash-124 重装 v0.7.4 + 重启 omo 复验 Hub 连接'
+  - ts: '2026-09-14T15:00:00.000Z'
+    op: 'evidence'
+    by: 'omp-architect'
+    note: '真机实证（关键验收证据）：logstash-124 上的 omo 主动上报上线——Hub ws://172.20.10.91:7377 已连接、别名 logstash-124-omp（sessionID omp_8450fab24ad7）、Hub 权威名 omo-logstash-124、角色 worker、收件箱空、可正常收发（发送方 agent 92c3f746…，Hub 已验证）。此前同一机器为「未配置（单机模式）」，故该上线通知即 v0.7.4 yuyi 配置桥接修复的端到端实证。已回执对端（并附修复背景与安全提醒）。'
 branch: 'feature/OMOBRIDGE-1'
 report:
   summary: 'yuyi 配置桥接修复完成并发 v0.7.4（自报）：① 启动器 set -a 包裹 source（修复：HOME 重定向下裸 KEY=VALUE 未进子进程 → 插件落单机模式）；② install.sh 预读旧受管键、无显式参数以旧值为默认（防重装丢 token/自定义 hub）。制品核验五项通过（set -a 桥接/预读/旧值并入/上轮修复/o,p-single）。桩验：子进程可见 YUYI_TOKEN/YUYI_HUB；env 文件保留 token/custom hub/unknown keys。待主人在 logstash-124 重装 v0.7.4 + 重启 omo 复验 Hub 连接'
