@@ -1,6 +1,6 @@
 id: 'OPSAUDIT-2'
 title: '/ops-audit 技术方案设计（architect-design）'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-14T05:39:21.023Z'
 accept:
@@ -16,4 +16,17 @@ events:
     op: 'claim'
     by: 'omp-architect'
     note: 'branch=feature/OPSAUDIT-2-design'
+  - ts: '2026-09-14T05:45:38.402Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: '技术方案草稿落 docs/designs/ops-audit-command-design.md（分支 feature/OPSAUDIT-2-design）：六维度+五问齐备，architect_design 插件自检 60/60；复用面 registerCommand/ui.notify/getBranch/appendEntry，新建面仅 audit-view.ts 三纯函数；T1–T5 按定案口径内嵌，决策门无命中。待独立评审 + 主人确认（自报 ≠ 完成）'
 branch: 'feature/OPSAUDIT-2-design'
+report:
+  summary: '技术方案草稿落 docs/designs/ops-audit-command-design.md（分支 feature/OPSAUDIT-2-design）：六维度+五问齐备，architect_design 插件自检 60/60；复用面 registerCommand/ui.notify/getBranch/appendEntry，新建面仅 audit-view.ts 三纯函数；T1–T5 按定案口径内嵌，决策门无命中。待独立评审 + 主人确认（自报 ≠ 完成）'
+  evidence:
+    - 'xd://architect_design 自检 60/60（全维度 10 分）'
+    - '证据回源：types/vendor-platform.d.ts:68-78,122-163 + v42-layer-audit-probe.ts:28-29 信封形状 + hooks.ts/commands.ts 写入点'
+  pending:
+    - '评审路由未定（dsh 独立窗口 vs 本会话自评）——待主人拍板'
+  at: '2026-09-14T05:45:38.401Z'
+  by: 'omp-architect'
