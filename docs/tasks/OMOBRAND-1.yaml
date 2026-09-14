@@ -1,6 +1,6 @@
 id: 'OMOBRAND-1'
 title: '品牌面残留修复——omo update 拦截 + 品牌面构建期 fail-loud + ops-pi 文案品牌化（dsh 移交 P3/P2）'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-14T09:47:27.199Z'
 accept:
@@ -16,4 +16,21 @@ events:
     op: 'claim'
     by: 'omp-architect'
     note: 'branch=feature/OMOBRAND-1-fix'
+  - ts: '2026-09-14T10:12:00.000Z'
+    op: 'evidence'
+    by: 'omp-architect'
+    note: '修复与发布实证：① P3① 启动器 update|upgrade 合并安全通道（install.sh:236）；② P3③ patch-omp-brand --require-hits（构建期任一面锚点缺失即失败）+ build 管线启用 + release.yml 品牌面断言（启动器拦截存在 + 二进制含 OMO_APP_NAME）；③ P2 用户可见文案品牌化 5 处（hooks.ts 4 + platform.ts 1）。本地：npm test 182/0 fail、typecheck 0 错、build --require-hits 全 7 面通过、二进制 --version=omp/18.1.18。发布：v0.7.1（CI run 34830019481 success，Release 122MB）；**已下载 v0.7.1 制品核验**：包内 install.sh 含 update|upgrade)（:236）、hooks.ts 含 4 处 omo：、omp-single 就位。遗留（P3② 可选加固，主人拍板另议）：二进制内 update 命令实体与 settings-schema 描述文案仍在（启动器已拦截其可达路径）。'
+  - ts: '2026-09-14T09:54:34.768Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: '品牌面残留修复完成并发版（自报）：P3① 启动器 update|upgrade 安全通道（拦截上游自更新，护住 pin 与全局命名空间）；P3③ 品牌 patch --require-hits 构建期 fail-loud + CI 品牌面断言；P2 文案品牌化 5 处。v0.7.1 已发布（CI 绿）且制品级核验通过（包内三处修复实测在案）。未兑现：logstash-124 重装后的现场复验（Update 提示消失/文案为 omo）；P3②（二进制内 update 实体与 settings 描述）主人拍板另议。自报 ≠ 完成，待主人确认'
 branch: 'feature/OMOBRAND-1-fix'
+report:
+  summary: '品牌面残留修复完成并发版（自报）：P3① 启动器 update|upgrade 安全通道（拦截上游自更新，护住 pin 与全局命名空间）；P3③ 品牌 patch --require-hits 构建期 fail-loud + CI 品牌面断言；P2 文案品牌化 5 处。v0.7.1 已发布（CI 绿）且制品级核验通过（包内三处修复实测在案）。未兑现：logstash-124 重装后的现场复验（Update 提示消失/文案为 omo）；P3②（二进制内 update 实体与 settings 描述）主人拍板另议。自报 ≠ 完成，待主人确认'
+  evidence:
+    - 'v0.7.1 制品核验（下载实测）：install.sh:236 update|upgrade)、hooks.ts omo：×4、omp-single 在包'
+    - '本地：npm test 182/0 fail、typecheck 0 错、build --require-hits 七面全过'
+  pending:
+    - '主人 confirm；logstash-124 重装 v0.7.1 现场复验；P3② 加固取舍'
+  at: '2026-09-14T09:54:34.767Z'
+  by: 'omp-architect'
