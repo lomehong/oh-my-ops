@@ -28,6 +28,10 @@ events:
     op: 'evidence'
     by: 'omp-architect'
     note: '主人复验反馈修复（v0.7.1 重装时 bun 被重复安装）：根因=检测仅看 command -v bun（当前 PATH），长驻旧 shell 不刷新 PATH 且 ~/.bun/bin 未在环 → 误判“未检测到”；修=显式识别标准安装位 ~/.bun/bin/bun（识别即加入本次会话 PATH，不再下载）。实测：PATH 无 bun + 标准位存在 → 输出「检测到已有 bun 1.4.2（~/.bun/bin…）」不重装。install.sh 修复已推 main（随下个 Release 进包；当前机器可仅重拉 main 的 install.sh 复验）。'
+  - ts: '2026-09-14T14:30:00.000Z'
+    op: 'evidence'
+    by: 'omp-architect'
+    note: '主人复验第二反馈（v0.7.1 重装仍重复装 bun）双因素定位：① 操作序列因素——主人已拉 main 新脚本但随后 rm -rf oh-my-ops-v0.7.* 删掉目录，重新解压 v0.7.1 包（tag 时旧脚本，不含该修）后运行；② 真缺陷二——官方 bun 通道实际成功（其日志 Added ~/.bun/bin to PATH in ~/.bash_profile），但判定用 command -v bun（PATH 未刷新）→ 误判失败并回退镜像二次下载 36MB。修复 bb6e229：官方通道成功判定改用标准位存在性 [ -x $HOME/.bun/bin/bun ]。两修（已知位置识别 + 官方通道判定）均已在 main；本机实测：PATH 无 bun + 标准位在 → 命中「检测到已有 bun」零下载。'
 branch: 'feature/OMOBRAND-1-fix'
 report:
   summary: '品牌面残留修复完成并发版（自报）：P3① 启动器 update|upgrade 安全通道（拦截上游自更新，护住 pin 与全局命名空间）；P3③ 品牌 patch --require-hits 构建期 fail-loud + CI 品牌面断言；P2 文案品牌化 5 处。v0.7.1 已发布（CI 绿）且制品级核验通过（包内三处修复实测在案）。未兑现：logstash-124 重装后的现场复验（Update 提示消失/文案为 omo）；P3②（二进制内 update 实体与 settings 描述）主人拍板另议。自报 ≠ 完成，待主人确认'
