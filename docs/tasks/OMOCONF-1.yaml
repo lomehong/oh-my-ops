@@ -1,6 +1,6 @@
 id: 'OMOCONF-1'
 title: 'policy/token 有效路径私有域化（~/.omo/）+ WARN 文案动态化（主人实测：文案与真实路径不符）'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-14T10:16:12.963Z'
 accept:
@@ -16,4 +16,17 @@ events:
     op: 'claim'
     by: 'omp-architect'
     note: 'branch=feature/OMOCONF-1'
+  - ts: '2026-09-14T10:17:37.869Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: 'policy/token 路径私有域化 + WARN 文案动态化完成（自报）：setup.ts resolvePath（config.json 显式 > env > cwd 缺省）；启动器注入 OMO_POLICY_PATH/OMO_TOKEN_PATH=~/.omo/…；install.sh 策略写私有域根并自动迁移旧位；hooks.ts WARN 动态取解析路径。证据：setup.test.ts 3/3（含空串边界）、npm test 185/0 fail、typecheck 0 错、安装冒烟（旧策略迁移 + env 注入实测）。待主人确认并决定是否发 v0.7.3（本修需新包才能到 logstash-124）'
 branch: 'feature/OMOCONF-1'
+report:
+  summary: 'policy/token 路径私有域化 + WARN 文案动态化完成（自报）：setup.ts resolvePath（config.json 显式 > env > cwd 缺省）；启动器注入 OMO_POLICY_PATH/OMO_TOKEN_PATH=~/.omo/…；install.sh 策略写私有域根并自动迁移旧位；hooks.ts WARN 动态取解析路径。证据：setup.test.ts 3/3（含空串边界）、npm test 185/0 fail、typecheck 0 错、安装冒烟（旧策略迁移 + env 注入实测）。待主人确认并决定是否发 v0.7.3（本修需新包才能到 logstash-124）'
+  evidence:
+    - 'packages/ops-extension/test/setup.test.ts：三档优先级契约测试'
+    - '冒烟：~/.omo/home/.ops-pi/policy.json → ~/.omo/policy.json 迁移成功；启动器 env 两行注入实证'
+  pending:
+    - '主人 confirm；v0.7.3 发版取舍（含 P3/P2 之后本修）'
+  at: '2026-09-14T10:17:37.869Z'
+  by: 'omp-architect'
