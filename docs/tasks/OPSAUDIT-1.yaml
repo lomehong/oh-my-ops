@@ -30,14 +30,18 @@ events:
     op: 'dispatch'
     by: 'omp-architect'
     note: '处理回执补发：replyTo=msg_mu0ox806_yfjx75mp（dsh-architect 的请求本体），to=PC-SZ-375:dsh-architect。补发原因=御驿宿主自动回信被 inTurn 看门狗 180s 超时释放吞掉（插件日志 03:38:41.025Z「inTurn 超时强制释放」，该路径 sendFailureReply/finalizeTurn 均未执行）。回执内容=三项办结确认 + T1–T5 闭合口径 + 要求 dsh 侧对「主人已拍板」给出可回源出处。投递结果：实时唤醒送达，对方回执 msg_mu0p4vgt_mu6rgf。'
+  - ts: '2026-09-14T03:57:21.000Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: 'dsh 侧独立评审结论收到（其发信链路维护中，经主人代转；原文已回灌任务记录 OPSAUDIT-1-REVIEW，msg_mu0pmu1x_dmoty4）：通过、可进入 architect-design；T1–T5 采信 owner-decision（34f4c73）按建议默认值定案；亲验 E3/E10/E2/E12/E6 属实。非阻断：N1 已采纳（包文 §6 落闭合标注）；N2 亲验属实（node_modules/@ops-pi/core 链接悬空，跑测试前先 npm install）。评审记录落 docs/designs/2026-09-14-阶段3试点-OPSAUDIT-1-评审记录.md。报请主人确认（confirm 归主人）。'
 branch: 'feature/OPSAUDIT-1-req'
 report:
-  summary: '需求包已落 docs/requirements/ops-audit-requirement-package.md（分支 feature/OPSAUDIT-1-req，提交 9142a43）；六项覆盖齐备、五问通过、无阻断项，准入=有条件通过（T1–T5 待主人拍板）。独立评审请求已发 yuyi，因目标会话不在 Hub 花名册投递失败（无收件箱记录），评审未发生。待主人确认。'
+  summary: '双方法评审一致通过：omp 侧准入有条件通过（T1–T5 已 owner-decision 闭合，34f4c73）+ dsh 侧独立评审通过（结论经主人代转，原文回灌任务记录 msg_mu0pmu1x_dmoty4）。评审记录 docs/designs/2026-09-14-阶段3试点-OPSAUDIT-1-评审记录.md；N1 已采纳（§6 闭合标注），N2 亲验属实（@ops-pi/core 链接悬空，测试前 npm install）。报请主人确认（confirm 归主人）。'
   evidence:
     - 'docs/requirements/ops-audit-requirement-package.md @9142a43：六项覆盖检查表 §8 + 五问准入 §8.1 + 证据表 §10（E1–E12）'
     - 'yuyi 任务记录 ~/.yuyi/tasks/OPSAUDIT-1-REVIEW.jsonl：goal 8 条验收准则 + artifact 引用 + summary（4 次投递失败，均无收件箱记录）'
+    - 'docs/designs/2026-09-14-阶段3试点-OPSAUDIT-1-评审记录.md：双方法对齐 + dsh 亲验对账（E3/E10/E2/E12/E6）+ N1/N2 处置'
   pending:
-    - '独立评审：目标会话 dsh-architect 于 2026-09-14T03:33Z 上线，评审请求本轮重发'
-    - '需求包落定待主人确认（自报 ≠ 完成）'
-  at: '2026-09-14T03:14:20.000Z'
+    - '主人确认 OPSAUDIT-1 需求包定案（confirm 归主人）；确认后进入 architect-design'
+  at: '2026-09-14T03:57:21.000Z'
   by: 'omp-architect'
