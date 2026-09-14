@@ -14,6 +14,8 @@ export interface ExecOptions {
 	cwd?: string;
 	env?: Record<string, string>;
 	maxOutputBytes?: number;
+	/** 通过 stdin 管道传给子进程的内容（P13：远程文件写入；ssh 会把本地 stdin 转发给远端命令） */
+	stdin?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -51,6 +53,12 @@ export class ShellExec {
 			};
 			child.stdout?.on("data", (chunk: Buffer) => { stdout = cap(stdout, chunk.toString("utf8")); });
 			child.stderr?.on("data", (chunk: Buffer) => { stderr = cap(stderr, chunk.toString("utf8")); });
+
+			// stdin 管道：内容一次性写入后关闭；子进程提前退出时的 EPIPE 属预期，交由 exitCode 判定
+			if (options.stdin !== undefined) {
+				child.stdin?.on("error", () => {});
+				child.stdin?.end(options.stdin, "utf8");
+			}
 
 			const timer = setTimeout(() => {
 				child.kill("SIGKILL");

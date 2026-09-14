@@ -1,4 +1,4 @@
-import { LOCAL_HOST, OpsError } from "@ops-pi/core";
+import { LOCAL_HOST, OpsError, normalizeTargetHost } from "@ops-pi/core";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { ApprovalFn } from "../approvals.ts";
 import { registerOpsTool } from "../approvals.ts";
@@ -25,29 +25,31 @@ export function registerWriteTools(pi: ExtensionAPI, ctx: OpsContext, vault: Cre
 		loadMode: "essential",
 		approval: approval("ops_file_write"),
 		description:
-			"写入文本文件（write 档，仅本机）。父目录须已存在；mode 可指定八进制权限（如 600）。" +
-			"须 Owner 预授权：policy.json 规则的 actions 须显式包含 'file-write'（shell 规则不放行本工具），或批准令牌。",
+			"写入文本文件（write 档；支持远程主机经 SshPool）。父目录须已存在；mode 可指定八进制权限（如 600）。" +
+			"须 Owner 预授权：policy.json 对应 host 规则的 actions 须显式包含 'file-write'（远程主机填真实 hostname 规则），或批准令牌。",
 		parameters: z.object({
 			path: z.string().describe("文件绝对路径"),
 			content: z.string().describe("要写入的完整内容（覆盖式）"),
 			mode: z.string().optional().describe("八进制权限（如 '600'），缺省 644"),
-			host: z.string().optional().describe("目标主机（当前仅支持 '@local'/留空；远程写入未实现）"),
+			host: z.string().optional().describe("目标主机（留空 = 本机；远程须 policy 预授权 + SSH 密钥可达）"),
 		}),
 		async execute(_toolCallId, params, signal) {
 			const p = params as Record<string, unknown>;
 			const pathVal = String(p.path ?? "");
 			const content = String(p.content ?? "");
 			const hostRaw = typeof p.host === "string" ? p.host.trim() : "";
-			const host = normalizeHost(hostRaw);
+			// P13：远程写入经 SshPool（非法主机名由 normalizeTargetHost 即拒）
+			const host = hostRaw === "" || hostRaw === LOCAL_HOST ? undefined : normalizeTargetHost(hostRaw);
 			if (pathVal === "") throw new Error("[INTERNAL] 缺少 path");
 
-			// ③ 权威复核：host 透传进策略维度（远程写入未实现 → 只允许 @local）
+			// ③ 权威复核：host 透传进策略维度（action='file-write'，P11 显式授权）
 			const authz = assertAuthorized("ops_file_write", { path: pathVal, host: host ?? LOCAL_HOST }, ctx.authzView);
 
 			const modeRaw = typeof p.mode === "string" ? p.mode.trim() : "";
 			const mode = /^[0-7]{3,4}$/.test(modeRaw) ? parseInt(modeRaw, 8) : undefined;
 
-			await ctx.files.write(pathVal, content, { mode, signal });
+			const ops = ctx.forHost(host);
+			await ops.files.write(pathVal, content, { mode, signal });
 			return {
 				content: [{ type: "text", text: `已写入 ${pathVal}（${Buffer.byteLength(content)} 字节）` }],
 				details: { authz, path: pathVal, bytes: Buffer.byteLength(content), host: host ?? LOCAL_HOST },
@@ -89,18 +91,4 @@ export function registerWriteTools(pi: ExtensionAPI, ctx: OpsContext, vault: Cre
 			};
 		},
 	});
-}
-
-function normalizeHost(raw: string): string | undefined {
-	const host = raw === "" ? undefined : raw;
-	if (host !== undefined && host !== LOCAL_HOST) {
-		// 远程写入未实现（P8 范围），诚实约束：file_write 仅本机
-		if (host !== "@local") {
-			throw new OpsError(
-				"POLICY_DENIED",
-				`[ERR_POLICY] 远程写入尚未实现：ops_file_write 当前仅支持本机目标（host='${host}'）`,
-			);
-		}
-	}
-	return host === LOCAL_HOST ? undefined : host;
 }

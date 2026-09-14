@@ -1,6 +1,6 @@
 id: 'OPSP-P13'
 title: 'ops_file_write 远程写入（P8 遗留：跟随 SshPool）'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-14T01:52:25.945Z'
 accept:
@@ -16,4 +16,20 @@ events:
     op: 'claim'
     by: 'omo-impl-session'
     note: 'branch=main'
+  - ts: '2026-09-14T02:04:57.401Z'
+    op: 'report'
+    by: 'omo-impl-session'
+    note: 'ops_file_write 远程写入——实现完成（stdin 管道 + argv 数组，无 shell 注入面）'
 branch: 'main'
+report:
+  summary: 'ops_file_write 远程写入——实现完成（stdin 管道 + argv 数组，无 shell 注入面）'
+  evidence:
+    - 'exec.ts：ExecOptions.stdin 管道内容（ssh 自动转发本地 stdin 到远端命令；EPIPE 容错交由 exitCode 判定）'
+    - 'files.ts writeViaRunner：dd of=<path> 从 stdin 写盘（O_TRUNC 语义同本地 writeFile）+ mode 时追加 chmod 复位；错误语义与 readViaRunner 对齐（PERMISSION_DENIED/EXEC_FAILED）'
+    - 'write.ts：解除「远程写入未实现」诚实化拒绝，host 经 normalizeTargetHost 规范化后 ctx.forHost 路由；③ 复核仍走 action=''file-write''（P11 显式授权，远程主机须对应规则）'
+    - '测试：core 新增 7 用例（本地写入/父目录缺失/dd+chmod argv 断言/无 chmod 路径/权限拒绝/EXEC_FAILED/chmod 失败如实上报）；桩 Runner 无 OS 依赖'
+    - '验证：tsc 双包 0 错；core node --test 98 用例 87 过 3 失败（Windows 环境噪音，与基线一致）；L2 bun 61/61'
+  pending:
+    - '真实远程写入联调验收（需目标环境，与 P7/P12 pending 同源）'
+  at: '2026-09-14T02:04:57.397Z'
+  by: 'omo-impl-session'
