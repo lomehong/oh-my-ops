@@ -70,12 +70,11 @@ fetch() { # $1=github绝对路径  $2=输出文件
   tar xzf oh-my-ops.tar.gz && cd oh-my-ops-$VER && bash scripts/install.sh
   （网络受限可设置镜像：OMO_MIRROR=https://ghproxy.cn …）"
 }
-
 # ── [1/4] 解析版本
 VER="${OMO_VERSION:-}"
 if [ -z "$VER" ]; then
   step "解析最新版本…"
-  # 逐源解析 releases/latest 重定向（直连 → OMO_MIRROR → 内置镜像）
+  # 逐源解析 releases/latest 重定向（直连 → OMO_MIRROR → 内置镜像）；非 semver 响应视为该源失败（A6）
   sources=()
   [ -n "${OMO_MIRROR:-}" ] && sources+=("$OMO_MIRROR")
   sources+=("direct" "https://gh-proxy.com" "https://ghproxy.cn")
@@ -85,10 +84,13 @@ if [ -z "$VER" ]; then
       *)      url="$src/$BASE/releases/latest" ;;
     esac
     VER="$(basename "$(curl -fsSL -o /dev/null -w '%{url_effective}' --retry 2 --connect-timeout 8 "$url" 2>/dev/null || true)")"
-    [ -n "$VER" ] && { ok "版本 $VER（via $src）"; break; }
+    if semver_ok "$VER"; then { ok "版本 $VER（via $src）"; break; }
+    else [ -n "$VER" ] && warn "源 $src 返回非 semver 版本「$VER」，跳过"
+    fi
   done
 fi
-[ -n "$VER" ] || die "无法解析最新版本。手动指定：OMO_VERSION=v0.4.3 重试"
+[ -n "$VER" ] || die "无法解析最新版本。手动指定：OMO_VERSION=v0.6.1 重试"
+semver_ok "$VER" || die "版本「$VER」非 semver——拒绝下载。手动指定：OMO_VERSION=v0.6.1 重试"
 case "$VER" in v*) ;; *) VER="v$VER" ;; esac
 ok "版本 $VER"
 

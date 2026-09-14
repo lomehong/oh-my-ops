@@ -1,27 +1,44 @@
 #!/usr/bin/env bash
-# oh-my-ops 安装脚本 v3：一键部署，品牌内置，零 sudo。
+# oh-my-ops 安装脚本 v4：自包含——零前置、~/.omo 私有域、与原生 omp 零接触。
 #
-# 布局（全部在用户目录，可整体删除）：
-#   ~/.ops-pi/
-#     omp/dist/            ← 系统 omp 产物镜像（品牌补丁直接打进副本）
-#     omp/node_modules     ← symlink → 系统 omp（bun 原生模块解析）
-#     extension/ops-pi/    ← ops-pi 扩展（含 ops-core 实体拷贝，无外部 symlink）
-#     bin/patch-omp-brand.mjs
-#   ~/.local/bin/omo       ← 启动器（每次运行自检镜像是否过期，过期自动重建）
-#   ~/.omp/agent/extensions/yuyi-omp-extension.js  ← Yuyi 适配器（默认 profile 自动发现）
+# 布局（全部在 ~/.omo，可整体删除；唯一对外痕迹 = ~/.local/bin/omo 启动器）：
+#   ~/.omo/bin/bun                ← 私有 bun（自动安装，锁 OMO_BUN_VERSION；不装系统级）
+#   ~/.omo/runtime/omp-single     ← 品牌化单文件 omp（发布包内置，构建管线见 scripts/build-omp-runtime.sh）
+#   ~/.omo/extensions/ops-pi/     ← ops 扩展（含 ops-core 实体拷贝）
+#   ~/.omo/extensions/yuyi-omp-extension.js ← Yuyi 适配器
+#   ~/.omo/home/                  ← omp 进程的 HOME（状态根：.omp/…、.ops-pi/policy.json、.omp/agent/AGENTS.md）
+#   ~/.local/bin/omo              ← 启动器（HOME 重定向 → omp-single）
 #
-# 前置：系统已装 oh-my-pi(omp)（bun 全局或 npm -g 均可，自动探测）。
-# 升级：重跑本脚本即可；omp 升级后 omo 启动时自动刷新镜像并重打品牌。
+# 前置：curl（解压/网络）。**不要求**机器上已有 omp/node/bun——运行时自备。
+# 与原生 omp 的关系：不读、不写、不升级、不接管；原生 omp 升级不影响 omo（版本契约随 omo 发布）。
+# 升级：重跑本脚本（runtime/extensions/启动器替换；home/ 内策略/凭据/会话保留）。
+# 卸载：bash scripts/install.sh --uninstall（⚠ 删除 ~/.omo，含策略/凭据/会话数据）。
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OPS_DIR="$HOME/.ops-pi"
+REAL_HOME="$HOME"
+OMO_DIR="$HOME/.omo"
+HOME_DIR="$OMO_DIR/home"
+RUNTIME="$OMO_DIR/runtime/omp-single"
+EXT_DIR="$OMO_DIR/extensions"
 BIN_DST="$HOME/.local/bin/omo"
-POLICY_DST="$HOME/.ops-pi"
-YUYI_DIR="$HOME/.yuyi"
-YUYI_DST="$HOME/.omp/agent/extensions/yuyi-omp-extension.js"
+YUYI_DIR="$REAL_HOME/.yuyi"
 YUYI_SRC="$REPO_ROOT/vendor/yuyi-omp-extension.js"
-PATCH_SRC="$REPO_ROOT/scripts/patch-omp-brand.mjs"
+OLD_OPS_DIR="$REAL_HOME/.ops-pi"
+
+# bun 版本锁定（T3 拍板：官方脚本 + CN 镜像回退，锁 1.4.x）
+OMO_BUN_VERSION="1.4.2"
+BUN_OFFICIAL="https://bun.sh/install"
+BUN_MIRROR_ZIP="https://registry.npmmirror.com/-/binary/bun/bun-v$OMO_BUN_VERSION/bun-linux-x64.zip"
+
+# zip 解包多后端（目标机未必有 unzip；python3/bsdtar/7z 任一即可）
+zip_extract() { # $1=zip  $2=目标目录
+  if command -v unzip >/dev/null 2>&1; then unzip -oq "$1" -d "$2"
+  elif command -v python3 >/dev/null 2>&1; then python3 -m zipfile -e "$1" "$2"
+  elif command -v bsdtar >/dev/null 2>&1; then bsdtar -xf "$1" -C "$2"
+  elif command -v 7z >/dev/null 2>&1; then 7z x -y -o"$2" "$1" >/dev/null
+  else echo "✗ 无可用解压工具（unzip/python3/bsdtar/7z 任一）"; return 1; fi
+}
 
 DEFAULT_HUB="wss://hub.qianji.io"
 DEFAULT_YUFU_URL="https://yufu.qianji.io"
@@ -41,29 +58,29 @@ done
 
 if [[ "$UNINSTALL" == true ]]; then
   echo "[uninstall] 移除…"
-  rm -rf "$OPS_DIR" "$HOME/.omp/agent/extensions/ops-pi" "$HOME/.omp/agent/extensions/ops-pi-deps"
-  rm -f "$YUYI_DST" "$BIN_DST"
-  echo "[uninstall] ✓ 已移除（策略与令牌保留在 ~/.ops-pi 之外的 ~/.yuyi/）"
+  echo "  ⚠ 将删除 $OMO_DIR（含策略 policy.json、vault 凭据、会话数据）。"
+  read -r -p "  确认删除？[y/N] " ans
+  case "$ans" in y|Y) ;; *) echo "[uninstall] 已取消"; exit 0 ;; esac
+  rm -rf "$OMO_DIR"
+  if [ -f "$BIN_DST" ] && grep -q "OMO_LAUNCHER_V4" "$BIN_DST" 2>/dev/null; then
+    rm -f "$BIN_DST"; echo "  ✓ 已移除 $BIN_DST"
+  elif [ -f "$BIN_DST" ]; then
+    echo "  ⚠ $BIN_DST 非本产品启动器，未删除（请自行处理）"
+  fi
+  echo "[uninstall] ✓ 已移除（$YUYI_DIR 的 token/凭据保留）"
   exit 0
 fi
 
-# ── 定位系统 omp
-SYS_OMP="$(readlink -f "$(command -v omp)")" || { echo "✗ 未找到 omp，请先安装 oh-my-pi ≥ 18.1.18"; exit 1; }
-SYS_DIR="$(dirname "$SYS_OMP")/.."
-SYS_DIR="$(cd "$SYS_DIR" && pwd)"
-[ -f "$SYS_DIR/dist/cli.js" ] || { echo "✗ omp 产物异常：$SYS_DIR/dist/cli.js 不存在"; exit 1; }
+# ── 包完整性：发布包根必须带预编译 omp-single，且能在本机运行（平台/损坏在此暴露）
+PKG_RUNTIME="$REPO_ROOT/omp-single"
+[ -f "$PKG_RUNTIME" ] || { echo "✗ 发布包异常：缺 $PKG_RUNTIME（omp-single 应由 Release 打包提供）"; exit 1; }
+chmod +x "$PKG_RUNTIME"
+mkdir -p "$HOME_DIR"   # 先建私有状态根：omp-single 首跑会把 pi-natives 落盘到 $HOME/.omp/natives（H4 机制）
+RUNTIME_VER="$(HOME="$HOME_DIR" "$PKG_RUNTIME" --version 2>&1 | head -1)" || { echo "✗ omp-single 无法运行（平台不符或包损坏）"; exit 1; }
+case "$RUNTIME_VER" in *18.1.18*|*omp/*) ;; *) echo "✗ omp-single 版本输出异常：$RUNTIME_VER"; exit 1 ;; esac
+echo "  运行时：$RUNTIME_VER（预编译单文件）"
 
-# omp 版本门禁：扩展依赖 18.x 宿主 API（getAllTools sourceInfo / typebox 注入）
-OMP_VER=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$SYS_DIR/package.json','utf8')).version||'0')}catch{console.log('0')}" 2>/dev/null || echo 0)
-if [ "$(printf '%s\n' "18.1.18" "$OMP_VER" | sort -V | head -1)" != "18.1.18" ]; then
-  echo "✗ omp 版本过低：$OMP_VER（要求 ≥ 18.1.18）。请先升级："
-  echo "    bun install -g @oh-my-pi/pi-coding-agent@latest   # 或 npm i -g 同名包"
-  echo "  升级后重新运行本安装脚本。"
-  exit 1
-fi
-echo "  系统 omp：$SYS_DIR（v$OMP_VER）"
-
-# ── Yuyi 配置：沿用优先，绝不覆盖已发放凭据
+# ── Yuyi 配置：沿用优先，绝不覆盖已发放凭据（沿用 v3 逻辑；凭据仍在真实 HOME 的 ~/.yuyi）
 if [ -z "$TOKEN" ] && [ -f "$YUYI_DIR/agent.json" ]; then
   TOKEN=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$YUYI_DIR/agent.json','utf8')).token||'')}catch{}" 2>/dev/null)
   [ -n "$TOKEN" ] && echo "↺ 沿用已有 Yuyi token"
@@ -82,65 +99,94 @@ fi
 HUB_URL="${HUB_URL:-$DEFAULT_HUB}"
 YUFU_URL="${YUFU_URL:-$DEFAULT_YUFU_URL}"
 
-echo "═══ oh-my-ops 安装 v3 ═══"
+echo "═══ oh-my-ops 安装 v4（自包含）═══"
 echo "  设备名：$AGENT_NAME"
+echo "  私有域：$OMO_DIR"
 echo
 
-# ── 1) ops-pi 扩展（自包含：ops-core 实体拷贝，删解压目录不影响运行）
-echo "[1/4] 部署 ops-pi 扩展…"
-EXT_DST="$OPS_DIR/extension/ops-pi"
-rm -rf "$EXT_DST" "$HOME/.omp/agent/extensions/ops-pi" "$HOME/.omp/agent/extensions/ops-pi-deps"
-mkdir -p "$EXT_DST/tools" "$EXT_DST/node_modules/@ops-pi"
-for f in "$REPO_ROOT/packages/ops-extension/src"/*.ts; do
-  base=$(basename "$f"); [ "$base" = "index.ts" ] && continue; cp "$f" "$EXT_DST/"
-done
-for f in "$REPO_ROOT/packages/ops-extension/src/tools/"*.ts; do cp "$f" "$EXT_DST/tools/"; done
-cp -r "$REPO_ROOT/packages/ops-core/src" "$EXT_DST/node_modules/@ops-pi/core"
-echo 'export { default } from "./extension.ts";' > "$EXT_DST/index.ts"
-echo '{"name":"ops-pi","private":true,"type":"module","dependencies":{"@ops-pi/core":"*"}}' > "$EXT_DST/package.json"
-echo "  ✓ $EXT_DST（自包含，含 ops-core）"
-# ── 2) 品牌化 omp 镜像（用户副本，免 sudo）
-echo "[2/4] 构建 omo 品牌 omp 镜像…"
-mkdir -p "$OPS_DIR/bin"
-cp "$REPO_ROOT/scripts/build-mirror.sh" "$OPS_DIR/bin/build-mirror.sh"
-cp "$PATCH_SRC" "$OPS_DIR/bin/patch-omp-brand.mjs"
-bash "$OPS_DIR/bin/build-mirror.sh" "$OPS_DIR/omp" "$SYS_DIR"
+# ── 1) 私有 bun（T3：官方脚本直连 → npmmirror zip 回退；落 ~/.omo/bin，不装系统级）
+echo "[1/5] 私有 bun（$OMO_BUN_VERSION）…"
+BUN_BIN="$OMO_DIR/bin/bun"
+bun_ok() { [ -x "$BUN_BIN" ] && v="$("$BUN_BIN" --version 2>/dev/null || true)" && case "$v" in 1.4.*) return 0 ;; esac; return 1; }
+if bun_ok; then
+  echo "  ↺ 已有 bun $("$BUN_BIN" --version)（$BUN_BIN），跳过"
+else
+  ok_installed=false
+  if curl -fsSL --max-time 90 "$BUN_OFFICIAL" | BUN_INSTALL="$OMO_DIR" bash -s -- "bun-v$OMO_BUN_VERSION" 2>/dev/null && bun_ok; then
+    ok_installed=true; echo "  ✓ bun $("$BUN_BIN" --version)（官方脚本 → $BUN_BIN）"
+  fi
+  if [ "$ok_installed" = false ]; then
+    echo "  ↺ 官方通道失败，回退 npmmirror zip…"
+    TMPZ="$(mktemp -d)"
+    if curl -fsSL --max-time 300 "$BUN_MIRROR_ZIP" -o "$TMPZ/bun.zip" \
+       && zip_extract "$TMPZ/bun.zip" "$TMPZ" \
+       && [ -f "$TMPZ/bun-linux-x64/bun" ]; then
+      mkdir -p "$OMO_DIR/bin"
+      mv "$TMPZ/bun-linux-x64/bun" "$BUN_BIN"; chmod +x "$BUN_BIN"
+      ok_installed=true; echo "  ✓ bun $("$BUN_BIN" --version)（npmmirror → $BUN_BIN）"
+    fi
+    rm -rf "$TMPZ"
+    bun_ok || { echo "✗ bun 自动安装失败（官方与镜像通道均不可达）。可手动：curl -fsSL https://bun.sh/install | bash"; exit 1; }
+  fi
+fi
 
-# ── 3) omo 启动器（自愈：系统 omp 升级后自动刷新镜像并重打品牌）
-echo "[3/4] 创建 omo 启动器…"
+# ── 2) 布局 runtime + 扩展
+echo "[2/5] 布局 ~/.omo …"
+mkdir -p "$OMO_DIR/runtime" "$EXT_DIR/ops-pi/tools" "$EXT_DIR/ops-pi/node_modules/@ops-pi" "$HOME_DIR"
+install -m 755 "$PKG_RUNTIME" "$RUNTIME"
+echo "  ✓ $RUNTIME"
+
+for f in "$REPO_ROOT/packages/ops-extension/src"/*.ts; do
+  base=$(basename "$f"); [ "$base" = "index.ts" ] && continue; cp "$f" "$EXT_DIR/ops-pi/"
+done
+for f in "$REPO_ROOT/packages/ops-extension/src/tools/"*.ts; do cp "$f" "$EXT_DIR/ops-pi/tools/"; done
+cp -r "$REPO_ROOT/packages/ops-core/src" "$EXT_DIR/ops-pi/node_modules/@ops-pi/core"
+echo 'export { default } from "./extension.ts";' > "$EXT_DIR/ops-pi/index.ts"
+echo '{"name":"ops-pi","private":true,"type":"module","dependencies":{"@ops-pi/core":"*"}}' > "$EXT_DIR/ops-pi/package.json"
+echo "  ✓ $EXT_DIR/ops-pi（自包含，含 ops-core）"
+
+if [ -f "$YUYI_SRC" ]; then
+  cp "$YUYI_SRC" "$EXT_DIR/yuyi-omp-extension.js"; echo "  ✓ Yuyi 适配器已部署"
+else
+  echo "  ⚠ vendor/yuyi-omp-extension.js 不存在——跨 Agent 通讯不可用"
+fi
+
+# ── 3) omo 启动器（HOME 重定向 = 与原生 omp 状态隔离的唯一机制，H4 探针实证）
+echo "[3/5] 创建 omo 启动器…"
 mkdir -p "$(dirname "$BIN_DST")"
+if [ -f "$BIN_DST" ] && ! grep -q "OMO_LAUNCHER_V4" "$BIN_DST" 2>/dev/null; then
+  echo "✗ $BIN_DST 已存在且非本产品启动器——拒绝覆盖（请自行处理）"; exit 1
+fi
 cat > "$BIN_DST" <<OMOEOF
 #!/usr/bin/env bash
-# omo — 运维智能体 CLI（品牌内置镜像 + profile 隔离 + 自愈升级）
+# OMO_LAUNCHER_V4 — omo 运维智能体 CLI（自包含：~/.omo 私有域 + HOME 重定向，与原生 omp 零接触）
 set -euo pipefail
-# 进程探测：不依赖 ps/pgrep（极简容器/无 procps 环境可用）
+OMO_DIR="$OMO_DIR"
+REAL_HOME="$REAL_HOME"
+export HOME="$HOME_DIR"
+mkdir -p "\$HOME"
+export OPS_PI_SANDBOX="\${OPS_PI_SANDBOX:-0}"
+export OMO_APP_NAME="omo"
+export OMO_BIN="omo"
+export OMO_TIPS=\$'/ops-audit [n] 回看最近 n 条审计条目（只读）\n/ops-inspect <主机> 执行标准巡检（只读）\n/ops-health 十秒健康快照；/ops-status 查看策略/沙箱/凭据状态\n只读 ops 工具自动放行；变更类需 Owner 预授权（policy.json）\n无人值守下生产目标变更一律拒绝——这是设计，不是故障\nomo serve 常驻后，cron/webhook 可直接触发巡检与诊断\nPress ctrl+r to search your prompt history\nCtrl+D exits but keeps your draft saved'
+RUN="\$OMO_DIR/runtime/omp-single"
+EXT="\$OMO_DIR/extensions/ops-pi"
+YUYI="\$OMO_DIR/extensions/yuyi-omp-extension.js"
+[ -f "\$REAL_HOME/.yuyi/env" ] && source "\$REAL_HOME/.yuyi/env"
+[ -x "\$RUN" ] || { echo "✗ 运行时缺失：\$RUN（重跑安装脚本）"; exit 1; }
+EXT_ARGS=()
+[ -d "\$EXT" ] && EXT_ARGS+=(--extension "\$EXT")
+[ -f "\$YUYI" ] && EXT_ARGS+=(--extension "\$YUYI")
 rpc_pids() {
   local f p
   for f in /proc/[0-9]*/cmdline; do
     [ -r "\$f" ] || continue
-    if tr '\0' '\n' < "\$f" 2>/dev/null | grep -q "mode rpc"; then
+    if tr '\\0' '\\n' < "\$f" 2>/dev/null | grep -q "mode rpc"; then
       p=\${f#/proc/}; echo "\${p%/cmdline}"
     fi
   done
   return 0
 }
-[ -f "\$HOME/.yuyi/env" ] && source "\$HOME/.yuyi/env"
-export OPS_PI_SANDBOX="\${OPS_PI_SANDBOX:-0}"
-export OMO_APP_NAME="omo"
-export OMO_BIN="omo"   # 命令提示用真实 CLI 名（update/models/plugin 提示可照敲）
-export OMO_TIPS=\$'/ops-inspect <主机> 执行标准巡检（只读）\n/ops-health 十秒健康快照；/ops-status 查看策略/沙箱/凭据状态\n只读 ops 工具自动放行；变更类需 Owner 预授权（policy.json）\n无人值守下生产目标变更一律拒绝——这是设计，不是故障\nomo serve 常驻后，cron/webhook 可直接触发巡检与诊断\nPress ctrl+r to search your prompt history\nCtrl+D exits but keeps your draft saved'
-MIR="\$HOME/.ops-pi/omp"
-EXT="\$HOME/.ops-pi/extension/ops-pi"
-YUYI="\$HOME/.omp/agent/extensions/yuyi-omp-extension.js"
-SYS_DIR="\$(cd "\$(dirname "\$(readlink -f "\$(command -v omp)")")/.." && pwd)"
-# 自愈：系统 omp 比镜像新 → 重建镜像 + 重打品牌
-if [ -f "\$SYS_DIR/dist/cli.js" ] && { [ ! -f "\$MIR/dist/cli.js" ] || [ "\$SYS_DIR/dist/cli.js" -nt "\$MIR/dist/cli.js" ]; }; then
-  bash "\$HOME/.ops-pi/bin/build-mirror.sh" "\$MIR" "\$SYS_DIR" >/dev/null 2>&1 || \
-    echo "[omo] ⚠ 镜像刷新失败，沿用现有镜像"
-fi
-EXT_ARGS=()
-[ -d "\$EXT" ] && EXT_ARGS+=(--extension "\$EXT")
-[ -f "\$YUYI" ] && EXT_ARGS+=(--extension "\$YUYI")
 case "\${1:-}" in
   serve)
     shift; FOREGROUND=false; EXTRA_ARGS=()
@@ -151,16 +197,17 @@ case "\${1:-}" in
       exit 0
     fi
     if [ "\$FOREGROUND" = true ]; then
-      exec "\$MIR/dist/cli.js" --profile ops "\${EXT_ARGS[@]}" --mode rpc "\${EXTRA_ARGS[@]}"
+      exec "\$RUN" --profile ops "\${EXT_ARGS[@]}" --mode rpc "\${EXTRA_ARGS[@]}"
     else
-      setsid bash -c 'tail -f /dev/null | exec "\$HOME/.ops-pi/omp/dist/cli.js" --profile ops "\${EXT_ARGS[@]}" --mode rpc "\${EXTRA_ARGS[@]}"' >> /tmp/omo-serve.log 2>&1 < /dev/null &
+      setsid bash -c 'tail -f /dev/null | exec "$0" --profile ops "$@"' "\$RUN" --mode rpc "\${EXTRA_ARGS[@]}" >> /tmp/omo-serve.log 2>&1 < /dev/null &
       sleep 1; { rpc_pids | tail -1 > /tmp/omo-serve.pid; } || true
       echo "[omo] ✓ 服务已启动 PID \$(cat /tmp/omo-serve.pid)"
     fi ;;
   status)
     echo "═══ omo (oh-my-ops) ═══"
+    echo "  私有域：\$OMO_DIR"
+    [ -x "\$RUN" ] && echo "  运行时：✓ \$(\$RUN --version 2>/dev/null | head -1)" || echo "  运行时：✗（重跑安装脚本）"
     [ -d "\$EXT" ] && echo "  扩展：✓" || echo "  扩展：✗（重跑安装脚本）"
-    [ -f "\$MIR/dist/cli.js" ] && echo "  镜像：✓" || echo "  镜像：✗（重跑安装脚本）"
     PID="\$(cat /tmp/omo-serve.pid 2>/dev/null || true)"
     if [ -n "\$PID" ] && kill -0 "\$PID" 2>/dev/null; then
       echo "  服务：✓ PID \$PID"
@@ -170,82 +217,80 @@ case "\${1:-}" in
       echo "  服务：✗（omo serve 启动）"
     fi
     [ -f "\$HOME/.ops-pi/policy.json" ] && echo "  策略：✓" || echo "  策略：⚠ 未配置（变更全拒）"
-    grep -q '"token": "[^"]' "\$HOME/.yuyi/agent.json" 2>/dev/null && echo "  Yuyi：✓ 已配置" || echo "  Yuyi：✗ 缺 token（bash scripts/install.sh --token <token> 补上）"
+    grep -q '"token": "[^"]' "\$REAL_HOME/.yuyi/agent.json" 2>/dev/null && echo "  Yuyi：✓ 已配置" || echo "  Yuyi：✗ 缺 token（bash scripts/install.sh --token <token> 补上）"
     [ "\${OPS_PI_SANDBOX:-0}" = "1" ] && echo "  沙箱：✓" || echo "  沙箱：⚠" ;;
-  install)
-    [ -f "\$PWD/scripts/install.sh" ] && bash "\$PWD/scripts/install.sh" || { echo "✗ 请在解压目录内运行"; exit 1; } ;;
+  upgrade)
+    for u in "https://github.com/lomehong/oh-my-ops/releases/latest/download/install.sh" "https://gh-proxy.com/https://github.com/lomehong/oh-my-ops/releases/latest/download/install.sh"; do
+      if curl -fsSL --max-time 60 "\$u" -o /tmp/omo-install.sh 2>/dev/null; then
+        bash /tmp/omo-install.sh; exit \$?
+      fi
+    done
+    echo "✗ 升级失败：安装器下载不可达（可重试或手动下载 Release 包）"; exit 1 ;;
+  uninstall)
+    echo "[omo] 卸载请执行：bash <Release 包解压目录>/scripts/install.sh --uninstall（会删除 \$OMO_DIR）" ;;
   help|--help|-h)
     echo "omo — 运维智能体 CLI"
     echo "  omo                      交互式"
     echo "  omo -p '巡检本机'        非交互执行"
     echo "  omo serve                后台服务（cron/webhook 入口）"
     echo "  omo status               状态"
+    echo "  omo upgrade              升级到最新 Release"
     echo "  其他参数透传 omp" ;;
   *)
-    exec "\$MIR/dist/cli.js" --profile ops "\${EXT_ARGS[@]}" "\$@" ;;
+    exec "\$RUN" --profile ops "\${EXT_ARGS[@]}" "\$@" ;;
 esac
 OMOEOF
 chmod +x "$BIN_DST"
 echo "  ✓ $BIN_DST"
 
-# ── 4) Yuyi 适配器 + 配置 + 策略
-echo "[4/4] Yuyi 适配器与配置…"
-if [ -f "$YUYI_SRC" ]; then
-  mkdir -p "$(dirname "$YUYI_DST")"; cp "$YUYI_SRC" "$YUYI_DST"; echo "  ✓ Yuyi 适配器已部署"
-else
-  echo "  ⚠ vendor/yuyi-omp-extension.js 不存在——跨 Agent 通讯不可用"
-fi
-mkdir -p "$YUYI_DIR" "$POLICY_DST"
-# 仅在有 token 时写 agent.json——绝不覆盖已发放凭据
+# ── 4) Yuyi 适配器配置（真实 HOME 的 ~/.yuyi，跨 Agent 凭据不进 ~/.omo）
+echo "[4/5] Yuyi 配置…"
+mkdir -p "$YUYI_DIR"
 if [ -n "$TOKEN" ]; then
   echo "{\"token\": \"$TOKEN\", \"name\": \"$AGENT_NAME\"}" > "$YUYI_DIR/agent.json"
   chmod 600 "$YUYI_DIR/agent.json"
-  echo "  ✓ ~/.yuyi/agent.json（设备 $AGENT_NAME）"
+  echo "  ✓ $YUYI_DIR/agent.json（设备 $AGENT_NAME）"
 elif [ ! -f "$YUYI_DIR/agent.json" ]; then
   echo "{\"token\": \"\", \"name\": \"$AGENT_NAME\"}" > "$YUYI_DIR/agent.json"
   chmod 600 "$YUYI_DIR/agent.json"
   echo "  ⚠ 未提供 token——跨 Agent 通讯暂不可用（--token 补配）"
 else
-  echo "  ↺ 保留已有 ~/.yuyi/agent.json"
+  echo "  ↺ 保留已有 $YUYI_DIR/agent.json"
 fi
-# ~/.yuyi/env 写入：**按键合并**，保留未知键，避免重装抹掉人工/其他组件写入的配置。
-#   受管键（每次刷新为新值）：YUYI_HUB / YUYI_YUFU_URL / YUYI_TOKEN
-#   YUYI_TOKEN 仅在已发放 token 时写入，保证插件不依赖启动 shell 导出变量也能连 Hub
-#   其余键（含注释/空行）原样保留；纯 bash 实现，无新依赖（兼容 curl | bash）
 ENV_FILE="$YUYI_DIR/env"
 ENV_TMP="$ENV_FILE.tmp.$$"
 : > "$ENV_TMP"
 if [ -f "$ENV_FILE" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      YUYI_HUB=*|YUYI_YUFU_URL=*|YUYI_TOKEN=*) continue ;;  # 受管键：丢弃旧值，末尾统一重写
-      *) printf '%s\n' "$line" >> "$ENV_TMP" ;;              # 未知键/注释/空行：原样保留
+      YUYI_HUB=*|YUYI_YUFU_URL=*|YUYI_TOKEN=*) continue ;;
+      *) printf '%s\n' "$line" >> "$ENV_TMP" ;;
     esac
   done < "$ENV_FILE"
 fi
 {
   printf 'YUYI_HUB=%s\n' "$HUB_URL"
   printf 'YUYI_YUFU_URL=%s\n' "$YUFU_URL"
-  if [ -n "$TOKEN" ]; then
-    printf 'YUYI_TOKEN=%s\n' "$TOKEN"
-  fi
+  [ -n "$TOKEN" ] && printf 'YUYI_TOKEN=%s\n' "$TOKEN"
 } >> "$ENV_TMP"
 mv "$ENV_TMP" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
-if [ ! -f "$POLICY_DST/policy.json" ]; then
+
+# ── 5) 策略与 AGENTS.md（全部落私有 HOME；旧 ~/.ops-pi 策略 best-effort 迁移）
+echo "[5/5] 策略与常驻规则…"
+POLICY_DST="$HOME_DIR/.ops-pi"
+mkdir -p "$POLICY_DST"
+if [ ! -f "$POLICY_DST/policy.json" ] && [ -f "$OLD_OPS_DIR/policy.json" ]; then
+  cp "$OLD_OPS_DIR/policy.json" "$POLICY_DST/policy.json"
+  echo "  ↺ 已迁移旧策略：$OLD_OPS_DIR/policy.json → $POLICY_DST/policy.json"
+elif [ ! -f "$POLICY_DST/policy.json" ]; then
   echo '{"targets":[]}' > "$POLICY_DST/policy.json"
   echo "  ✓ 空策略（变更全拒）"
 else
   echo "  ↺ 保留已有策略"
 fi
 
-# ── Agent 常驻规则文件（控制面 Owner 指令「免确认执行」的前提）
-#   为何需要：omp Agent 能对 Owner 从 Yufu 控制面下发的管理指令**直接执行、不走确认**，
-#   靠的正是本工作区这份常驻规则——它声明了 Hub 可验证归属的三要素判定（Hub 已验证发送方 + 控制面投递
-#   + directiveId）与「其他来源不放宽」的诚实边界。该文件不由 omp 自身生成：
-#   安装器若不补，重装一次就丢，整条免确认链的前提随之失效。
-#   策略：**只补缺，绝不覆盖**——规则只能由 Owner 修改，安装器无权改写。
-AGENTS_DST="$HOME/.omp/agent/AGENTS.md"
+AGENTS_DST="$HOME_DIR/.omp/agent/AGENTS.md"
 if [ ! -f "$AGENTS_DST" ]; then
   mkdir -p "$(dirname "$AGENTS_DST")"
   cat > "$AGENTS_DST" <<'AGENTS_EOF'
@@ -281,16 +326,19 @@ if [ ! -f "$AGENTS_DST" ]; then
 - 它**不**证明「Owner 本人逐字撰写」；控制面若需更强的上游保证，属控制面职责范围。
 - 后续将加入内容签名（`contentSignature` + 御符 `verify-signature` 验签），届时可按密钥验证到更前一段来源。
 AGENTS_EOF
-  echo "  ✓ 已生成 ~/.omp/agent/AGENTS.md（控制面 Owner 指令免确认执行的前提）"
+  echo "  ✓ 已生成 $AGENTS_DST"
 else
-  echo "  ↺ 保留已有 ~/.omp/agent/AGENTS.md（规则只能由 Owner 修改，绝不覆盖）"
+  echo "  ↺ 保留已有 $AGENTS_DST"
 fi
 
 echo
-echo "═══ ✓ 安装完成 ═══"
-echo "  omo                      → 交互式（omo 品牌，无需任何补丁）"
+echo "═══ ✓ 安装完成（自包含 v4）═══"
+echo "  omo                      → 交互式"
 echo "  omo -p '巡检本机'        → 非交互巡检"
-echo "  omo serve                → 后台服务"
-echo "  omo status               → 状态"
-echo "  系统 omp 不受影响；omp 升级后 omo 自动刷新镜像"
-
+echo "  omo serve / status / upgrade"
+echo "  私有域：$OMO_DIR（卸载：bash scripts/install.sh --uninstall）"
+echo "  原生 omp 与 ~/.omp 零接触；版本契约随 omo 发布"
+case ":$PATH:" in
+  *":$(dirname "$BIN_DST"):"*) ;;
+  *) echo "  ⚠ $(dirname "$BIN_DST") 不在 PATH——请将其加入 PATH 后使用 omo" ;;
+esac
