@@ -91,6 +91,13 @@ case "$RUNTIME_VER" in *18.1.18*|*omp/*) ;; *) echo "✗ omp-single 版本输出
 echo "  运行时：$RUNTIME_VER（预编译单文件）"
 
 # ── Yuyi 配置：沿用优先，绝不覆盖已发放凭据（沿用 v3 逻辑；凭据仍在真实 HOME 的 ~/.yuyi）
+# 预读旧 ~/.yuyi/env 的受管键（在默认值解析之前）：本次未显式提供的，以旧值为默认，防重装丢 token/自定义 hub
+OLD_ENV_TOKEN=""; OLD_ENV_HUB=""; OLD_ENV_YUFU=""
+if [ -f "$YUYI_DIR/env" ]; then
+  OLD_ENV_TOKEN="$(sed -n 's/^YUYI_TOKEN=//p' "$YUYI_DIR/env" | head -1)"
+  OLD_ENV_HUB="$(sed -n 's/^YUYI_HUB=//p' "$YUYI_DIR/env" | head -1)"
+  OLD_ENV_YUFU="$(sed -n 's/^YUYI_YUFU_URL=//p' "$YUYI_DIR/env" | head -1)"
+fi
 if [ -z "$TOKEN" ] && [ -f "$YUYI_DIR/agent.json" ]; then
   TOKEN="$(json_str token "$YUYI_DIR/agent.json")"
   [ -n "$TOKEN" ] && echo "↺ 沿用已有 Yuyi token"
@@ -106,8 +113,10 @@ fi
 if [ -z "$AGENT_NAME" ]; then
   AGENT_NAME=$(hostname)
 fi
-HUB_URL="${HUB_URL:-$DEFAULT_HUB}"
-YUFU_URL="${YUFU_URL:-$DEFAULT_YUFU_URL}"
+[ -z "$TOKEN" ] && TOKEN="$OLD_ENV_TOKEN"          # 旧 env 里的 token 作为兜底（agent.json/参数优先）
+[ -n "$TOKEN" ] && [ -n "$OLD_ENV_TOKEN" ] && [ "$TOKEN" = "$OLD_ENV_TOKEN" ] && echo "↺ 沿用已有 Yuyi token（env）"
+HUB_URL="${HUB_URL:-${OLD_ENV_HUB:-$DEFAULT_HUB}}"
+YUFU_URL="${YUFU_URL:-${OLD_ENV_YUFU:-$DEFAULT_YUFU_URL}}"
 
 echo "═══ oh-my-ops 安装 v4（自包含）═══"
 echo "  设备名：$AGENT_NAME"
@@ -196,7 +205,9 @@ export OMO_TIPS=\$'/ops-audit [n] 回看最近 n 条审计条目（只读）\n/o
 RUN="\$OMO_DIR/runtime/omp-single"
 EXT="\$OMO_DIR/extensions/ops-pi"
 YUYI="\$OMO_DIR/extensions/yuyi-omp-extension.js"
-[ -f "\$REAL_HOME/.yuyi/env" ] && source "\$REAL_HOME/.yuyi/env"
+# yuyi 配置桥接：HOME 已重定向 → 插件找不到真实 ~/.yuyi；source 的文件为裸 KEY=VALUE（无 export），
+# 必须 set -a 包裹才能进入子进程环境（否则插件三处皆无 token，落单机模式——logstash-124 实测）
+if [ -f "\$REAL_HOME/.yuyi/env" ]; then set -a; source "\$REAL_HOME/.yuyi/env"; set +a; fi
 [ -x "\$RUN" ] || { echo "✗ 运行时缺失：\$RUN（重跑安装脚本）"; exit 1; }
 EXT_ARGS=()
 [ -d "\$EXT" ] && EXT_ARGS+=(--extension "\$EXT")
@@ -289,8 +300,8 @@ ENV_TMP="$ENV_FILE.tmp.$$"
 if [ -f "$ENV_FILE" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      YUYI_HUB=*|YUYI_YUFU_URL=*|YUYI_TOKEN=*) continue ;;
-      *) printf '%s\n' "$line" >> "$ENV_TMP" ;;
+      YUYI_HUB=*|YUYI_YUFU_URL=*|YUYI_TOKEN=*) continue ;;  # 受管键：丢弃旧行，末尾统一重写（值已在预读阶段并入）
+      *) printf '%s\n' "$line" >> "$ENV_TMP" ;;              # 未知键/注释/空行：原样保留
     esac
   done < "$ENV_FILE"
 fi
