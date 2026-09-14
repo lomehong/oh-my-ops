@@ -16,4 +16,8 @@ events:
     op: 'claim'
     by: 'omp-architect'
     note: 'branch=feature/OPSAUDIT-4-drill'
+  - ts: '2026-09-14T06:22:00.000Z'
+    op: 'dispatch'
+    by: 'omp-architect'
+    note: '主人指令「打 tag 触发 CI，真实环境安装最新版测试」：本地已打附注标签 v0.6.0（指向 e387862，含 OPSAUDIT-3 全部实现 + 文档；安装脚本与 main 无漂移，@main 一行安装通道兼容）。推送被阻断：容器内无 GitHub 凭据（credential.helper 指向 gh 但 gh 缺失；GH_TOKEN 空串；api.github.com 401 实测）→ 交接主人：在有凭据的环境执行 git push origin feature/OPSAUDIT-3-impl feature/OPSAUDIT-4-drill v0.6.0，push tag 即触发 release.yml（测试→打包→GitHub Release v0.6.0）。'
 branch: 'feature/OPSAUDIT-4-drill'
