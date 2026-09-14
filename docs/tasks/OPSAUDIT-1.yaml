@@ -1,6 +1,6 @@
 id: 'OPSAUDIT-1'
 title: 'ops-audit 审计回看命令——需求包与独立评审'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-14T03:09:57.000Z'
 accept:
@@ -38,6 +38,10 @@ events:
     op: 'verify'
     by: 'omp-architect'
     note: 'N2 处置执行完毕（本会话实证）：npm install 重建 workspace 链接（@ops-pi/core 由悬空 /mnt/host/e/... 恢复为 ../../packages/ops-core）→ npm test（bun）166 pass / 1 skip（bwrap 不可用，环境性）/ 0 fail（13 文件 167 用例，2.19s）→ typecheck 双包 0 错。另：需求包 §10 E11 引用行号校正（05-service-policy.sh 143-151 → 147-152，内容一致）；本方独立预检与 dsh 亲验四项（E3/E10/E2/E12/E6）全部同源吻合。结论=通过可采信；落定仍待主人 confirm。'
+  - ts: '2026-09-14T05:38:04.183Z'
+    op: 'confirm'
+    by: '主人'
+    note: '双方法评审一致通过（omp 准入有条件通过 + dsh 独立评审经主人代转回灌，msg_mu0pmu1x_dmoty4）；N1 已采纳（包文 §6 闭合标注），N2 执行闭环（84523eb：npm install 重建链接 + 166 pass/0 fail + typecheck 0 错）；主人本会话确认定案，进入 architect-design'
 branch: 'feature/OPSAUDIT-1-req'
 report:
   summary: '双方法评审一致通过：omp 侧准入有条件通过（T1–T5 已 owner-decision 闭合，34f4c73）+ dsh 侧独立评审通过（结论经主人代转，原文回灌任务记录 msg_mu0pmu1x_dmoty4）。评审记录 docs/designs/2026-09-14-阶段3试点-OPSAUDIT-1-评审记录.md；N1 已采纳（§6 闭合标注），N2 亲验属实（@ops-pi/core 链接悬空，测试前 npm install）。报请主人确认（confirm 归主人）。'
@@ -49,3 +53,5 @@ report:
     - '主人确认 OPSAUDIT-1 需求包定案（confirm 归主人）；确认后进入 architect-design'
   at: '2026-09-14T03:57:21.000Z'
   by: 'omp-architect'
+confirmedBy: '主人'
+confirmedVia: '会话确认 2026-09-14（ask 选项「确认定案」；双方法评审一致通过 0355173/84523eb）'
