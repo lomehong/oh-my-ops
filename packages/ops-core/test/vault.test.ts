@@ -94,4 +94,41 @@ describe("CredentialVault", () => {
 		assert.deepEqual(vault.keys(), ["b"]);
 		vault.lock();
 	});
+
+	it("P14 rekey：新口令解锁、旧口令失效、数据保留；salt 轮换", () => {
+		const db = tmpDb();
+		const v1 = new CredentialVault(db);
+		v1.unlock("old-pass");
+		v1.store("k", "SECRET-3");
+		assert.equal(v1.rekey("new-pass"), true);
+		v1.lock();
+
+		const v2 = new CredentialVault(db);
+		assert.equal(v2.unlock("old-pass"), false, "旧口令须失效");
+		assert.equal(v2.unlock("new-pass"), true);
+		assert.equal(v2.read("k"), "SECRET-3", "轮换后数据保留");
+		v2.lock();
+	});
+
+	it("P14 rekey：空口令拒绝；锁态抛 VAULT_LOCKED", () => {
+		const vault = new CredentialVault(tmpDb());
+		assert.throws(() => vault.rekey("x"), /VAULT_LOCKED/);
+		vault.unlock("pw");
+		assert.equal(vault.rekey(""), false);
+		vault.lock();
+	});
+
+	it("P14 rekey：锁态下整文件拷贝即备份（密文可迁移，原口令可解）", () => {
+		const db = tmpDb();
+		const backup = `${db}.bak`;
+		const v1 = new CredentialVault(db);
+		v1.unlock("pw-bak");
+		v1.store("cred", "SECRET-4");
+		fs.copyFileSync(db, backup); // 锁态密文备份
+
+		const restored = new CredentialVault(backup);
+		assert.equal(restored.unlock("pw-bak"), true);
+		assert.equal(restored.read("cred"), "SECRET-4");
+		restored.lock();
+	});
 });

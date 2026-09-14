@@ -32,6 +32,9 @@ export const TIER_TABLE: Readonly<Record<string, Tier | ((args: unknown) => Tier
 	ops_file_write: WRITE,
 	ops_vault_store: WRITE,
 
+	// P14 · write（vault 口令轮换）
+	ops_vault_rekey: WRITE,
+
 	// P1 · exec
 	ops_shell_exec: EXEC,
 	ops_shell_script: EXEC,

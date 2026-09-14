@@ -32,4 +32,8 @@ describe("policyRequestFor · write 档显式 action（P11）", () => {
 		expect(policyRequestFor("ops_vault_store", { key: "k", value: "v" }))
 			.toEqual({ host: "@local", action: "vault-write" });
 	});
+	test("ops_vault_rekey → action='vault-rekey'（P14 口令轮换独立授权粒度）", () => {
+		expect(policyRequestFor("ops_vault_rekey", { newPassphrase: "n" }))
+			.toEqual({ host: "@local", action: "vault-rekey" });
+	});
 });

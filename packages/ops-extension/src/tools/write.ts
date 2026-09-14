@@ -7,7 +7,7 @@ import type { CredentialVault } from "@ops-pi/core";
 import type { OpsContext } from "../context.ts";
 
 /**
- * P8：write 档工具——ops_file_write / ops_vault_store。
+ * P8/P13/P14：write 档工具——ops_file_write / ops_vault_store / ops_vault_rekey。
  * write 档须 Owner 预授权（TIER_TABLE: WRITE → needsOwnerAuth 恒真），
  * execute 首行 assertAuthorized（③ 权威复核），全量落审计（tool_execution_end 钩子）。
  *
@@ -15,6 +15,7 @@ import type { OpsContext } from "../context.ts";
  *  - 口令仅来自环境变量 OPS_VAULT_PASSPHRASE（session_start 自动解锁，不入配置文件）。
  *  - 未配置 vault / 未解锁 → VAULT_LOCKED 诚实失败，不静默降级。
  *  - ops_vault_store 仅存凭据（key → secret），ops_vault_list 列名不回明文。
+ *  - P14：ops_vault_rekey 轮换口令（新盐重加密原子落盘）；备份 = 锁态整文件拷贝（密文）。
  */
 export function registerWriteTools(pi: ExtensionAPI, ctx: OpsContext, vault: CredentialVault | undefined, approval: (name: string) => ApprovalFn): void {
 	const z = pi.zod;
@@ -88,6 +89,41 @@ export function registerWriteTools(pi: ExtensionAPI, ctx: OpsContext, vault: Cre
 			return {
 				content: [{ type: "text", text: `已存入凭据 '${key}'（密文落盘，明文不留日志）` }],
 				details: { authz, key },
+			};
+		},
+	});
+
+	registerOpsTool(pi, {
+		name: "ops_vault_rekey",
+		label: "Vault Rekey",
+		loadMode: "essential",
+		approval: approval("ops_vault_rekey"),
+		description:
+			"轮换 vault 口令（re-key，write 档，P14）：以新口令+新盐重加密现有凭据并原子落盘，旧口令随即失效。" +
+			"须 vault 已解锁（OPS_VAULT_PASSPHRASE）+ Owner 预授权（policy.json 规则 actions 显式包含 'vault-rekey'，或批准令牌）。" +
+			"备份建议：轮换前锁态整文件拷贝 vault db（密文，可用旧口令解锁恢复）。",
+		parameters: z.object({
+			newPassphrase: z.string().describe("新口令（派生新密钥；空口令拒绝）"),
+		}),
+		async execute(_toolCallId, params, _signal) {
+			const p = params as Record<string, unknown>;
+			const newPassphrase = String(p.newPassphrase ?? "");
+			if (newPassphrase === "") throw new OpsError("VAULT_KEY_EMPTY", "新口令不能为空");
+			if (vault === undefined) {
+				throw new OpsError("VAULT_LOCKED", "vault 未配置：在 .ops-pi/config.json 设置 vault.dbPath 后重试");
+			}
+			// ③ 权威复核：vault 为控制节点本机能力，host 恒 @local（action='vault-rekey'）
+			const authz = assertAuthorized("ops_vault_rekey", { host: LOCAL_HOST }, ctx.authzView);
+			// 惰性解锁（与 ops_vault_store 同路径）
+			if (!vault.isUnlocked && process.env.OPS_VAULT_PASSPHRASE) {
+				vault.unlock(process.env.OPS_VAULT_PASSPHRASE);
+			}
+			if (!vault.rekey(newPassphrase)) {
+				throw new OpsError("VAULT_LOCKED", "口令轮换失败：vault 未解锁或落盘失败（旧口令仍有效）");
+			}
+			return {
+				content: [{ type: "text", text: "vault 口令已轮换（新盐重加密原子落盘，旧口令失效；建议立即更新 OPS_VAULT_PASSPHRASE 并整文件备份）" }],
+				details: { authz, op: "vault-rekey" },
 			};
 		},
 	});

@@ -1,6 +1,6 @@
 id: 'OPSP-P14'
 title: 'vault 口令轮换 re-key + 备份策略（P8 遗留收尾）'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-14T01:52:26.206Z'
 accept:
@@ -16,4 +16,20 @@ events:
     op: 'claim'
     by: 'omo-impl-session'
     note: 'branch=main'
+  - ts: '2026-09-14T02:08:08.690Z'
+    op: 'report'
+    by: 'omo-impl-session'
+    note: 'vault 口令轮换 re-key + 备份策略——实现完成（P8 遗留收尾）'
 branch: 'main'
+report:
+  summary: 'vault 口令轮换 re-key + 备份策略——实现完成（P8 遗留收尾）'
+  evidence:
+    - 'core vault.ts：CredentialVault.rekey(newPassphrase)——解锁态下新盐重派生密钥原子落盘；空口令拒绝；落盘失败回滚内存密钥（旧口令继续有效）'
+    - '工具 ops_vault_rekey 注册进 write 档（TIER_TABLE → buildCapabilityLists 提示词零漂移）；policy action=''vault-rekey'' 独立授权粒度（request.ts 三层同值）'
+    - '备份策略文档化（README 新增 vault 段）：vault db 为 AES-256-GCM 密文，锁态整文件拷贝即备份，恢复=放回原路径+原口令解锁'
+    - '测试：core 新增 3 用例（rekey 往返+旧口令失效+salt 轮换 / 空口令+锁态拒绝 / 锁态拷贝备份可解密恢复）；request.test 新增 vault-rekey 映射'
+    - '验证：tsc 双包 0 错；core node --test 101 用例 90 过 3 失败（Windows 环境噪音，与基线一致）；L2 bun 62/62'
+  pending:
+    - '需 Owner 确认落定；ops_vault_rekey 首次实战轮换建议先整文件备份（工具 description 已内嵌提醒）'
+  at: '2026-09-14T02:08:08.687Z'
+  by: 'omo-impl-session'

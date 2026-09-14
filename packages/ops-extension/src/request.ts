@@ -47,6 +47,8 @@ export function policyRequestFor(toolName: string, input: unknown): PolicyReques
 			return { host, action: "file-write" };
 		case "ops_vault_store":
 			return { host, action: "vault-write" };
+		case "ops_vault_rekey":
+			return { host, action: "vault-rekey" };
 
 		// 其余（read 档为主）：host 统一本机；read 档在判定前即短路，不会真正用于授权
 		default:

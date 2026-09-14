@@ -158,9 +158,16 @@ omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 | 档位 | 工具 | 说明 |
 |---|---|---|
 | **read**（自动放行） | `ops_file_read` `ops_file_ls` `ops_process_list` `ops_log_tail` `ops_log_journalctl` `ops_log_grep` `ops_health_check` `ops_health_poll` `ops_vault_list` `ops_docker_ps` `ops_docker_logs` `ops_docker_compose(ps\|logs)` `ops_k8s_pods` `ops_k8s_logs` `ops_k8s_rollout(status)` `ops_service(status)` | 只读诊断 |
+| **write**（需批准） | `ops_file_write`（policy action=`file-write`，支持远程） `ops_vault_store`（`vault-write`） `ops_vault_rekey`（`vault-rekey`，P14 口令轮换） | 文件写入/凭据管理 |
 | **exec**（需批准） | `ops_shell_exec` `ops_shell_script` `ops_docker_exec` `ops_docker_compose(除 ps\|logs)` `ops_k8s_exec` `ops_k8s_rollout(除 status)` `ops_service(start\|stop\|restart\|enable\|disable)` | 变更/执行 |
 
-> SSH/vault 写路径等工具于实现时加入 `TIER_TABLE`（提示词随之更新，不会提前宣告）。
+> write 档的 policy action 粒度见上表括注——P11 起须显式授权对应 action，shell/services 规则不连带放行。新工具于实现时加入 `TIER_TABLE`（提示词随之更新，不会提前宣告）。
+
+### vault 凭据（加密存储）
+
+- 口令仅来自环境变量 `OPS_VAULT_PASSPHRASE`（session_start 自动解锁）；落盘为 AES-256-GCM 密文（0600，tmp+rename 原子写）。
+- **备份策略**：锁态下整文件拷贝 vault db 即备份（纯密文，可随普通备份流转）；恢复 = 放回原路径 + 原口令解锁。
+- **口令轮换**：`ops_vault_rekey`（write 档，须 policy 授权 `vault-rekey` 或批准令牌）——新盐重派生密钥原子落盘，旧口令随即失效；轮换后记得更新 `OPS_VAULT_PASSPHRASE` 并重做备份。
 
 ## 斜杠命令（只读）
 

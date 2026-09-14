@@ -90,6 +90,29 @@ export class CredentialVault {
 		this.unlocked = false;
 	}
 
+	/**
+	 * 口令轮换（re-key，P14）：解锁态下以新口令 + 新盐重派生密钥并原子落盘。
+	 * 返回 true=成功；空口令或落盘失败 → false（内存密钥回滚，旧口令继续有效）。
+	 * 备份语义：落盘文件自始至终是 AES-256-GCM 密文——锁态下整文件拷贝即备份，恢复=放回原路径。
+	 */
+	rekey(newPassphrase: string): boolean {
+		this.assertUnlocked();
+		if (newPassphrase === "") return false;
+		const oldKey = this.key;
+		const oldSalt = this.salt;
+		const salt = randomBytes(KDF_SALT_BYTES);
+		this.key = scryptSync(newPassphrase, salt, KDF_KEYLEN, { N: KDF_N });
+		this.salt = salt;
+		try {
+			this.persist();
+			return true;
+		} catch {
+			this.key = oldKey;
+			this.salt = oldSalt;
+			return false;
+		}
+	}
+
 	private assertUnlocked(): void {
 		if (!this.unlocked || !this.entries || !this.key) {
 			throw new OpsError("VAULT_LOCKED", "vault 未解锁：设置 OPS_VAULT_PASSPHRASE 后重试");
