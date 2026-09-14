@@ -20,3 +20,16 @@ describe("policyRequestFor · host 维度", () => {
 		expect(policyRequestFor("ops_file_read", { path: "/etc/hostname", host: "deploy@10.0.0.5" }).host).toBe("deploy@10.0.0.5");
 	});
 });
+
+describe("policyRequestFor · write 档显式 action（P11）", () => {
+	test("ops_file_write → action='file-write'（此前落 default 分支只带 {host}，被任意 host 规则连带放行）", () => {
+		expect(policyRequestFor("ops_file_write", { path: "/tmp/a", content: "x" }))
+			.toEqual({ host: "@local", action: "file-write" });
+		expect(policyRequestFor("ops_file_write", { path: "/a", content: "x", host: "web-01" }))
+			.toEqual({ host: "web-01", action: "file-write" });
+	});
+	test("ops_vault_store → action='vault-write'", () => {
+		expect(policyRequestFor("ops_vault_store", { key: "k", value: "v" }))
+			.toEqual({ host: "@local", action: "vault-write" });
+	});
+});

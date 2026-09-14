@@ -93,7 +93,7 @@ omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 
 路径：`<工作目录>/.ops-pi/policy.json`（默认；可在 `.ops-pi/config.json` 用 `policyPath`/`tokenPath` 重定向）。
 
-控制「允许对本机哪些服务执行什么操作」。**缺省全拒**；`host` 一律填 `@local`（当前所有工具在控制节点本机执行，`@@` 非法 hostname 字符，无伪造冲突）。文件保存后热加载，下次判定即生效。
+控制「允许对哪些主机/服务执行什么操作」。**缺省全拒**；`host` 填 `@local` 表示本机，远程主机填真实 hostname（P7 起经 SshPool 远程执行，须 SSH 密钥可达且本规则显式授权；`@@` 非法 hostname 字符，无伪造冲突）。文件保存后热加载，下次判定即生效。
 
 ```json
 {
@@ -107,12 +107,17 @@ omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
       "host": "@local",
       "actions": ["shell"],
       "expiresAt": "2027-06-30T00:00:00Z"
+    },
+    {
+      "host": "@local",
+      "actions": ["file-write"]
     }
   ]
 }
 ```
 
 - `actions: ["shell"]` 授权本机命令执行（`ops_shell_exec`/`ops_shell_script`）；service 维度工具按 `start/stop/restart/status/…` 匹配。
+- **write 档须显式授权**：`ops_file_write` 要求规则 `actions` 含 `file-write`，`ops_vault_store` 要求含 `vault-write`（P11 起 shell/services 规则不再连带放行写档工具）。
 - `production: true` 只做生产标记：本身不授予放行，无人值守变更被 `guard-production` 拒，放行只能凭批准令牌。
 
 ### 批准令牌（approval-token.json）

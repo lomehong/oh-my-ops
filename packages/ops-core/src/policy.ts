@@ -80,12 +80,18 @@ function ruleMatchesHost(rule: TargetRule, host?: string): boolean {
 
 function ruleCovers(rule: TargetRule, request: PolicyRequest): boolean {
 	if (!ruleMatchesHost(rule, request.host)) return false;
-	// ★ 服务维度显式性：带 service 的请求必须命中**显式** services 白名单。
-	//   无 services 约束的规则（如 actions:["shell"] 的本机 shell 白名单）只覆盖无服务维度的请求——
-	//   否则它会误放行任意服务的 service/action 请求（越权扩大）。
+	// ★ 服务维度显式性（P11 起双侧收紧）：
+	//   请求带 service → 必须命中规则的 services 白名单（规则未约束 service = 通配）；
+	//   规则带 services 白名单而请求未指定 service → 不覆盖——服务级规则（如 nginx/restart）
+	//   不得连带放行无服务维度的请求（文件写入等），否则「最小服务授权」会被暗中扩大成整机授权。
 	if (request.service !== undefined) {
 		if (rule.services === undefined || !rule.services.includes(request.service)) return false;
+	} else if (rule.services !== undefined) {
+		return false;
 	}
+	// action 维度：请求带 action 且规则声明 actions → 必须命中。
+	// P11 起 write 档工具携带显式 action（file-write / vault-write）——shell/services 规则
+	// 不再连带放行写档工具；Owner 显式的全 host 规则（无 services 无 actions）仍覆盖一切。
 	if (request.action !== undefined && rule.actions !== undefined && !rule.actions.includes(request.action)) {
 		return false;
 	}

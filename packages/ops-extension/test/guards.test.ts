@@ -252,4 +252,19 @@ describe("assertAuthorized（③ execute 权威复核，X19 场景）", () => {
 			assertAuthorized("ops_service", { service: "redis", action: "restart" }, authz),
 		).toThrow(/未获预授权/);
 	});
+
+	test("★ P11：write 档须显式 file-write 规则——shell/services 白名单不再连带放行文件写入", () => {
+		expect(() =>
+			assertAuthorized("ops_file_write", { path: "/etc/cron.d/pwn", content: "*" }, view()),
+		).toThrow(/未获预授权/);
+		expect(() =>
+			assertAuthorized("ops_vault_store", { key: "ssh/x", value: "v" }, view()),
+		).toThrow(/未获预授权/);
+		// 显式授权后放行（规则 actions 含 file-write）
+		const writable = standardAuthzView(
+			new DefaultDenyPolicy([{ host: LOCAL_HOST, actions: ["file-write"] }]),
+			new StaticTokenStore([]),
+		);
+		expect(assertAuthorized("ops_file_write", { path: "/tmp/ok", content: "x" }, writable)).toBe("policy");
+	});
 });

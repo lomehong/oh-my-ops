@@ -83,6 +83,34 @@ describe("TargetPolicy（第③层 defaultDeny）", () => {
 	});
 });
 
+describe("P11：write 档显式 action + ruleCovers 收紧", () => {
+	it("★ 服务级规则不连带放行无 service 维度的请求（此前 {host} 请求会被任何 host 规则放行）", () => {
+		// 规则 {web-01, services:[nginx], actions:[restart,status]} 不覆盖无 service 的请求
+		assert.equal(policy.allows({ host: "web-01" }), false);
+		// shell 规则（{host:@local, actions:["shell"]}，无 services）也不放行 write 档 action
+		assert.equal(policy.allows({ host: LOCAL_HOST, action: "file-write" }), false);
+		assert.equal(policy.allows({ host: LOCAL_HOST, action: "vault-write" }), false);
+	});
+
+	it("★ 显式 file-write 规则才放行；Owner 全 host 规则（无 services 无 actions）仍覆盖一切", () => {
+		const p = new DefaultDenyPolicy([
+			{ host: LOCAL_HOST, actions: ["file-write"] },
+			{ host: "wide-host" },
+		]);
+		assert.equal(p.allows({ host: LOCAL_HOST, action: "file-write" }), true);
+		assert.equal(p.allows({ host: LOCAL_HOST, action: "vault-write" }), false);
+		assert.equal(p.allows({ host: "wide-host", action: "file-write" }), true);
+		// services 级规则（无 actions）不放行 action 型写档请求（写文件不是「该服务的操作」）
+		const svcOnly = new DefaultDenyPolicy([{ host: LOCAL_HOST, services: ["nginx"] }]);
+		assert.equal(svcOnly.allows({ host: LOCAL_HOST, service: "nginx" }), true);
+		assert.equal(svcOnly.allows({ host: LOCAL_HOST, action: "file-write" }), false);
+	});
+
+	it("action 无关语义保持：host+service 命中即放行（服务级授权不要求逐 action 枚举）", () => {
+		assert.equal(policy.allows({ host: "web-01", service: "nginx" }), true);
+	});
+});
+
 describe("evaluateAuthorization（单一事实源：①-a/①-b/③ 共用）", () => {
 	it("优先级 1：令牌命中 → allowed(source=token)，明示批准 > 生产 blanket-deny", () => {
 		const verdict = evaluateAuthorization(policy, tokens, { host: "prod-db", service: "postgres", action: "restart" });

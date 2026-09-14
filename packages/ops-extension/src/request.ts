@@ -40,6 +40,14 @@ export function policyRequestFor(toolName: string, input: unknown): PolicyReques
 		case "ops_k8s_rollout":
 			return { host, service: `${str("kind") ?? "deployment"}/${str("name") ?? ""}`, action: str("action") };
 
+		// P11：write 档显式 action 维度——此前落入 default 分支只带 {host}（无 action、无 service），
+		// 任意命中 host 的规则（哪怕只授权 nginx/restart 或 shell）都会连带放行文件写入与 vault 写入。
+		// 显式 action 后：规则必须在 actions 中包含 file-write / vault-write（或 Owner 显式全 host 规则）才放行。
+		case "ops_file_write":
+			return { host, action: "file-write" };
+		case "ops_vault_store":
+			return { host, action: "vault-write" };
+
 		// 其余（read 档为主）：host 统一本机；read 档在判定前即短路，不会真正用于授权
 		default:
 			return { host };

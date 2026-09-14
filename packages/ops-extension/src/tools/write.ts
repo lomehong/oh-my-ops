@@ -26,7 +26,7 @@ export function registerWriteTools(pi: ExtensionAPI, ctx: OpsContext, vault: Cre
 		approval: approval("ops_file_write"),
 		description:
 			"写入文本文件（write 档，仅本机）。父目录须已存在；mode 可指定八进制权限（如 600）。" +
-			"须 Owner 预授权（policy.json 对应 host 规则或批准令牌）。",
+			"须 Owner 预授权：policy.json 规则的 actions 须显式包含 'file-write'（shell 规则不放行本工具），或批准令牌。",
 		parameters: z.object({
 			path: z.string().describe("文件绝对路径"),
 			content: z.string().describe("要写入的完整内容（覆盖式）"),
@@ -61,7 +61,8 @@ export function registerWriteTools(pi: ExtensionAPI, ctx: OpsContext, vault: Cre
 		loadMode: "essential",
 		approval: approval("ops_vault_store"),
 		description:
-			"存入凭据到加密 vault（write 档）。须 Owner 预授权 + vault 已解锁（OPS_VAULT_PASSPHRASE）。" +
+			"存入凭据到加密 vault（write 档）。须 Owner 预授权（policy.json 规则的 actions 须显式包含 'vault-write'，" +
+			"或批准令牌）+ vault 已解锁（OPS_VAULT_PASSPHRASE）。" +
 			"key 为凭据名（如 'ssh/prod-db'），value 为机密内容（落盘为密文）。",
 		parameters: z.object({
 			key: z.string().describe("凭据名（如 'ssh/prod-db'）"),
