@@ -3,7 +3,7 @@
 ```yaml
 ---
 title: omo 自包含安装器——fork omp 定制单文件运行时 + ~/.omo 私有域 + bun 自动装
-status: 草稿
+status: 已落定        # 草稿 → 已评审 → 已落定（主人确认后） → 已执行
 requirement: docs/requirements/omo-install-selfcontained-requirement-package.md（OMOINSTALL-1，已落定；T1–T5 已拍板）
 author: omp-architect（omp_1c3610f27a3f）
 created: 2026-09-14
