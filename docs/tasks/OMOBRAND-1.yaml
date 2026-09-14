@@ -1,6 +1,6 @@
 id: 'OMOBRAND-1'
 title: '品牌面残留修复——omo update 拦截 + 品牌面构建期 fail-loud + ops-pi 文案品牌化（dsh 移交 P3/P2）'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-14T09:47:27.199Z'
 accept:
@@ -36,13 +36,19 @@ events:
     op: 'evidence'
     by: 'omp-architect'
     note: 'v0.7.2 发布与制品核验：CI run 34831762645 success；Release assets（install.sh + 122MB tarball + sha256）。下载实测六项通过：① bun 标准位识别（BUN_KNOWN=~/.bun/bin/bun）② 官方通道判定改用标准位存在性（2 处）③ update|upgrade 拦截 ④ 文案品牌化 omo：×4 ⑤ omp-single 在包 ⑥ build 管线含 --require-hits。主人拍板：P3② 不做（启动器已拦截全部可达路径，二进制内 update 实体属不可达死代码）——备案。'
+  - ts: '2026-09-14T10:31:06.738Z'
+    op: 'confirm'
+    by: '主人'
+    note: 'P3①③+P2 落地并经真实环境实测；P3② 主人拍板不做（启动器拦截已覆盖全部可达路径）；模型凭据策略=保持手动仅补文档'
 branch: 'feature/OMOBRAND-1-fix'
 report:
   summary: '品牌面残留修复完成并发版（自报）：P3① 启动器 update|upgrade 安全通道（拦截上游自更新，护住 pin 与全局命名空间）；P3③ 品牌 patch --require-hits 构建期 fail-loud + CI 品牌面断言；P2 文案品牌化 5 处。v0.7.1 已发布（CI 绿）且制品级核验通过（包内三处修复实测在案）。未兑现：logstash-124 重装后的现场复验（Update 提示消失/文案为 omo）；P3②（二进制内 update 实体与 settings 描述）主人拍板另议。自报 ≠ 完成，待主人确认'
   evidence:
-    - 'v0.7.1 制品核验（下载实测）：install.sh:236 update|upgrade)、hooks.ts omo：×4、omp-single 在包'
+    - 'v0.7.1 制品核验（下载实测）：install.sh: '236 update|upgrade)、hooks.ts omo：×4、omp-single 在包'''
     - '本地：npm test 182/0 fail、typecheck 0 错、build --require-hits 七面全过'
   pending:
     - '主人 confirm；logstash-124 重装 v0.7.1 现场复验；P3② 加固取舍'
   at: '2026-09-14T09:54:34.767Z'
   by: 'omp-architect'
+confirmedBy: '主人'
+confirmedVia: '会话确认 2026-09-14（ask「两项都确认落定」；logstash-124 实测：bun 零下载/策略落 ~/.omo/policy.json/WARN 文案=真实路径/品牌文案/update 提示拦截）'

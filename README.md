@@ -51,6 +51,9 @@ bash scripts/install.sh
 升级：重跑安装器（状态保留）；`omo update` / `omo upgrade` 拉最新 Release 安装器（安全通道——版本经 pin 锁定，**不触发上游 omp 自更新**）。
 卸载：`bash scripts/install.sh --uninstall`（⚠ 删除 `~/.omo`，含策略/凭据/会话数据）。
 
+首次使用需先配置模型：TUI 内 `/login`，或设置 API key 环境变量（如 `DEEPSEEK_API_KEY`）后用 `/model` 选择。
+模型凭据存于 `~/.omo/home`（随 HOME 隔离）——**非卸载的重装/升级会保留**；`--uninstall` 会连同策略/vault/会话一并删除。
+
 开发者从源码安装：
 
 ```bash

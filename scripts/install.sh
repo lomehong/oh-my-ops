@@ -12,7 +12,7 @@
 # 前置：curl（解压/网络）。**不要求**机器上已有 omp/node/bun——运行时自备。
 # 与原生 omp 的关系：不读、不写、不升级、不接管；原生 omp 升级不影响 omo（版本契约随 omo 发布）。
 # 升级：重跑本脚本（runtime/extensions/启动器替换；home/ 内策略/凭据/会话保留）。
-# 卸载：bash scripts/install.sh --uninstall（⚠ 删除 ~/.omo，含策略/凭据/会话数据）。
+# 卸载：bash scripts/install.sh --uninstall（⚠ 删除 ~/.omo，含策略/凭据**含模型凭据**/会话数据）。
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -68,7 +68,7 @@ done
 
 if [[ "$UNINSTALL" == true ]]; then
   echo "[uninstall] 移除…"
-  echo "  ⚠ 将删除 $OMO_DIR（含策略 policy.json、vault 凭据、会话数据）。"
+  echo "  ⚠ 将删除 $OMO_DIR（含策略 policy.json、vault 凭据、**模型凭据**、会话数据）。"
   read -r -p "  确认删除？[y/N] " ans
   case "$ans" in y|Y) ;; *) echo "[uninstall] 已取消"; exit 0 ;; esac
   rm -rf "$OMO_DIR"
