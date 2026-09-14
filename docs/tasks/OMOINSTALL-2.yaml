@@ -1,6 +1,6 @@
 id: 'OMOINSTALL-2'
 title: '自包含安装器——H3/H4 可行性探针 + 技术方案设计'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-14T07:10:27.752Z'
 accept:
@@ -20,4 +20,17 @@ events:
     op: 'evidence'
     by: 'omp-architect'
     note: 'H3/H4 探针双 ✅（报告落 docs/reports/omo-install-probes.md）：H3=omp 单文件可执行构建可行（bun compile + 生成 embedded-addon.js 嵌入 pi-natives 双 variant；omp-single 471MB；--version 与 ops 扩展全链路行为一致），H3 探针通过→T1 单文件路线成立；H4=状态目录严格随 $HOME 重定向（fakehome 实测全部落 fakehome/.omp，真实 ~/.omp 零写入）→ 隔离方案=启动器 HOME 指向 ~/.omo，无需 fork 改 omp。设计前置硬门已过，进入 architect-design。'
+  - ts: '2026-09-14T07:23:34.273Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: 'H3/H4 探针双 ✅（报告 docs/reports/omo-install-probes.md）+ 技术方案草稿落 docs/designs/omo-install-selfcontained-design.md：xd://architect_design 自检 60/60。方案要点：构建管线（pin 18.1.18 sha256 → embedded-addon 生成 → 品牌 patch → bun compile 单文件）；安装器 ~/.omo 私有域（HOME 重定向隔离，H4 实证）；bun 自动装锁 1.4.x；vlatest semver 校验；自愈废除、升级/卸载显式化。待确认 C1（471MB vs 瘦身 ~290MB）C2（PATH 指引口径）不阻塞。待实现评审+主人确认（自报 ≠ 完成）'
 branch: 'feature/OMOINSTALL-2-design'
+report:
+  summary: 'H3/H4 探针双 ✅（报告 docs/reports/omo-install-probes.md）+ 技术方案草稿落 docs/designs/omo-install-selfcontained-design.md：xd://architect_design 自检 60/60。方案要点：构建管线（pin 18.1.18 sha256 → embedded-addon 生成 → 品牌 patch → bun compile 单文件）；安装器 ~/.omo 私有域（HOME 重定向隔离，H4 实证）；bun 自动装锁 1.4.x；vlatest semver 校验；自愈废除、升级/卸载显式化。待确认 C1（471MB vs 瘦身 ~290MB）C2（PATH 指引口径）不阻塞。待实现评审+主人确认（自报 ≠ 完成）'
+  evidence:
+    - 'docs/reports/omo-install-probes.md：H3 omp-single 471MB --version=omp/18.1.18 + 扩展全链路行为一致；H4 fakehome 全量落点 + 真实 ~/.omp 零写入'
+    - 'xd://architect_design 自检 60/60（全维度 10 分）'
+  pending:
+    - 'C1 体积取舍（主人可改默认全嵌）；实现评审路由（按既定偏好投 dsh）；主人确认落定'
+  at: '2026-09-14T07:23:34.271Z'
+  by: 'omp-architect'
