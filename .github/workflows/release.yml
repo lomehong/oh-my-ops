@@ -65,9 +65,15 @@ jobs:
           cp -r types     "/tmp/${PKG}/types"
           cp -r vendor    "/tmp/${PKG}/vendor"
           cp -r docs/examples "/tmp/${PKG}/examples"
+          cp -r scripts   "/tmp/${PKG}/scripts"
           cp dist/omp-single "/tmp/${PKG}/omp-single"
           cp README.md    "/tmp/${PKG}/README.md"
           cp scripts/bootstrap.sh "$GITHUB_WORKSPACE/install.sh"
+
+          # 打包清单断言（v0.7.0 首发曾丢 scripts/ —— 关键文件缺失直接红）
+          for f in "scripts/install.sh" "scripts/bootstrap.sh" "omp-single" "README.md" "packages/ops-extension/src/index.ts"; do
+            [ -e "/tmp/${PKG}/${f}" ] || { echo "✗ 打包缺关键文件：${f}"; exit 1; }
+          done
 
           # 清除不需要的文件
           find "/tmp/${PKG}" -name "*.test.ts" -delete
