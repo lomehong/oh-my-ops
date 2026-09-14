@@ -116,8 +116,13 @@ echo
 
 # ── 1) bun：机器上已有 → 直接用（不改动）；没有 → 自动做标准用户级安装（~/.bun，随 profile 进 PATH）。
 #    bun 是共享基础工具，不属于 omo 私有域；omo 自身运行不依赖它（omp-single 为自包含单文件）。
+BUN_KNOWN="$HOME/.bun/bin/bun"
 if command -v bun >/dev/null 2>&1; then
   echo "  ✓ 检测到系统 bun $(bun --version 2>/dev/null || echo '?')——直接使用，不改动"
+elif [ -x "$BUN_KNOWN" ]; then
+  # 上一轮装好的 bun（标准位 ~/.bun/bin）：长驻旧 shell 的 PATH 不会自动刷新 → 显式识别，避免重复下载
+  export PATH="$HOME/.bun/bin:$PATH"
+  echo "  ✓ 检测到已有 bun $("$BUN_KNOWN" --version 2>/dev/null || echo '?')（~/.bun/bin；已为本次会话加入 PATH，新终端自动可用）"
 else
   echo "  未检测到 bun → 自动安装（标准用户级 ~/.bun；官方脚本 → npmmirror 回退）…"
   installed=false
