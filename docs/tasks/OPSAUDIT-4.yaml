@@ -24,4 +24,8 @@ events:
     op: 'dispatch'
     by: 'omp-architect'
     note: '容器重启后主人注入 GH_TOKEN（fine-grained，93 字符）+ git safe.directory 修复：推送成功——feature/OPSAUDIT-3-impl、feature/OPSAUDIT-4-drill 两分支 + 标签 v0.6.0 已上 origin；Release workflow 已触发（run 34813880041）。待 CI 绿 → 主人真实环境按 docs/reports/ops-audit-conflict-drill-D1-runbook.md 安装实测 D-1。'
+  - ts: '2026-09-14T06:40:00.000Z'
+    op: 'hotfix'
+    by: 'omp-architect'
+    note: '主人在真实环境（logstash-124，老 curl）安装 v0.6.0 失败：bootstrap.sh 用 --retry-all-errors（需 curl ≥ 7.71），老 curl 遇未知选项整条失败 → 三源全灭（主人日志实证；版本解析段无该选项故成功）。热修 c84af5e：能力探测（curl --help all 含该选项才附加），下载/校验/解压语义不变；老 curl 忠实模拟端到端通过（下载+sha256+解压 OK）。已打 tag v0.6.1 触发 CI；v0.6.1 Release 的 install.sh 即修复版。注：Release 正文推荐的 @main 一行通道在 main 合并前仍为旧脚本——主人请用 releases/latest/download/install.sh（短版，取制品）。'
 branch: 'feature/OPSAUDIT-4-drill'
