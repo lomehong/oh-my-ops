@@ -189,6 +189,9 @@ mkdir -p "\$HOME"
 export OPS_PI_SANDBOX="\${OPS_PI_SANDBOX:-0}"
 export OMO_APP_NAME="omo"
 export OMO_BIN="omo"
+# 有效配置路径固定到私有域（否则随启动目录漂移；config.json 显式值仍优先）
+export OMO_POLICY_PATH="\$OMO_DIR/policy.json"
+export OMO_TOKEN_PATH="\$OMO_DIR/approval-token.json"
 export OMO_TIPS=\$'/ops-audit [n] 回看最近 n 条审计条目（只读）\n/ops-inspect <主机> 执行标准巡检（只读）\n/ops-health 十秒健康快照；/ops-status 查看策略/沙箱/凭据状态\n只读 ops 工具自动放行；变更类需 Owner 预授权（policy.json）\n无人值守下生产目标变更一律拒绝——这是设计，不是故障\nomo serve 常驻后，cron/webhook 可直接触发巡检与诊断\nPress ctrl+r to search your prompt history\nCtrl+D exits but keeps your draft saved'
 RUN="\$OMO_DIR/runtime/omp-single"
 EXT="\$OMO_DIR/extensions/ops-pi"
@@ -299,18 +302,21 @@ fi
 mv "$ENV_TMP" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
-# ── 5) 策略与 AGENTS.md（全部落私有 HOME；旧 ~/.ops-pi 策略 best-effort 迁移）
+# ── 5) 策略与 AGENTS.md（策略落私有域根 $OMO_DIR/policy.json，与启动器注入的 OMO_POLICY_PATH 一致）
 echo "[5/5] 策略与常驻规则…"
-POLICY_DST="$HOME_DIR/.ops-pi"
-mkdir -p "$POLICY_DST"
-if [ ! -f "$POLICY_DST/policy.json" ] && [ -f "$OLD_OPS_DIR/policy.json" ]; then
-  cp "$OLD_OPS_DIR/policy.json" "$POLICY_DST/policy.json"
-  echo "  ↺ 已迁移旧策略：$OLD_OPS_DIR/policy.json → $POLICY_DST/policy.json"
-elif [ ! -f "$POLICY_DST/policy.json" ]; then
-  echo '{"targets":[]}' > "$POLICY_DST/policy.json"
-  echo "  ✓ 空策略（变更全拒）"
+POLICY_DST="$OMO_DIR/policy.json"
+LEGACY_POLICY_HOME="$HOME_DIR/.ops-pi/policy.json"   # v0.7.2 及更早自包含布局
+if [ ! -f "$POLICY_DST" ] && [ -f "$LEGACY_POLICY_HOME" ]; then
+  cp "$LEGACY_POLICY_HOME" "$POLICY_DST"
+  echo "  ↺ 已迁移策略：$LEGACY_POLICY_HOME → $POLICY_DST"
+elif [ ! -f "$POLICY_DST" ] && [ -f "$OLD_OPS_DIR/policy.json" ]; then
+  cp "$OLD_OPS_DIR/policy.json" "$POLICY_DST"
+  echo "  ↺ 已迁移旧策略：$OLD_OPS_DIR/policy.json → $POLICY_DST"
+elif [ ! -f "$POLICY_DST" ]; then
+  echo '{"targets":[]}' > "$POLICY_DST"
+  echo "  ✓ 空策略（变更全拒）：$POLICY_DST"
 else
-  echo "  ↺ 保留已有策略"
+  echo "  ↺ 保留已有策略：$POLICY_DST"
 fi
 
 AGENTS_DST="$HOME_DIR/.omp/agent/AGENTS.md"

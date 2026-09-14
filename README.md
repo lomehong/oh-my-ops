@@ -75,7 +75,7 @@ omo
 
 ### 对指定服务执行重启
 
-前提：`.ops-pi/policy.json` 中已用 `@local` 规则预授权该服务（当前仅本机；远程 P1 经 SshPool 引入）。
+前提：`policy.json` 中已用 `@local` 规则预授权该服务（路径见下「策略」节；omo 自包含部署下为 `~/.omo/policy.json`）。
 
 ```bash
 omo --no-session --approval-mode write \
@@ -102,7 +102,8 @@ omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 
 ### 目标策略（policy.json）
 
-路径：`<工作目录>/.ops-pi/policy.json`（默认；可在 `.ops-pi/config.json` 用 `policyPath`/`tokenPath` 重定向）。
+路径（优先级：`.ops-pi/config.json` 显式值 > 环境变量 > 缺省）：缺省 `<工作目录>/.ops-pi/policy.json`；
+omo 自包含安装器部署下由启动器注入 `OMO_POLICY_PATH=~/.omo/policy.json`（私有域，不随启动目录漂移）。
 
 控制「允许对哪些主机/服务执行什么操作」。**缺省全拒**；`host` 填 `@local` 表示本机，远程主机填真实 hostname（P7 起经 SshPool 远程执行，须 SSH 密钥可达且本规则显式授权；`@@` 非法 hostname 字符，无伪造冲突）。文件保存后热加载，下次判定即生效。
 
@@ -133,7 +134,7 @@ omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 
 ### 批准令牌（approval-token.json）
 
-路径：`<工作目录>/.ops-pi/approval-token.json`（默认同上可重定向）。
+路径：同上规则；缺省 `<工作目录>/.ops-pi/approval-token.json`，omo 部署下 `OMO_TOKEN_PATH=~/.omo/approval-token.json`。
 
 高危敏感操作的**单次/限时**明示批准。`scope` 逐段前缀匹配（`@local` ⊂ 本机全部；`@local/postgres` ⊂ 该服务任意动作；`@local/postgres/restart` 精确到动作）。令牌在 execute 复核通过后消费，`consumedAt` 写回文件，跨会话不可重放。
 
@@ -158,8 +159,8 @@ omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 | 配置项 | 位置 | 必要性 |
 |---|---|---|
 | `approvalMode` | omp 设置（**禁止 yolo**） | 必须 |
-| `policy.json` | `.ops-pi/policy.json`（工作目录） | 强烈建议 |
-| `approval-token.json` | `.ops-pi/approval-token.json`（工作目录） | 生产变更需要 |
+| `policy.json` | `~/.omo/policy.json`（自包含部署）；缺省 `<工作目录>/.ops-pi/policy.json` | 强烈建议 |
+| `approval-token.json` | `~/.omo/approval-token.json`（自包含部署）；缺省同工作目录规则 | 生产变更需要 |
 | 沙箱 | 容器/网络策略 | 建议 |
 
 ## 工具清单

@@ -21,6 +21,18 @@ export interface LoadedOpsConfig extends OpsConfig {
 const DEFAULT_POLICY_PATH = ".ops-pi/policy.json";
 const DEFAULT_TOKEN_PATH = ".ops-pi/approval-token.json";
 
+/**
+ * 路径解析（优先级：config.json 显式值 > 环境变量 > cwd 缺省）。
+ * 环境变量用于「部署态固定私有域」（自包含安装器由启动器注入，
+ * 如 OMO_POLICY_PATH=~/.omo/policy.json）——避免有效配置随启动目录漂移。
+ */
+function resolvePath(rawValue: unknown, envKey: string, cwd: string, fallback: string): string {
+	if (typeof rawValue === "string" && rawValue !== "") return rawValue;
+	const env = process.env[envKey];
+	if (typeof env === "string" && env !== "") return env;
+	return path.join(cwd, fallback);
+}
+
 /** 配置加载（方案 §7.3）：扩展加载时同步读取（早于 session_start）。 */
 export function loadConfig(cwd: string): LoadedOpsConfig {
 	const configPath = path.join(cwd, ".ops-pi", "config.json");
@@ -32,8 +44,8 @@ export function loadConfig(cwd: string): LoadedOpsConfig {
 	}
 	return {
 		hostMode: raw.hostMode === "pi" || raw.hostMode === "omp" ? raw.hostMode : "omp",
-		policyPath: typeof raw.policyPath === "string" ? raw.policyPath : path.join(cwd, DEFAULT_POLICY_PATH),
-		tokenPath: typeof raw.tokenPath === "string" ? raw.tokenPath : path.join(cwd, DEFAULT_TOKEN_PATH),
+		policyPath: resolvePath(raw.policyPath, "OMO_POLICY_PATH", cwd, DEFAULT_POLICY_PATH),
+		tokenPath: resolvePath(raw.tokenPath, "OMO_TOKEN_PATH", cwd, DEFAULT_TOKEN_PATH),
 		vault: isVaultConfig(raw.vault) ? raw.vault : undefined,
 		health: isHealthConfig(raw.health) ? raw.health : undefined,
 		ssh: isSshConfig(raw.ssh) ? raw.ssh : undefined,

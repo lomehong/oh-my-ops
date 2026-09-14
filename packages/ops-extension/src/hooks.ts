@@ -20,7 +20,7 @@ export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
 
 		// ③ 降级可发现性（§7.4.3）
 		if (!ctx.targetPolicy.isConfigured) {
-			sessionCtx.ui.notify("omo：未配置目标策略（.ops-pi/policy.json）——变更类操作一律拒绝", "warning");
+			sessionCtx.ui.notify(`omo：未配置目标策略（${ctx.config.policyPath}）——变更类操作一律拒绝`, "warning");
 		}
 		if (process.env.OPS_PI_SANDBOX === "1") {
 			sessionCtx.ui.notify(probeBwrap() ? "omo：沙箱已启用（bubblewrap）" : "omo：沙箱已启用但 bwrap 不可用——本地 shell 命令将被 fail-closed 拒绝", probeBwrap() ? "info" : "warning");
