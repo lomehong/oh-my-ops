@@ -1,6 +1,6 @@
 id: 'OPSAUDIT-4'
 title: '冲突路径演练——/ops-audit 实弹观测被拒/令牌/兜底路径（阶段 3 收口）'
-state: '待执行'
+state: '执行中'
 level: 'L1'
 created: '2026-09-14T06:15:13.736Z'
 accept:
@@ -12,3 +12,8 @@ events:
     op: 'create'
     by: 'omp-architect'
     note: '冲突路径演练——/ops-audit 实弹观测被拒/令牌/兜底路径（阶段 3 收口）'
+  - ts: '2026-09-14T06:19:33.081Z'
+    op: 'claim'
+    by: 'omp-architect'
+    note: 'branch=feature/OPSAUDIT-4-drill'
+branch: 'feature/OPSAUDIT-4-drill'
