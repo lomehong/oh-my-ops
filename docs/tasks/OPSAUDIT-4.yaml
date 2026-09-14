@@ -48,6 +48,10 @@ events:
     op: 'confirm'
     by: '主人'
     note: '阶段 3 试点收口：/ops-audit（OPSAUDIT-1~3）+ 自包含安装器（OMOINSTALL-1~3）+ 真实环境 D-1 实测全链闭环'
+  - ts: '2026-09-14T09:22:00.000Z'
+    op: 'evidence'
+    by: 'omp-architect'
+    note: 'D-1 最终证据归档（主人贴回真实输出）：S3 无参 /ops-audit 显示 6 条倒序，含被拒条目 [08:53:44] ops_service blocked/blocked class=- host=- [PERMISSION_DENIED] [ERR_PERMISSION] guard-unattended…——A4「被拒条目当前分支内可读且字段可辨」字面判据达成；S4 limit=1 仅显示 ops-audit read/ok（先读后写闭环）；S5/S6 参数防御逐字命中。演练报告已补原始输出附录（docs/reports/ops-audit-conflict-drill.md）。'
 branch: 'feature/OPSAUDIT-4-drill'
 report:
   summary: '冲突路径演练完成（自报）：D-1 实弹于 logstash-124（v0.7.0 自包含安装器，主人实操）——被拒调用留痕 + /ops-audit 回看 + 自审计闭环 + 参数防御，全部通过；演练报告 docs/reports/ops-audit-conflict-drill.md（含 D-2/D-3 降级引用与三层对账）。阶段 3 试点功能面完成。自报 ≠ 完成，待主人确认收口'
