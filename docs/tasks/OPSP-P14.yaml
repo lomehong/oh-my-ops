@@ -1,6 +1,6 @@
 id: 'OPSP-P14'
 title: 'vault 口令轮换 re-key + 备份策略（P8 遗留收尾）'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-14T01:52:26.206Z'
 accept:
@@ -20,6 +20,10 @@ events:
     op: 'report'
     by: 'omo-impl-session'
     note: 'vault 口令轮换 re-key + 备份策略——实现完成（P8 遗留收尾）'
+  - ts: '2026-09-14T02:12:30.584Z'
+    op: 'confirm'
+    by: '主人'
+    note: '会话确认（2026-09-14，主人对本轮接手交付 P11~P14 明示「确认」）'
 branch: 'main'
 report:
   summary: 'vault 口令轮换 re-key + 备份策略——实现完成（P8 遗留收尾）'
@@ -33,3 +37,5 @@ report:
     - '需 Owner 确认落定；ops_vault_rekey 首次实战轮换建议先整文件备份（工具 description 已内嵌提醒）'
   at: '2026-09-14T02:08:08.687Z'
   by: 'omo-impl-session'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-09-14，主人对本轮接手交付 P11~P14 明示「确认」）'

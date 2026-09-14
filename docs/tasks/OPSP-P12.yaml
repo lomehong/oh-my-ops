@@ -1,6 +1,6 @@
 id: 'OPSP-P12'
 title: '/ops-inspect 支持远程主机巡检（P7 SshPool 遗留对齐）'
-state: '待确认'
+state: '已落定'
 level: 'L2'
 created: '2026-09-14T01:52:25.712Z'
 accept:
@@ -20,6 +20,10 @@ events:
     op: 'report'
     by: 'omo-impl-session'
     note: '/ops-inspect 远程主机巡检——实现完成（P7 SshPool 遗留对齐）'
+  - ts: '2026-09-14T02:12:30.159Z'
+    op: 'confirm'
+    by: '主人'
+    note: '会话确认（2026-09-14，主人对本轮接手交付 P11~P14 明示「确认」）'
 branch: 'main'
 report:
   summary: '/ops-inspect 远程主机巡检——实现完成（P7 SshPool 遗留对齐）'
@@ -32,3 +36,5 @@ report:
     - '真实远程主机联调验收（需目标环境第二台可达主机，与 P7 pending 同源）'
   at: '2026-09-14T02:00:36.428Z'
   by: 'omo-impl-session'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-09-14，主人对本轮接手交付 P11~P14 明示「确认」）'

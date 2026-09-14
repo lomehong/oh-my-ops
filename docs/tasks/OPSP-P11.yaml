@@ -1,6 +1,6 @@
 id: 'OPSP-P11'
 title: 'write 档 policy 维度补齐：ops_file_write/ops_vault_store 显式 action 映射 + ruleCovers 收紧（安全修复）'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-14T01:52:25.476Z'
 accept:
@@ -20,6 +20,10 @@ events:
     op: 'report'
     by: 'omo-impl-session'
     note: 'P11 write 档 policy 维度补齐——实现完成，安全缺口闭合（三层同值 + 回归覆盖）'
+  - ts: '2026-09-14T02:12:29.907Z'
+    op: 'confirm'
+    by: '主人'
+    note: '会话确认（2026-09-14，主人对本轮接手交付 P11~P14 明示「确认」）'
 branch: 'main'
 report:
   summary: 'P11 write 档 policy 维度补齐——实现完成，安全缺口闭合（三层同值 + 回归覆盖）'
@@ -34,3 +38,5 @@ report:
     - '需 Owner 确认落定；已有部署若依赖旧行为（shell 规则连带放行写档）需在 policy.json 显式补 file-write/vault-write'
   at: '2026-09-14T01:59:19.095Z'
   by: 'omo-impl-session'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-09-14，主人对本轮接手交付 P11~P14 明示「确认」）'

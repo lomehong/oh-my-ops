@@ -1,6 +1,6 @@
 id: 'OPSP-P13'
 title: 'ops_file_write 远程写入（P8 遗留：跟随 SshPool）'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-14T01:52:25.945Z'
 accept:
@@ -20,6 +20,10 @@ events:
     op: 'report'
     by: 'omo-impl-session'
     note: 'ops_file_write 远程写入——实现完成（stdin 管道 + argv 数组，无 shell 注入面）'
+  - ts: '2026-09-14T02:12:30.369Z'
+    op: 'confirm'
+    by: '主人'
+    note: '会话确认（2026-09-14，主人对本轮接手交付 P11~P14 明示「确认」）'
 branch: 'main'
 report:
   summary: 'ops_file_write 远程写入——实现完成（stdin 管道 + argv 数组，无 shell 注入面）'
@@ -33,3 +37,5 @@ report:
     - '真实远程写入联调验收（需目标环境，与 P7/P12 pending 同源）'
   at: '2026-09-14T02:04:57.397Z'
   by: 'omo-impl-session'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-09-14，主人对本轮接手交付 P11~P14 明示「确认」）'
