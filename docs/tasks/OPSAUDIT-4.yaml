@@ -28,4 +28,8 @@ events:
     op: 'hotfix'
     by: 'omp-architect'
     note: '主人在真实环境（logstash-124，老 curl）安装 v0.6.0 失败：bootstrap.sh 用 --retry-all-errors（需 curl ≥ 7.71），老 curl 遇未知选项整条失败 → 三源全灭（主人日志实证；版本解析段无该选项故成功）。热修 c84af5e：能力探测（curl --help all 含该选项才附加），下载/校验/解压语义不变；老 curl 忠实模拟端到端通过（下载+sha256+解压 OK）。已打 tag v0.6.1 触发 CI；v0.6.1 Release 的 install.sh 即修复版。注：Release 正文推荐的 @main 一行通道在 main 合并前仍为旧脚本——主人请用 releases/latest/download/install.sh（短版，取制品）。'
+  - ts: '2026-09-14T06:52:07.000Z'
+    op: 'requirement-captured'
+    by: '主人'
+    note: '新需求捕获（logstash-124 实测阻塞引发）：安装器必须「自包含 + 与原生 omp 共存」——① 零手工前置（不再要求预装 oh-my-pi ≥18.1.18，omp 运行时由安装器自备于私有目录）；② 不覆盖/不升级/不劫持系统 omp 命令与包管理命名空间；③ 状态面隔离（现 ~/.omp/agent 的 extensions+AGENTS.md 与原生 omp 共享，双向污染面）；④ 版本契约自我兜底（现「镜像自愈=跟随系统 omp」需重定义）。主人要求先复述确认再立项。另捕获安装器健壮性 bug：版本解析失败时 "latest" 被透传为版本号（vlatest 404），需 semver 校验。归属：新任务（建议 OMOINSTALL-1，走 architect-prd-digest 准入），不在 OPSAUDIT-4 演练范围内；对 D-1 的影响待主人定（现在原生装 omp 继续演练 vs 等自包含安装器）。'
 branch: 'feature/OPSAUDIT-4-drill'
