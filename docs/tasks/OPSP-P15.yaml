@@ -30,8 +30,8 @@ report:
     - 'gitSync：init/commit/push/pull --rebase autostash 全 best-effort；identity 兜底；无远端=本地模式优雅降级'
     - '两节点共享真源单测（file:// 裸远端往返）：A push → B pull 可见 ✓'
     - 'e2e（重装后真实 omo）：kb_save ✓ → kb_search 命中 ✓ → kb_sync commit ✓；条目落盘 ~/.omo/knowledge/'
-  pending:
-    - 'Owner 在 GitHub 建私有仓 lomehong/omo-knowledge 并在 config.json knowledge.repo 填入远端（PAT 无建仓权限，已实测）'
-    - '多节点 pull 可见性真机验收（需第二台 omo 节点 + 远端就绪）'
+    - '（已闭环）Owner 建仓 lomehong/omo-knowledge（private）+ config.repo 接线；ops_kb_sync 推送 commit 646ec80 成功'
+    - '（已闭环）第二节点 clone 真源可见 ssh-502-runbook.md（多节点共享验证通过）'
+    - '目标机 push 凭据：目标机 shell 需 GH_TOKEN 或 credential store（ Pull 对私有仓亦需认证）；缺失时本地保留重试，不阻塞'
   at: '2026-09-14T13:16:31.013Z'
   by: 'omp-architect-session'
