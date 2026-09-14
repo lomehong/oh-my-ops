@@ -28,6 +28,12 @@ die()  { printf '%s  ✗ %s%s\n' "$R" "$1" "$N" >&2; exit 1; }
 
 # ── 下载：多源回退（直连 → OMO_MIRROR → 内置镜像），重试 + 进度条
 CURL_QUIET=""; [ -t 2 ] && CURL_QUIET="--progress-bar" || CURL_QUIET="-sS"
+# --retry-all-errors 需 curl ≥ 7.71（老 curl 遇未知选项整条失败，logstash-124 实测）→ 能力探测后按需附加；
+# 缺失时仅少了「非瞬态错误重试」，多源回退语义不变
+CURL_RETRY_ALL=""
+if curl --help all 2>/dev/null | grep -q -- --retry-all-errors; then
+  CURL_RETRY_ALL="--retry-all-errors"
+fi
 # 下载内容有效性：gzip 魔数 / sha256 文件格式（镜像可能回 200 的 HTML 垃圾）
 valid_download() {
   local f="$1"
@@ -51,7 +57,7 @@ fetch() { # $1=github绝对路径  $2=输出文件
     esac
     tried=$((tried+1))
     printf '%s  ↓ [%s] %s%s\n' "$D" "$src" "$(basename "$dest")" "$N"
-    if curl -fL $CURL_QUIET --retry 3 --retry-delay 2 --retry-all-errors \
+    if curl -fL $CURL_QUIET --retry 3 --retry-delay 2 $CURL_RETRY_ALL \
          --connect-timeout 10 -o "$dest" "$url" && valid_download "$dest"; then
       ok "下载成功（$src，第 $tried 次尝试）"
       return 0
