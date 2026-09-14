@@ -33,6 +33,8 @@ for (const file of targets) {
 	let src = readFileSync(file, "utf8");
 	const before = src;
 	const log = [];
+	// --require-hits：任一面锚点缺失（⚠）即构建失败——防上游漂移导致品牌静默漏面
+	const REQUIRE_HITS = process.argv.includes("--require-hits");
 	let V; // APP_NAME 的压缩变量名
 
 	// ── A. APP_NAME ──
@@ -125,6 +127,14 @@ for (const file of targets) {
 	if (src.includes(gFrom)) { src = src.split(gFrom).join(gTo); log.push("✓ G. 审批摘要"); }
 	else if (src.includes(gTo)) log.push("⏭ G. 审批摘要（已打）");
 	else log.push("⚠ G. 审批摘要锚点未找到，跳过");
+
+	if (REQUIRE_HITS) {
+		const missing = log.filter((l) => l.startsWith("⚠"));
+		if (missing.length > 0) {
+			console.error(`[patch-omp-brand] ✗ 品牌面锚点缺失（上游漂移，禁止带病出包）\n  ${missing.join("\n  ")}`);
+			process.exit(1);
+		}
+	}
 
 	if (src === before) {
 		console.log(`[patch-omp-brand] ${file}\n  （全部已打，无改动）\n  ${log.join("\n  ")}`);

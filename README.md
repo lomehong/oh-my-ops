@@ -48,7 +48,7 @@ bash scripts/install.sh
 5. 初始化策略（缺省：变更类操作全拒）+ Yuyi 通讯配置（沿用已有 token/设备名）
 
 无需预装 oh-my-pi/node/bun。安装后 `omo` 即完整形态；裸 `omp` 命令完全不受影响。
-升级：重跑安装器（状态保留）；`omo upgrade` 拉最新 Release 安装器。
+升级：重跑安装器（状态保留）；`omo update` / `omo upgrade` 拉最新 Release 安装器（安全通道——版本经 pin 锁定，**不触发上游 omp 自更新**）。
 卸载：`bash scripts/install.sh --uninstall`（⚠ 删除 `~/.omo`，含策略/凭据/会话数据）。
 
 开发者从源码安装：

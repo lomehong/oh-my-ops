@@ -233,7 +233,9 @@ case "\${1:-}" in
     [ -f "\$HOME/.ops-pi/policy.json" ] && echo "  策略：✓" || echo "  策略：⚠ 未配置（变更全拒）"
     grep -q '"token": "[^"]' "\$REAL_HOME/.yuyi/agent.json" 2>/dev/null && echo "  Yuyi：✓ 已配置" || echo "  Yuyi：✗ 缺 token（bash scripts/install.sh --token <token> 补上）"
     [ "\${OPS_PI_SANDBOX:-0}" = "1" ] && echo "  沙箱：✓" || echo "  沙箱：⚠" ;;
-  upgrade)
+  update|upgrade)
+    # 安全通道：版本经 pin 锁定（18.1.18），升级=重跑 oh-my-ops 安装器（拉最新 Release），
+    # 绝不触发上游 omp 自更新（否则击穿 pin + 污染全局命名空间，dsh P3）
     for u in "https://github.com/lomehong/oh-my-ops/releases/latest/download/install.sh" "https://gh-proxy.com/https://github.com/lomehong/oh-my-ops/releases/latest/download/install.sh"; do
       if curl -fsSL --max-time 60 "\$u" -o /tmp/omo-install.sh 2>/dev/null; then
         bash /tmp/omo-install.sh; exit \$?
@@ -248,7 +250,7 @@ case "\${1:-}" in
     echo "  omo -p '巡检本机'        非交互执行"
     echo "  omo serve                后台服务（cron/webhook 入口）"
     echo "  omo status               状态"
-    echo "  omo upgrade              升级到最新 Release"
+    echo "  omo update|upgrade       升级到最新 Release（安全通道；不触发上游自更新）"
     echo "  其他参数透传 omp" ;;
   *)
     exec "\$RUN" --profile ops "\${EXT_ARGS[@]}" "\$@" ;;

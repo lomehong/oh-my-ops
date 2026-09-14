@@ -42,7 +42,7 @@ node "$REPO_ROOT/scripts/embed-pi-natives.mjs" \
   --platform-tag linux-x64
 
 echo "▸ [4/5] 品牌化 patch（构建期正式化）"
-node "$REPO_ROOT/scripts/patch-omp-brand.mjs" --target dist/cli.js
+node "$REPO_ROOT/scripts/patch-omp-brand.mjs" --require-hits --target dist/cli.js
 
 echo "▸ [5/5] bun build --compile → $OUT"
 bun build --compile dist/cli.js --outfile "$OUT" 2>&1 | tail -2

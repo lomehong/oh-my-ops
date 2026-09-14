@@ -57,7 +57,7 @@ export function assertPlatformAtLoad(pi: ExtensionAPI): void {
 	}
 	if (failures.length > 0) {
 		throw new Error(
-			`[ops-pi] 平台能力校验失败（omp 最低版本 18.1.18）：\n${failures.join("\n")}\n` +
+			`[omo] 平台能力校验失败（omp 最低版本 18.1.18）：\n${failures.join("\n")}\n` +
 			"拒绝启动：缺失的能力是安全前提，不会以残缺安全门运行。",
 		);
 	}
@@ -72,6 +72,6 @@ export function assertPlatformAtSessionStart(ctx: {
 	if (typeof ctx.setInterval !== "function") failures.push("  · ctx.setInterval：受管定时器（O5）");
 	if (typeof ctx.sessionManager?.getBranch !== "function") failures.push("  · ctx.sessionManager.getBranch：审计读取（O17）");
 	if (failures.length > 0) {
-		throw new Error(`[ops-pi] 平台能力校验失败（session_start）：\n${failures.join("\n")}`);
+		throw new Error(`[omo] 平台能力校验失败（session_start）：\n${failures.join("\n")}`);
 	}
 }

@@ -15,17 +15,17 @@ export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
 		// ② 工具清单断言（O11/X15）——被共载扩展覆盖的 ops_ 工具先自愈（重注册 last-wins），复检失败才拒启
 		const repaired = assertToolRegistryIntegrity(pi);
 		if (repaired.length > 0) {
-			sessionCtx.ui.notify(`ops-pi：检测到 ${repaired.length} 个 ops_* 工具被共载扩展覆盖，已重新注册自愈（${repaired.join(", ")}）`, "warning");
+			sessionCtx.ui.notify(`omo：检测到 ${repaired.length} 个 ops_* 工具被共载扩展覆盖，已重新注册自愈（${repaired.join(", ")}）`, "warning");
 		}
 
 		// ③ 降级可发现性（§7.4.3）
 		if (!ctx.targetPolicy.isConfigured) {
-			sessionCtx.ui.notify("ops-pi：未配置目标策略（.ops-pi/policy.json）——变更类操作一律拒绝", "warning");
+			sessionCtx.ui.notify("omo：未配置目标策略（.ops-pi/policy.json）——变更类操作一律拒绝", "warning");
 		}
 		if (process.env.OPS_PI_SANDBOX === "1") {
-			sessionCtx.ui.notify(probeBwrap() ? "ops-pi：沙箱已启用（bubblewrap）" : "ops-pi：沙箱已启用但 bwrap 不可用——本地 shell 命令将被 fail-closed 拒绝", probeBwrap() ? "info" : "warning");
+			sessionCtx.ui.notify(probeBwrap() ? "omo：沙箱已启用（bubblewrap）" : "omo：沙箱已启用但 bwrap 不可用——本地 shell 命令将被 fail-closed 拒绝", probeBwrap() ? "info" : "warning");
 		} else {
-			sessionCtx.ui.notify("ops-pi：沙箱未启用——运行于进程级隔离（§7.1）", "warning");
+			sessionCtx.ui.notify("omo：沙箱未启用——运行于进程级隔离（§7.1）", "warning");
 		}
 
 		// ④ 品牌标识
