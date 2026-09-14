@@ -176,6 +176,7 @@ omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 | `/ops-inspect [host]` | 标准巡检（留空/`@local` = 本机；远程主机经 SshPool 只读探针，非法主机名诚实化拒绝） |
 | `/ops-health` | 快速健康检查 |
 | `/ops-status` | ops-pi 运行状态 |
+| `/ops-audit [n]` | 回看当前会话分支最近 n 条 `ops_audit` 审计条目（只读；留空=20，上限 200，超限提示截断） |
 
 ## 安全模型
 
