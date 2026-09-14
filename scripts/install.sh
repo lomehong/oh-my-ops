@@ -28,6 +28,12 @@ else
 fi
 YUYI_DIR="$REAL_HOME/.yuyi"
 YUYI_SRC="$REPO_ROOT/vendor/yuyi-omp-extension.js"
+
+# 取 JSON 字符串字段的纯 bash 实现（自包含：目标机可能没有 node/python）
+json_str() { # $1=键名  $2=json文件 → 打印值（无则空）
+  [ -f "$2" ] || return 0
+  sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\" ]*\)\".*/\1/p" "$2" | head -1
+}
 OLD_OPS_DIR="$REAL_HOME/.ops-pi"
 
 # bun 版本锁定（T3 拍板：官方脚本 + CN 镜像回退，锁 1.4.x）
@@ -86,7 +92,7 @@ echo "  运行时：$RUNTIME_VER（预编译单文件）"
 
 # ── Yuyi 配置：沿用优先，绝不覆盖已发放凭据（沿用 v3 逻辑；凭据仍在真实 HOME 的 ~/.yuyi）
 if [ -z "$TOKEN" ] && [ -f "$YUYI_DIR/agent.json" ]; then
-  TOKEN=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$YUYI_DIR/agent.json','utf8')).token||'')}catch{}" 2>/dev/null)
+  TOKEN="$(json_str token "$YUYI_DIR/agent.json")"
   [ -n "$TOKEN" ] && echo "↺ 沿用已有 Yuyi token"
 fi
 if [ -z "$TOKEN" ] && [ -t 0 ]; then
@@ -94,7 +100,7 @@ if [ -z "$TOKEN" ] && [ -t 0 ]; then
   read -r TOKEN
 fi
 if [ -z "$AGENT_NAME" ] && [ -f "$YUYI_DIR/agent.json" ]; then
-  AGENT_NAME=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$YUYI_DIR/agent.json','utf8')).name||'')}catch{}" 2>/dev/null)
+  AGENT_NAME="$(json_str name "$YUYI_DIR/agent.json")"
   [ -n "$AGENT_NAME" ] && echo "↺ 沿用已有设备名：$AGENT_NAME"
 fi
 if [ -z "$AGENT_NAME" ]; then
