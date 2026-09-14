@@ -11,9 +11,9 @@
 - Node.js ≥ 22
 - Yuyi Agent Token（可选，用于跨 Agent 通信；没有也能用全部单机运维功能）
 
-### 安装
+### 安装（自包含：零前置，与原生 omp 零接触）
 
-一行命令（自动在 jsDelivr / fastly / GitHub 多通道间回退，适配不稳定网络）：
+一行命令（bootstrap 自动多通道回退；进入包内 install.sh 后 bun 自动装到 `~/.omo/bin`、omp 单文件运行时随包携带）：
 
 ```bash
 for u in "https://cdn.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://fastly.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://raw.githubusercontent.com/lomehong/oh-my-ops/main/scripts/bootstrap.sh"; do curl -fsSL --retry 3 --connect-timeout 8 "$u" -o /tmp/omo-install.sh && break; done; bash /tmp/omo-install.sh
@@ -28,25 +28,36 @@ curl -fsSL https://github.com/lomehong/oh-my-ops/releases/latest/download/instal
 指定版本 / 传参：
 
 ```bash
-OMO_VERSION=v0.4.3 bash /tmp/omo-install.sh --token <yuyi-token>
+OMO_VERSION=v0.7.0 bash /tmp/omo-install.sh --token <yuyi-token>
 ```
 
 开发者从源码安装：
 
 ```bash
 git clone https://github.com/lomehong/oh-my-ops.git && cd oh-my-ops
+bash scripts/build-omp-runtime.sh   # 构建 omp-single（需 bun；上游包 sha256 pin）
 bash scripts/install.sh
 ```
 
 安装脚本自动完成：
 
-1. 部署 ops-pi 扩展到 `~/.ops-pi/`（自包含，删除解压目录不影响运行）
-2. 构建品牌化 omp 镜像到用户目录（TUI 横幅/tips/面板提示 = omo，不动系统 omp）
-3. 创建 `omo` CLI（启动时自动检测 omp 升级并自愈刷新镜像）
-4. 初始化策略目录（缺省：变更类操作全拒）+ Yuyi 通讯配置（自动沿用已有 token/设备名）
+1. 安装私有 bun 到 `~/.omo/bin/`（锁 1.4.x；官方脚本直连 → npmmirror 镜像回退；已装同版本则跳过）
+2. 布置预编译 omp 单文件运行时到 `~/.omo/runtime/`（品牌内置；构建自 pin 的 oh-my-pi 18.1.18）
+3. 部署 ops-pi 扩展 + Yuyi 适配器到 `~/.omo/extensions/`
+4. 创建 `omo` CLI（启动器将 HOME 重定向到 `~/.omo/home`——状态/策略/凭据/会话全部私有，**与原生 omp 及 `~/.omp` 零接触**）
+5. 初始化策略（缺省：变更类操作全拒）+ Yuyi 通讯配置（沿用已有 token/设备名）
 
-前置条件仅一个：系统已安装 [oh-my-pi](https://github.com/can1357/oh-my-pi) ≥ 18.1.18。
-安装后 `omo` 即完整形态；裸 `omp` 命令完全不受影响。卸载：`bash scripts/install.sh --uninstall`。
+无需预装 oh-my-pi/node/bun。安装后 `omo` 即完整形态；裸 `omp` 命令完全不受影响。
+升级：重跑安装器（状态保留）；`omo upgrade` 拉最新 Release 安装器。
+卸载：`bash scripts/install.sh --uninstall`（⚠ 删除 `~/.omo`，含策略/凭据/会话数据）。
+
+开发者从源码安装：
+
+```bash
+git clone https://github.com/lomehong/oh-my-ops.git && cd oh-my-ops
+bash scripts/build-omp-runtime.sh   # 构建 omp-single（需 bun；上游包 sha256 pin）
+bash scripts/install.sh
+```
 
 ## 日常使用
 

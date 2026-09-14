@@ -1,5 +1,5 @@
 import * as fs from "node:fs"
-import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent"
+import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent"
 import { formatAuditReport, toAuditViews } from "../../../src/audit-view.ts"
 
 /**
@@ -9,16 +9,14 @@ import { formatAuditReport, toAuditViews } from "../../../src/audit-view.ts"
  *
  * 写入侧用与 hooks.ts/commands.ts 完全同款的 appendEntry 形状，覆盖两类条目：
  * 工具路径（authz=read，isError=false）与被拒路径（authz=blocked + reasonClass/reason）。
- * session_start 与 turn_end 各 dump 一次（后者覆盖前者）：即使 -p 模式 turn_end 不触发，
- * session_start 内的 getBranch 读取也足以完成数据面断言。
+ * session_start 内追加后即 dump（appendEntry 同步入分支，H4/H3 探针实测充分）。
  */
 export default function (pi: ExtensionAPI): void {
 	const dir = process.env.OPS_AUDIT_PROBE_OUT_DIR ?? "/tmp/ops-audit-probe"
 	const outFile = `${dir}/out.json`
-	let dumped = false
 
-	const dump = (label: string, ctx: { sessionManager: { getBranch: () => unknown[] } }) => {
-		const views = toAuditViews(ctx.sessionManager.getBranch())
+	const dump = (label: string, c: ExtensionContext) => {
+		const views = toAuditViews(c.sessionManager.getBranch())
 		fs.mkdirSync(dir, { recursive: true })
 		fs.writeFileSync(
 			outFile,
@@ -33,7 +31,6 @@ export default function (pi: ExtensionAPI): void {
 				2,
 			),
 		)
-		dumped = true
 	}
 
 	pi.on("session_start", async () => {
@@ -53,12 +50,7 @@ export default function (pi: ExtensionAPI): void {
 		})
 	})
 
-	pi.on("turn_end", async (_e, c) => {
-		if (!dumped) dump("turn_end", c)
-	})
-
-	// session_start 的 ctx 与 turn_end 同源；延后一拍读取以确保 appendEntry 已入分支
-	pi.on("session_start", async (_e, c) => {
+	pi.on("session_start", async (_e, c: ExtensionContext) => {
 		dump("session_start", c)
 	})
 }

@@ -29,7 +29,7 @@ jobs:
         run: node --test packages/ops-core/test/*.test.ts
 
       - name: L2 测试
-        run: bun test packages/ops-extension/test/guards.test.ts packages/ops-extension/test/platform.test.ts
+        run: bun test packages/ops-extension/test/guards.test.ts packages/ops-extension/test/platform.test.ts packages/ops-extension/test/audit-view.test.ts
 
       - name: 类型检查
         run: npx tsc -p packages/ops-core/tsconfig.json --noEmit
@@ -45,7 +45,11 @@ jobs:
         id: ver
         run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
-      # 打包结构 = git 仓库结构（install.sh 依赖相对路径 packages/…）
+      # 自包含运行时：pin 18.1.18 → embedded-addon → 品牌 patch → bun compile 单文件（方案 §A.3）
+      - name: 构建 omp 单文件运行时
+        run: bash scripts/build-omp-runtime.sh
+
+      # 打包结构 = git 仓库结构（install.sh 依赖相对路径 packages/…）+ 自包含运行时 omp-single
       - name: 打部署包
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
@@ -57,7 +61,7 @@ jobs:
           cp -r types     "/tmp/${PKG}/types"
           cp -r vendor    "/tmp/${PKG}/vendor"
           cp -r docs/examples "/tmp/${PKG}/examples"
-          cp -r scripts   "/tmp/${PKG}/scripts"
+          cp dist/omp-single "/tmp/${PKG}/omp-single"
           cp README.md    "/tmp/${PKG}/README.md"
           cp scripts/bootstrap.sh "$GITHUB_WORKSPACE/install.sh"
 
