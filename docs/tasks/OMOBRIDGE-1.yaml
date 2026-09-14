@@ -1,6 +1,6 @@
 id: 'OMOBRIDGE-1'
 title: 'yuyi 配置桥接修复——HOME 重定向下 env 未进子进程（单机模式）+ env 重写保序（主人实测）'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-14T10:44:42.492Z'
 accept:
@@ -16,4 +16,17 @@ events:
     op: 'claim'
     by: 'omp-architect'
     note: 'branch=feature/OMOBRIDGE-1'
+  - ts: '2026-09-14T10:49:24.995Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: 'yuyi 配置桥接修复完成并发 v0.7.4（自报）：① 启动器 set -a 包裹 source（修复：HOME 重定向下裸 KEY=VALUE 未进子进程 → 插件落单机模式）；② install.sh 预读旧受管键、无显式参数以旧值为默认（防重装丢 token/自定义 hub）。制品核验五项通过（set -a 桥接/预读/旧值并入/上轮修复/o,p-single）。桩验：子进程可见 YUYI_TOKEN/YUYI_HUB；env 文件保留 token/custom hub/unknown keys。待主人在 logstash-124 重装 v0.7.4 + 重启 omo 复验 Hub 连接'
 branch: 'feature/OMOBRIDGE-1'
+report:
+  summary: 'yuyi 配置桥接修复完成并发 v0.7.4（自报）：① 启动器 set -a 包裹 source（修复：HOME 重定向下裸 KEY=VALUE 未进子进程 → 插件落单机模式）；② install.sh 预读旧受管键、无显式参数以旧值为默认（防重装丢 token/自定义 hub）。制品核验五项通过（set -a 桥接/预读/旧值并入/上轮修复/o,p-single）。桩验：子进程可见 YUYI_TOKEN/YUYI_HUB；env 文件保留 token/custom hub/unknown keys。待主人在 logstash-124 重装 v0.7.4 + 重启 omo 复验 Hub 连接'
+  evidence:
+    - 'v0.7.4 制品核验（下载实测）：①set -a 桥接 ②OLD_ENV_TOKEN 预读 ③OLD_ENV_HUB 并入 ④update 拦截/BUN_KNOWN ⑤omp-single 在包'
+    - '桩验端到端：子进程看到 TOKEN=tok-old-keep / HUB=wss://custom.hub.example；env 文件 EXTRA_KEY 与自定义 hub/yufu 全保留'
+  pending:
+    - '主人复验（重装 v0.7.4 + 重启 omo → yuyi_status 应 Hub 已连接、peers/inbox 可用）'
+  at: '2026-09-14T10:49:24.995Z'
+  by: 'omp-architect'
