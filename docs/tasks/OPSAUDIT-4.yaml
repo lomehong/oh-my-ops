@@ -1,6 +1,6 @@
 id: 'OPSAUDIT-4'
 title: '冲突路径演练——/ops-audit 实弹观测被拒/令牌/兜底路径（阶段 3 收口）'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-14T06:15:13.736Z'
 accept:
@@ -36,4 +36,20 @@ events:
     op: 'dispatch'
     by: 'omp-architect'
     note: 'v0.7.0 发布成功（CI run 34821083551 success；Release assets：install.sh + oh-my-ops-v0.7.0.tar.gz 122MB 含 omp-single + sha256）。main 已合并自包含安装器全链（@main 安装通道自愈，v0.6.x 时代的 @main 旧脚本问题消除）。待主人 logstash-124：releases/latest/download/install.sh 安装 → D-1 S1–S7 实测（结果回传对账收口阶段 3）。'
+  - ts: '2026-09-14T08:35:00.000Z'
+    op: 'evidence'
+    by: 'omp-architect'
+    note: 'D-1 实弹完成（logstash-124，v0.7.0 自包含安装器，主人实操）：S1 安装五步全绿（bun 自动装 npmmirror 通道）；S2 exec 被拒 [ERR_PERMISSION] guard-unattended（主人贴回 UI 原文存证）；S3 /ops-audit 回看被拒条目成功；S4 /ops-audit 1 自审计闭环成功；S5/S6 参数防御成功。A4 真实环境闭环。演练报告落 docs/reports/ops-audit-conflict-drill.md。'
+  - ts: '2026-09-14T08:58:10.711Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: '冲突路径演练完成（自报）：D-1 实弹于 logstash-124（v0.7.0 自包含安装器，主人实操）——被拒调用留痕 + /ops-audit 回看 + 自审计闭环 + 参数防御，全部通过；演练报告 docs/reports/ops-audit-conflict-drill.md（含 D-2/D-3 降级引用与三层对账）。阶段 3 试点功能面完成。自报 ≠ 完成，待主人确认收口'
 branch: 'feature/OPSAUDIT-4-drill'
+report:
+  summary: '冲突路径演练完成（自报）：D-1 实弹于 logstash-124（v0.7.0 自包含安装器，主人实操）——被拒调用留痕 + /ops-audit 回看 + 自审计闭环 + 参数防御，全部通过；演练报告 docs/reports/ops-audit-conflict-drill.md（含 D-2/D-3 降级引用与三层对账）。阶段 3 试点功能面完成。自报 ≠ 完成，待主人确认收口'
+  evidence:
+    - 'docs/reports/ops-audit-conflict-drill.md：D-1 S1–S7 结果表 + 与 05②⑤⑥/12 探针对账 + 未决三项'
+  pending:
+    - '主人 confirm OPSAUDIT-4 收口（阶段 3 完结）；suite-map 补录与安装器经验回灌（知识任务，待主人点头）'
+  at: '2026-09-14T08:58:10.577Z'
+  by: 'omp-architect'
