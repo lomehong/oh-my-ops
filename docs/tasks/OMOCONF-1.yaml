@@ -20,6 +20,10 @@ events:
     op: 'report'
     by: 'omp-architect'
     note: 'policy/token 路径私有域化 + WARN 文案动态化完成（自报）：setup.ts resolvePath（config.json 显式 > env > cwd 缺省）；启动器注入 OMO_POLICY_PATH/OMO_TOKEN_PATH=~/.omo/…；install.sh 策略写私有域根并自动迁移旧位；hooks.ts WARN 动态取解析路径。证据：setup.test.ts 3/3（含空串边界）、npm test 185/0 fail、typecheck 0 错、安装冒烟（旧策略迁移 + env 注入实测）。待主人确认并决定是否发 v0.7.3（本修需新包才能到 logstash-124）'
+  - ts: '2026-09-14T15:05:00.000Z'
+    op: 'evidence'
+    by: 'omp-architect'
+    note: 'v0.7.3 发布与制品核验：CI run 34832591862 success；下载实测七项通过——① 启动器注入 OMO_POLICY_PATH/OMO_TOKEN_PATH（指向 $OMO_DIR）② 策略写私有域根（POLICY_DST=$OMO_DIR/policy.json）③ setup.ts resolvePath ④ hooks.ts WARN 动态取 ctx.config.policyPath ⑤ bun 标准位识别 ⑥ update|upgrade 拦截 ⑦ 测试文件已从制品剔除。注：首次核验 ① 报 0 系我核验模式未计 heredoc 转义（\$OMO_DIR），放宽模式复核为 2 处命中并核对实际导出内容。'
 branch: 'feature/OMOCONF-1'
 report:
   summary: 'policy/token 路径私有域化 + WARN 文案动态化完成（自报）：setup.ts resolvePath（config.json 显式 > env > cwd 缺省）；启动器注入 OMO_POLICY_PATH/OMO_TOKEN_PATH=~/.omo/…；install.sh 策略写私有域根并自动迁移旧位；hooks.ts WARN 动态取解析路径。证据：setup.test.ts 3/3（含空串边界）、npm test 185/0 fail、typecheck 0 错、安装冒烟（旧策略迁移 + env 注入实测）。待主人确认并决定是否发 v0.7.3（本修需新包才能到 logstash-124）'
