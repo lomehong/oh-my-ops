@@ -1,4 +1,4 @@
-import { LOCAL_HOST } from "@ops-pi/core";
+import { LOCAL_HOST, normalizeTargetHost } from "@ops-pi/core";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { OpsContext } from "./context.ts";
 import { buildCapabilityLists } from "./approvals.ts";
@@ -55,31 +55,29 @@ export function buildomoSystemPrompt(ctx: OpsContext): string {
  */
 export function registerOpsCommands(pi: ExtensionAPI, ctx: OpsContext): void {
 	pi.registerCommand("ops-inspect", {
-		description: "对指定主机执行标准巡检（只读，当前仅本机）",
+		description: "对指定主机执行标准巡检（只读；留空/@local = 本机，远程主机经 SshPool）",
 		handler: async (args, cmdCtx) => {
-			const host = String(args ?? "").trim().split(/\s+/)[0];
-			if (!host) {
-				cmdCtx.ui.notify(`用法：/ops-inspect ${LOCAL_HOST} [checks]`, "error");
+			const raw = String(args ?? "").trim().split(/\s+/)[0] ?? "";
+			// P12：host 规范化（非法主机名在此诚实拒绝）；@local/留空 → 本机，真实主机名 → SshPool 远程探针
+			let host: string;
+			try {
+				host = normalizeTargetHost(raw === "" || raw === LOCAL_HOST ? undefined : raw) ?? LOCAL_HOST;
+			} catch (error) {
+				cmdCtx.ui.notify(error instanceof Error ? error.message : String(error), "error");
 				return;
 			}
-			// ★ 主机守卫：远程巡检未实现，此前填任何主机名都会静默巡检本机（诚实化）
-			if (host !== LOCAL_HOST) {
-				cmdCtx.ui.notify(
-					`远程巡检尚未实现（P1 经 SshPool 引入）：当前仅支持本机。用法：/ops-inspect ${LOCAL_HOST}`,
-					"error",
-				);
-				return;
-			}
-			cmdCtx.ui.notify("开始巡检（本机）…", "info");
+			const ops = ctx.forHost(host === LOCAL_HOST ? undefined : host);
+			cmdCtx.ui.notify(`开始巡检（${host}）…`, "info");
 			const commands = [
 				"echo '=== CPU ===' && uptime",
 				"echo '=== MEMORY ===' && free -h | head -3",
 				"echo '=== DISK ===' && df -h / | tail -1",
 				"echo '=== TOP ===' && ps aux --sort=-%cpu | head -6",
 			].join(" && ");
-			const result = await ctx.shell.exec(["sh", "-c", commands], { timeoutMs: 30_000 });
-			cmdCtx.ui.notify(`巡检完成（${LOCAL_HOST}）`, result.exitCode === 0 ? "info" : "error");
-			pi.appendEntry("ops_audit", { tool: "ops-inspect", host: LOCAL_HOST, isError: result.exitCode !== 0, ts: new Date().toISOString(), authz: "read" });
+			const result = await ops.shell.exec(["sh", "-c", commands], { timeoutMs: 30_000 });
+			cmdCtx.ui.notify(`巡检完成（${host}）\n${result.stdout}`, result.exitCode === 0 ? "info" : "error");
+			// 只读命令自落审计（命令路径不产生 tool_execution_end，§7.7）；host 记录真实目标
+			pi.appendEntry("ops_audit", { tool: "ops-inspect", host, isError: result.exitCode !== 0, ts: new Date().toISOString(), authz: "read" });
 		},
 	});
 

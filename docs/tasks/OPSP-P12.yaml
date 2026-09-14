@@ -1,6 +1,6 @@
 id: 'OPSP-P12'
 title: '/ops-inspect 支持远程主机巡检（P7 SshPool 遗留对齐）'
-state: '执行中'
+state: '待确认'
 level: 'L2'
 created: '2026-09-14T01:52:25.712Z'
 accept:
@@ -16,4 +16,19 @@ events:
     op: 'claim'
     by: 'omo-impl-session'
     note: 'branch=main'
+  - ts: '2026-09-14T02:00:36.432Z'
+    op: 'report'
+    by: 'omo-impl-session'
+    note: '/ops-inspect 远程主机巡检——实现完成（P7 SshPool 遗留对齐）'
 branch: 'main'
+report:
+  summary: '/ops-inspect 远程主机巡检——实现完成（P7 SshPool 遗留对齐）'
+  evidence:
+    - 'commands.ts：host 经 normalizeTargetHost 规范化（非法主机名诚实拒绝），@local/留空 → 本机，真实主机名 → ctx.forHost 经 SshPool 执行只读探针'
+    - '审计：命令路径自落 ops_audit 且 host 记录真实目标（含远程）；巡检结果全文随 notify 输出'
+    - 'README 斜杠命令表同步去除「仅本机」；移除已过时的「远程巡检尚未实现（P1 经 SshPool 引入）」诚实化拒绝'
+    - '验证：ext tsc 0 错；L2 bun 61/61（只读命令边界不变：探针全部只读，危险动作仍不注册命令 §7.7）'
+  pending:
+    - '真实远程主机联调验收（需目标环境第二台可达主机，与 P7 pending 同源）'
+  at: '2026-09-14T02:00:36.428Z'
+  by: 'omo-impl-session'
