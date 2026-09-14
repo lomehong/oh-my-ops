@@ -1,0 +1,15 @@
+id: 'OPSP-P16'
+title: '定时巡检任务化：定义 yaml + serve 调度 + 历史留存 + 风险对比'
+state: '待执行'
+level: 'L2'
+created: '2026-09-14T12:57:29.152Z'
+accept:
+  - '任务定义 ~/.omo/inspections/*.yaml（名称/间隔/巡检项/目标主机）'
+  - 'serve 内置调度器执行 + 结果历史留存 ~/.omo/inspections/history/'
+  - 'ops_inspection_run / ops_inspection_list 工具'
+  - '风险对比：本次 vs 上次（新增异常高亮）'
+events:
+  - ts: '2026-09-14T12:57:29.152Z'
+    op: 'create'
+    by: 'omp-architect-session'
+    note: '定时巡检任务化：定义 yaml + serve 调度 + 历史留存 + 风险对比'

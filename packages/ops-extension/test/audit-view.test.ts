@@ -51,7 +51,7 @@ describe("toAuditViews（B2/B3：判型收窄，缺失不臆造，保序）", ()
 			"junk",
 			null,
 		]);
-		expect(views).toHaveLength(1);
+		expect(views.length).toBe(1);
 		expect(views[0]?.tool).toBe("ops_read_file");
 	});
 
@@ -71,7 +71,7 @@ describe("toAuditViews（B2/B3：判型收窄，缺失不臆造，保序）", ()
 			{ type: "custom", customType: "ops_audit" },
 			{ type: "custom", customType: "ops_audit", data: "garbage" },
 		]);
-		expect(views).toHaveLength(2);
+		expect(views.length).toBe(2);
 		expect(views[0]?.tool).toBeUndefined();
 		expect(views[1]?.tool).toBeUndefined();
 	});

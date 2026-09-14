@@ -10,6 +10,7 @@ export interface OpsConfig {
 	vault?: { dbPath?: string };
 	health?: { autoPollIntervalMs?: number };
 	ssh?: SshConfig;
+	knowledge?: { dir?: string; repo?: string; branch?: string };
 }
 
 /** loadConfig 的返回：路径字段已保证有值（缺省 → cwd/.ops-pi/），供 OpsContext 直接使用 */
@@ -49,6 +50,7 @@ export function loadConfig(cwd: string): LoadedOpsConfig {
 		vault: isVaultConfig(raw.vault) ? raw.vault : undefined,
 		health: isHealthConfig(raw.health) ? raw.health : undefined,
 		ssh: isSshConfig(raw.ssh) ? raw.ssh : undefined,
+		knowledge: isKnowledgeConfig(raw.knowledge) ? raw.knowledge : undefined,
 	};
 }
 
@@ -77,5 +79,16 @@ function isSshConfig(value: unknown): value is NonNullable<OpsConfig["ssh"]> {
 		(rec.connectTimeoutSec === undefined || numOk(rec.connectTimeoutSec)) &&
 		(rec.controlPersistSec === undefined || numOk(rec.controlPersistSec)) &&
 		(rec.maxSessions === undefined || numOk(rec.maxSessions))
+	);
+}
+
+function isKnowledgeConfig(value: unknown): value is NonNullable<OpsConfig["knowledge"]> {
+	if (value === null || typeof value !== "object") return false;
+	const rec = value as Record<string, unknown>;
+	const strOk = (v: unknown) => typeof v === "string" && v !== "";
+	return (
+		(rec.dir === undefined || strOk(rec.dir)) &&
+		(rec.repo === undefined || strOk(rec.repo)) &&
+		(rec.branch === undefined || strOk(rec.branch))
 	);
 }

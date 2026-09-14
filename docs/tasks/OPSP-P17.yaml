@@ -1,0 +1,14 @@
+id: 'OPSP-P17'
+title: '任务下发/认领/回执工具化（包装 yuyi 任务层）'
+state: '待执行'
+level: 'L2'
+created: '2026-09-14T12:57:29.214Z'
+accept:
+  - 'ops_task_dispatch（write 档）：向指定 agent 下发任务（yuyi 邮件 + 任务记录）'
+  - 'ops_task_list / ops_task_report：认领方列出与回执（写回任务记录）'
+  - '安全：dispatch 为 write 档须预授权；跨 Agent 不降低安全标准'
+events:
+  - ts: '2026-09-14T12:57:29.214Z'
+    op: 'create'
+    by: 'omp-architect-session'
+    note: '任务下发/认领/回执工具化（包装 yuyi 任务层）'

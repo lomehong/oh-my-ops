@@ -35,6 +35,11 @@ export function buildomoSystemPrompt(ctx: OpsContext): string {
 	parts.push(`The vault is local to the control node and has no host parameter.`);
 	parts.push("");
 
+	parts.push("## Knowledge base (P15)");
+	parts.push("处置完事件后：用 ops_kb_save 沉淀 Runbook（slug 短横线小写；正文含现象/根因/处置/验证）。");
+	parts.push("诊断前：先用 ops_kb_search 检索同类问题（'这类告警上次怎么修的'）；ops_kb_sync 把知识推送到团队真源。");
+	parts.push("");
+
 	parts.push("## Behavior");
 	parts.push("When asked to inspect: chain read-tier tools (health_check + process_list + log_tail) and output a summary report (ok/warn/critical counts + anomaly details).");
 	parts.push("When asked to fix: first diagnose with read-tier tools, then propose and execute the fix (exec-tier requires pre-authorization).");

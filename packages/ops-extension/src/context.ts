@@ -1,4 +1,6 @@
 import { CredentialVault, FileOps, LogCollector, ProcessManager, ShellExec, ReloadableTargetPolicy, SshPool, loadTokenStore, normalizeTargetHost } from "@ops-pi/core";
+import { KnowledgeStore } from "./knowledge.ts";
+import * as path from "node:path";
 import type { ExecOptions, ExecResult, PolicyRequest, Runner } from "@ops-pi/core";
 import { SandboxedShell } from "./sandbox.ts";
 import type { AuthorizationView } from "./guards.ts";
@@ -43,6 +45,9 @@ export class OpsContext {
 	readonly shell: ShellExec;
 	readonly #pool: SshPool;
 	readonly vault: CredentialVault | undefined;
+	readonly kb: KnowledgeStore;
+	readonly kbRepo: string | undefined;
+	readonly kbBranch: string;
 	readonly #remote = new Map<string, HostOps>();
 
 	constructor(
@@ -64,6 +69,9 @@ export class OpsContext {
 		this.tokens = loadTokenStore(paths.tokenPath);
 		this.#pool = new SshPool(config.ssh);
 		this.vault = config.vault?.dbPath ? new CredentialVault(config.vault.dbPath) : undefined;
+		this.kb = new KnowledgeStore(config.knowledge?.dir ?? path.join(paths.policyPath, "..", "knowledge"));
+		this.kbRepo = config.knowledge?.repo;
+		this.kbBranch = config.knowledge?.branch ?? "main";
 	}
 
 	/** 配置（供工具读取 vault 路径等运行时信息） */

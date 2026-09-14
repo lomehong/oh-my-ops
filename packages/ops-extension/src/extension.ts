@@ -11,6 +11,7 @@ import { registerServiceTools } from "./tools/service.ts";
 import { setupHooks } from "./hooks.ts";
 import { registerOpsCommands } from "./commands.ts";
 import { registerWriteTools } from "./tools/write.ts";
+import { registerKnowledgeTools } from "./tools/knowledge.ts";
 
 /**
  * omo 扩展入口（方案 §7.3）。
@@ -38,5 +39,6 @@ export default function (pi: ExtensionAPI): void {
 
 	registerOpsCommands(pi, ctx);
 	registerWriteTools(pi, ctx, ctx.vault, approval);
+	registerKnowledgeTools(pi, ctx, approval);
 	setupHooks(pi, ctx);
 }
