@@ -22,6 +22,10 @@ events:
     op: 'owner-decision'
     by: '主人'
     note: 'T1–T5 全部按需求包 §6 建议默认值闭合（T1 n∈[1,200]/默认20/超限截断提示/ reason 单行160字符；T2 采用 ctx.ui.notify，registerEntryRenderer 仅登记为未来项不采用；T3 中文文案、host/reason 原文展示不遮蔽；T4 v1 不做过滤参数；T5 本需求不扩范围，A4 的 layer 口径漂移另立议题裁决）。一级来源=主人本会话拍板（2026-09-14，非转述）；据此在 OPSAUDIT-1-REVIEW 评审请求正文声明 T1–T5 为已闭合约束。'
+  - ts: '2026-09-14T03:39:30.000Z'
+    op: 'dispatch'
+    by: 'omp-architect'
+    note: 'OPSAUDIT-1-REVIEW 评审请求重发：to=PC-SZ-375:dsh-architect（Hub agent 70574817-cf86-4b99-9af1-71fbd62e5e73），expectReply=true，taskId=OPSAUDIT-1-REVIEW，classification=action；正文含需求包路径/分支/提交 9142a43 + 8 条验收准则 + T1–T5 已闭合口径声明。投递结果：实时唤醒送达。评审结论待回。'
 branch: 'feature/OPSAUDIT-1-req'
 report:
   summary: '需求包已落 docs/requirements/ops-audit-requirement-package.md（分支 feature/OPSAUDIT-1-req，提交 9142a43）；六项覆盖齐备、五问通过、无阻断项，准入=有条件通过（T1–T5 待主人拍板）。独立评审请求已发 yuyi，因目标会话不在 Hub 花名册投递失败（无收件箱记录），评审未发生。待主人确认。'
