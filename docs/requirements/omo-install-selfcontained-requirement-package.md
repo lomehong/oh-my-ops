@@ -2,7 +2,7 @@
 
 > 来源：主人 2026-09-14 logstash-124 实测阻塞引发，路线已由主人拍板（fork 定制 / 可执行文件进包 / `~/.omo/` 私有目录 / bun 自动装不打包）
 > 产出：architect-prd-digest 六项覆盖检查（本文件）
-> 状态：**待确认**（自报 ≠ 完成；待确认 T1–T5 清零前不得进入 architect-design）
+> 状态：**准入通过（T1–T5 已拍板清零；设计前置=H3/H4 可行性探针，探针失败即停下与主人重新对齐路线）**
 > 关联：`docs/designs/ops-audit-command-design.md`（OPSAUDIT-2，/ops-audit 已执行）；台账任务：`OMOINSTALL-1`
 > 实测链：logstash-124 三连失败（curl:35 TLS 重置 → `vlatest` 404 → 「未找到 omp」）——问题找方案
 
@@ -46,7 +46,7 @@
 |---|---|---|---|
 | H1 | 目标机有 curl（root 可写 $HOME） | logstash-124 实测有 curl | 无 curl 的机器超出首版范围（安装前提示） |
 | H2 | bun 可经安装脚本/镜像自动装到私有目录（非系统级） | bun 官方安装脚本默认 `~/.bun` 免 sudo；CN 网络需镜像通道（待确认 T3） | 需换通道或降级为「下载 bun 到 ~/.omo」自研逻辑 |
-| H3 | omp CLI 可构建为**可执行文件**（如 bun compile）且扩展体系（registerCommand/getBranch/appendEntry）在其中行为一致 | 主人路线要求（R2）；**可行性未验证**——omp 现以 npm 包分发（dist+node_modules），原生模块能否进 compile 未知 | 降级形态：包内携带 dist+node_modules+私有 bun 运行（T1 fallback，需主人预接受） |
+| H3 | omp CLI 可构建为**可执行文件**（如 bun compile）且扩展体系（registerCommand/getBranch/appendEntry）在其中行为一致 | 主人路线要求（R2）；**可行性未验证**——omp 现以 npm 包分发（dist+node_modules），原生模块能否进 compile 未知 | **探针失败 = 停止条件**：T1 已拍板「只要单文件、不接受过渡形态」→ 停下与主人重新对齐路线 |
 | H4 | omp 的状态目录（默认 `~/.omp/agent`）可重定向到 `~/.omo`（env/flag/补丁） | 矩阵 #51：agentDir「默认」`~/.omp/agent/extensions`，暗示可配但**未验证**；不可重定向则需 fork 补丁实现（管线内做） | 隔离破功 → A3 不可验收 → 需 fork 补丁或与主人重新对齐隔离口径 |
 | H5 | fork 定制以「上游产物 + 构建期 patch」维护（即 patch-omp-brand.mjs 正式化），非源码级硬改 | 主人原话「就是 patch-omp-brand.mjs 做的事情」 | 若需源码级 fork，上游跟进策略复杂化（T4） |
 
@@ -54,15 +54,15 @@
 
 **无硬阻断**。H3/H4 为高风险未知，处置：设计前先打可行性探针（omp compile + 状态重定向各一支），探针失败即触发 T1 fallback / 隔离口径对齐——不解除不得出架构方案。
 
-## 6. 待确认（需主人拍板；未清前不得进入 architect-design）
+## 6. 待确认（T1–T5 已于 2026-09-14 主人会话全部拍板清零）
 
 | # | 待确认 | 建议默认 | 影响 |
 |---|---|---|---|
-| T1 | 可执行形态：omp compile 单文件可行→用它；不可行→是否预接受「dist+node_modules+私有 bun」过渡形态 | compile 可行用 compile；否则接受过渡形态 | 决定 A4 与构建管线形状 |
-| T2 | 首版平台矩阵 | 仅 Linux x64 | 交付范围 |
-| T3 | bun 安装通道与版本锁定 | 官方安装脚本 + CN 镜像回退（如 npmmirror bun 镜像）；版本锁定（如 bun 1.4.x）写入安装器 | A1 在 CN 网络的可达性 |
-| T4 | fork 上游跟进策略 | pin 上游 18.1.x，跟随安全/特性需要按季评估升级 | 长期维护成本 |
-| T5 | `main` 合并时机（v0.6.1 教训：Release 正文推荐的 @main 一行命令在 main 合并前仍拉旧 bootstrap） | 本需求产出首个可用安装器后，将已落定工作链合并 main，官方通道自愈 | 官方安装通道正确性 |
+| T1 | 可执行形态：omp compile 单文件可行→用它；不可行→是否预接受「dist+node_modules+私有 bun」过渡形态 | **已拍板（加严）：只要单文件可执行**；探针失败不接受过渡形态，停止并重新对齐路线（主人 2026-09-14 会话） | 决定 A4 与构建管线形状；H3 探针为硬门 |
+| T2 | 首版平台矩阵 | **已拍板：仅 Linux x64**（覆盖 logstash-124 与 WSL 环境） | 交付范围 |
+| T3 | bun 安装通道与版本锁定 | **已拍板：官方脚本 + CN 镜像回退；bun 锁定 1.4.x**（与 CI 一致） | A1 在 CN 网络的可达性 |
+| T4 | fork 上游跟进策略 | **已拍板：pin 上游 18.1.x，按季评估升级** | 长期维护成本 |
+| T5 | `main` 合并时机（v0.6.1 教训：Release 正文推荐的 @main 一行命令在 main 合并前仍拉旧 bootstrap） | **已拍板：本需求产出首个可用安装器并经主人验收后，合并 main**，官方通道自愈 | 官方安装通道正确性 |
 
 ## 7. 专项评审触发
 
@@ -97,10 +97,11 @@
 
 ## 9. 准入结论
 
-**有条件通过（Conditional Pass）。**
-- 六项覆盖齐备、五问通过、无硬阻断；
-- **停止条件**：① H3/H4 可行性探针（omp 可执行构建 / 状态目录重定向）设计前必须先行，失败即触发 T1 fallback 与隔离口径对齐；② T1–T5 未清零不得进入 architect-design；
-- 本文件为自报产出，落定以主人确认为准（纪律 1）。
+**通过（Admission Pass，T1–T5 已拍板清零）。**
+
+- 六项覆盖齐备、五问通过、无硬阻断；机械检查（xd://architect_digest）六项 ✅；
+- **设计前置（硬门）**：H3/H4 可行性探针必须先行——H3 失败即触发 T1 停止条件（停下与主人重新对齐路线）；H4 失败则隔离口径需重新对齐（fork 补丁 or 口径变更，均须主人裁决）；
+- 本文件为自报产出，落定以主人确认为准（纪律 1）；准入已经主人会话确认（2026-09-14）。
 
 ## 10. 证据表
 

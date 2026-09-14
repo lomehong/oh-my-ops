@@ -1,6 +1,6 @@
 id: 'OMOINSTALL-1'
 title: '自包含安装器——零前置装 omo，与原生 omp 共存（fork omp 定制 + 可执行文件进包 + ~/.omo 私有目录）'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-14T07:00:50.546Z'
 accept:
@@ -19,13 +19,19 @@ events:
     op: 'report'
     by: 'omp-architect'
     note: '需求包落 docs/requirements/omo-install-selfcontained-requirement-package.md（分支 feature/OMOINSTALL-1-req）：六项覆盖齐备、五问通过、无硬阻断；xd://architect_digest 机械准入通过（Do4/Dont6/待确认5/证据8/系统3/验证计划登记）。高危未知 H3（omp 可执行构建可行性）H4（状态目录重定向）已登记，设计前探针裁决。准入=有条件通过，待主人拍板 T1–T5（自报 ≠ 完成）'
+  - ts: '2026-09-14T07:10:27.588Z'
+    op: 'confirm'
+    by: '主人'
+    note: '需求包准入通过；T1–T5 拍板清零（T1 加严=只要单文件可执行、T2 Linux x64、T3 官方+镜像锁 1.4.x、T4 pin 18.1.x、T5 验收后合 main）；设计前置=H3/H4 探针（H3 失败=停止对齐路线）'
 branch: 'feature/OMOINSTALL-1-req'
 report:
   summary: '需求包落 docs/requirements/omo-install-selfcontained-requirement-package.md（分支 feature/OMOINSTALL-1-req）：六项覆盖齐备、五问通过、无硬阻断；xd://architect_digest 机械准入通过（Do4/Dont6/待确认5/证据8/系统3/验证计划登记）。高危未知 H3（omp 可执行构建可行性）H4（状态目录重定向）已登记，设计前探针裁决。准入=有条件通过，待主人拍板 T1–T5（自报 ≠ 完成）'
   evidence:
     - 'docs/requirements/omo-install-selfcontained-requirement-package.md §10 证据表 E1–E9（install.sh/bootstrap.sh/矩阵#51/知识库/logstash 实测）'
-    - 'xd://architect_digest：需求准入通过（六项 ✅）'
+    - 'xd: '//architect_digest：需求准入通过（六项 ✅）'''
   pending:
     - 'T1 可执行形态 / T2 平台矩阵 / T3 bun 通道 / T4 fork 策略 / T5 main 合并时机——全部待主人拍板'
   at: '2026-09-14T07:05:41.824Z'
   by: 'omp-architect'
+confirmedBy: '主人'
+confirmedVia: '会话确认 2026-09-14（ask「准入通过（含探针前置）」；xd://architect_digest 六项 ✅）'
