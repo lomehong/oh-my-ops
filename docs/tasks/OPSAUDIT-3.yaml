@@ -1,6 +1,6 @@
 id: 'OPSAUDIT-3'
 title: '/ops-audit 实现——audit-view 纯函数 + 命令注册 + 测试（architect-implement）'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-14T05:56:51.205Z'
 accept:
@@ -16,4 +16,17 @@ events:
     op: 'claim'
     by: 'omp-architect'
     note: 'branch=feature/OPSAUDIT-3-impl'
+  - ts: '2026-09-14T06:07:06.582Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: '/ops-audit 实现完成（自报）：src/audit-view.ts 三纯函数（112 行）+ commands.ts ops-audit 注册（先读后写/fail-soft）+ 单测 15 用例 + runtime 数据面探针（真实 omp 会话 2/2 过）+ README 一行。证据：bun 单测 15/15；npm test 181 pass/1 skip(bwrap 环境性)/0 fail；typecheck 双包 0 错；git diff 9142a43..HEAD -- src/hooks.ts 空（写入侧零改）。提交 87af224/b29e5a1/bd98643。未兑现：U2 人工冒烟（待交互会话）+ suite-map 补录（知识任务）。自报 ≠ 完成，待实现评审 + 主人确认'
 branch: 'feature/OPSAUDIT-3-impl'
+report:
+  summary: '/ops-audit 实现完成（自报）：src/audit-view.ts 三纯函数（112 行）+ commands.ts ops-audit 注册（先读后写/fail-soft）+ 单测 15 用例 + runtime 数据面探针（真实 omp 会话 2/2 过）+ README 一行。证据：bun 单测 15/15；npm test 181 pass/1 skip(bwrap 环境性)/0 fail；typecheck 双包 0 错；git diff 9142a43..HEAD -- src/hooks.ts 空（写入侧零改）。提交 87af224/b29e5a1/bd98643。未兑现：U2 人工冒烟（待交互会话）+ suite-map 补录（知识任务）。自报 ≠ 完成，待实现评审 + 主人确认'
+  evidence:
+    - 'docs/designs/ops-audit-command-design-执行记录.md：对照自检三表（对齐度/测试证据/未兑现）'
+    - 'runtime 探针实测：bash test/runtime/12-ops-audit.sh → 2 过/0 败（count=2，报告头含可读范围声明）'
+  pending:
+    - '实现评审（architect-review，宜非编码会话）+ 主人 confirm；U2 人工冒烟回填 evidence'
+  at: '2026-09-14T06:07:06.582Z'
+  by: 'omp-architect'
