@@ -3,13 +3,13 @@
 ```yaml
 ---
 title: /ops-audit [n] 审计回看命令——只读读取面与收窄格式化纯函数
-status: 草稿
+status: 已落定        # 草稿 → 已评审 → 已落定（主人确认后） → 已执行
 requirement: docs/requirements/ops-audit-requirement-package.md（OPSAUDIT-1，已落定 781cef8）
 author: omp-architect（omp_1c3610f27a3f）
 created: 2026-09-14
 review:
-  score: 0
-  conclusion: 待评审
+  score: 60           # dsh 独立评审直答（2026-09-14）：通过，六维度 60/60；omp 侧 architect_design 插件自检同分
+  conclusion: 通过（双方法一致；主人已确认定案）
 ---
 ```
 

@@ -1,6 +1,6 @@
 id: 'OPSAUDIT-2'
 title: '/ops-audit 技术方案设计（architect-design）'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-14T05:39:21.023Z'
 accept:
@@ -28,11 +28,15 @@ events:
     op: 'review-received'
     by: 'dsh-architect'
     note: '独立评审结论直答（本次未走主人代转，Hub 验证发送方 70574817）：通过、六维度 60/60（其侧 architect-core checkDesign 同核异宿复跑一致，五问 5/5、占位符 0）、可提交主人确认进入实现。8 条验收准则逐条 ✅（存在性 178 行@3edfd0a / 需求覆盖 B1–B9+D1–D7+T1–T5 / 链路信封亲验 / Gap / 风险验证 / 六维度 / 结论 / 未改本仓）。非阻断备注：a) U2 人工冒烟结果须回填台账 evidence；b) 测试前 npm install（N2——已提前闭环，见 04:03 verify 事件 + 84523eb）；c) dsh-suite-architecture-map 未收录 oh-my-ops，试点收口后可立知识任务补录（不阻断，登记待办）。'
+  - ts: '2026-09-14T05:55:50.060Z'
+    op: 'confirm'
+    by: '主人'
+    note: '双方法评审一致通过（直答非代转）；非阻断 a/b/c 已登记处置；主人确认定案，实现由本会话自编（architect-implement）'
 branch: 'feature/OPSAUDIT-2-design'
 report:
   summary: '技术方案草稿落 docs/designs/ops-audit-command-design.md（分支 feature/OPSAUDIT-2-design）：六维度+五问齐备，architect_design 插件自检 60/60；复用面 registerCommand/ui.notify/getBranch/appendEntry，新建面仅 audit-view.ts 三纯函数；T1–T5 按定案口径内嵌，决策门无命中。待独立评审 + 主人确认（自报 ≠ 完成）'
   evidence:
-    - 'xd://architect_design 自检 60/60（全维度 10 分）'
+    - 'xd: '//architect_design 自检 60/60（全维度 10 分）'''
     - 'docs/designs/ops-audit-command-design.md @3edfd0a：六维度+五问齐备（architect_design 插件自检 60/60）'
     - 'dsh 独立评审结论（直答）：通过 60/60，8 条准则全过；非阻断 a/b/c 已登记处置'
   pending:
@@ -40,3 +44,5 @@ report:
     - 'U2 人工冒烟（实现落定后回填 evidence）+ 试点收口后 suite-map 补录知识任务（均不阻断）'
   at: '2026-09-14T05:45:38.401Z'
   by: 'omp-architect'
+confirmedBy: '主人'
+confirmedVia: '会话确认 2026-09-14（ask 选项「确认定案」；omp 插件自检 60/60 + dsh 独立评审直答 60/60）'
