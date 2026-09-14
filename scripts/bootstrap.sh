@@ -21,6 +21,8 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
 else
   G="" R="" Y="" B="" D="" N=""
 fi
+# semver 校验：接受 v 前缀可选、三段数字、可选 -prerelease
+semver_ok() { [[ "$1" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; }
 step() { printf '\n%s▸ %s%s\n' "$B" "$1" "$N"; }
 ok()   { printf '%s  ✓ %s%s\n' "$G" "$1" "$N"; }
 warn() { printf '%s  ⚠ %s%s\n' "$Y" "$1" "$N"; }
