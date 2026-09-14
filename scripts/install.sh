@@ -126,8 +126,10 @@ elif [ -x "$BUN_KNOWN" ]; then
 else
   echo "  未检测到 bun → 自动安装（标准用户级 ~/.bun；官方脚本 → npmmirror 回退）…"
   installed=false
-  if curl -fsSL --max-time 90 "$BUN_OFFICIAL" | bash -s -- "bun-v$OMO_BUN_VERSION" 2>/dev/null && command -v bun >/dev/null 2>&1; then
-    installed=true; echo "  ✓ bun $(bun --version)（官方脚本）"
+  # 官方脚本成功后 bun 落在 ~/.bun/bin（PATH 不一定已刷新）→ 以标准位存在与否判定成功，避免误判后重复下载
+  if curl -fsSL --max-time 90 "$BUN_OFFICIAL" | bash -s -- "bun-v$OMO_BUN_VERSION" >/dev/null 2>&1 && [ -x "$HOME/.bun/bin/bun" ]; then
+    export PATH="$HOME/.bun/bin:$PATH"
+    installed=true; echo "  ✓ bun $("$HOME/.bun/bin/bun" --version)（官方脚本 → ~/.bun/bin）"
   fi
   if [ "$installed" = false ]; then
     echo "  ↺ 官方通道失败，回退 npmmirror zip…"
