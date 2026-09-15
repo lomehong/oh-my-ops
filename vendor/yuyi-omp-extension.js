@@ -446,6 +446,11 @@ class HubClient {
       if (wasConnected) {
         this.opts.log?.(`hub disconnected (${ev?.code ?? "?"}) ${ev?.reason ?? ""}`.trimEnd());
       }
+      if (ev?.code === 4008 || ev?.code === 4009) {
+        this.closed = true;
+        this.opts.log?.(`hub close ${ev.code}（${ev.code === 4008 ? "kicked by admin" : "replaced"}）：按协议不重连`);
+        return;
+      }
       this.scheduleReconnect();
     };
   }
