@@ -1,5 +1,6 @@
-import { LOCAL_HOST, normalizeTargetHost } from "@ops-pi/core";
+import { LOCAL_HOST, OpsError, READ, normalizeTargetHost, tierOf } from "@ops-pi/core";
 import type { PolicyRequest } from "@ops-pi/core";
+import { TIER_TABLE } from "./approvals.ts";
 
 /**
  * 工具入参 → PolicyRequest 统一映射（单一事实源）。
@@ -50,8 +51,20 @@ export function policyRequestFor(toolName: string, input: unknown): PolicyReques
 		case "ops_vault_rekey":
 			return { host, action: "vault-rekey" };
 
-		// 其余（read 档为主）：host 统一本机；read 档在判定前即短路，不会真正用于授权
+		// P15 知识库 write 档：知识仓位于控制节点本机（KnowledgeStore 本地目录），host 恒 @local；
+		// 显式 action 防止 shell/file-write 规则连带放行知识写入与 git push（同 P11 语义）。
+		case "ops_kb_save":
+			return { host: LOCAL_HOST, action: "kb-write" };
+		case "ops_kb_sync":
+			return { host: LOCAL_HOST, action: "kb-sync" };
+
+		// 其余：仅 read 档允许落此分支（read 档在判定前即短路，此映射仅供一致性）。
+		// ★ 非 read 档落到此处 = 新增 write/exec 工具忘记登记显式 action——fail-fast，
+		//   不得以 {host} 宽松语义参与授权（否则任意命中 host 的规则都会连带放行，P11 教训）。
 		default:
+			if (tierOf(toolName, input, TIER_TABLE) !== READ) {
+				throw new OpsError("INTERNAL", `[ops-pi] ${toolName} 为非 read 档工具但未在 policyRequestFor 登记显式 action`);
+			}
 			return { host };
 	}
 }

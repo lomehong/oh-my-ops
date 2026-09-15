@@ -19,3 +19,7 @@ export type { Tier, ApprovalDecision, AuthzSource, AuthorizationVerdict } from "
 export { SshPool, normalizeTargetHost, type SshConfig } from "./ssh.ts";
 export type { Runner } from "./runner.ts";
 export { CredentialVault } from "./vault.ts";
+export { AuditLog, AUDIT_GENESIS, hashRecord } from "./audit.ts";
+export type { AuditData, AuditRecord, AuditVerifyResult } from "./audit.ts";
+export { PathGuard, realize } from "./path-guard.ts";
+export type { PathGuardRoots } from "./path-guard.ts";

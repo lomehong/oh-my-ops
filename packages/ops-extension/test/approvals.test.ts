@@ -88,9 +88,14 @@ describe("policyRequestFor（工具入参 → PolicyRequest 单一映射）", ()
 		expect(needsOwnerAuth("ops_vault_store", {}, TIER_TABLE)).toBe(true);
 	});
 
-	test("未登记工具 → host 透传（read 档在判定前短路，此映射仅供一致性）", () => {
-		expect(policyRequestFor("ops_x", { host: "whatever" })).toEqual({ host: "whatever" });
-		expect(policyRequestFor("ops_x", "not-an-object")).toEqual({ host: LOCAL_HOST });
+	test("未登记工具按最严档 EXEC → default 分支 fail-fast（不得以 {host} 宽松语义参与授权）", () => {
+		expect(() => policyRequestFor("ops_x", { host: "whatever" })).toThrow(/未在 policyRequestFor 登记显式 action/);
+		expect(() => policyRequestFor("ops_x", "not-an-object")).toThrow(/未在 policyRequestFor 登记显式 action/);
+	});
+
+	test("read 档 → host 透传（判定前短路，此映射仅供一致性）", () => {
+		expect(policyRequestFor("ops_file_read", { path: "/x", host: "whatever" })).toEqual({ host: "whatever" });
+		expect(policyRequestFor("ops_file_read", "not-an-object")).toEqual({ host: LOCAL_HOST });
 	});
 });
 

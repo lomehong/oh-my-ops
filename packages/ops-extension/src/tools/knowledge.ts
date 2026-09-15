@@ -110,7 +110,8 @@ export function registerKnowledgeTools(pi: ExtensionAPI, ctx: OpsContext, approv
 		loadMode: "essential",
 		approval: approval("ops_kb_save"),
 		description:
-			"沉淀知识条目（write 档，须 Owner 预授权）。处置完事件后调用：存 Runbook/根因/修复步骤。slug 为短横线小写标识（如 'nginx-502-upstream'）。",
+			"沉淀知识条目（write 档，须 Owner 预授权：policy.json 的 @local 规则 actions 须显式包含 'kb-write'，或批准令牌）。" +
+			"处置完事件后调用：存 Runbook/根因/修复步骤。slug 为短横线小写标识（如 'nginx-502-upstream'）。",
 		parameters: z.object({
 			slug: z.string().describe("条目标识（短横线小写，如 'disk-full-log-rotate'）"),
 			title: z.string().describe("标题（一句话说明问题/处置）"),
@@ -139,8 +140,8 @@ export function registerKnowledgeTools(pi: ExtensionAPI, ctx: OpsContext, approv
 		loadMode: "essential",
 		approval: approval("ops_kb_sync"),
 		description:
-			"知识库 git 同步（pull --rebase + commit + push）。全程 best-effort：失败不阻塞本地使用。" +
-			"未配置远端 = 本地模式。host 参数仅做格式一致性校验（同步本身只操作知识仓 git，不涉及 ops 目标主机）。",
+			"知识库 git 同步（pull --rebase + commit + push；write 档，须 Owner 预授权：@local 规则 actions 须显式包含 'kb-sync'，或批准令牌）。" +
+			"全程 best-effort：失败不阻塞本地使用。未配置远端 = 本地模式。host 参数仅做格式一致性校验（同步本身只操作知识仓 git，不涉及 ops 目标主机）。",
 		parameters: z.object({
 			host: z.string().optional().describe("保留参数（同步仅操作知识仓 git，不涉及 ops 目标主机）"),
 		}),

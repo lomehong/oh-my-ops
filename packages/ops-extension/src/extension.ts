@@ -26,7 +26,12 @@ export default function (pi: ExtensionAPI): void {
 	assertPlatformAtLoad(pi);
 
 	const config = loadConfig(process.cwd());
-	const ctx = new OpsContext(config, { policyPath: config.policyPath, tokenPath: config.tokenPath });
+	const ctx = new OpsContext(config, {
+		policyPath: config.policyPath,
+		tokenPath: config.tokenPath,
+		auditPath: config.auditPath,
+		configPath: config.configPath,
+	});
 	const approval = makeApprovalFactory(ctx.targetPolicy, ctx.tokens);
 
 	// P1：注册所有工具——Shell（exec）+ 日志（read）+ Process/File（read）+ Health/Vault（read）

@@ -39,6 +39,7 @@ export const AUDIT_LIMIT_MAX = 200;
 export const REASON_MAX_CHARS = 160;
 
 const SCOPE_NOTE = "可读范围=当前会话分支 leaf 路径";
+export const FILE_SCOPE_NOTE = "可读范围=独立审计文件（跨会话）";
 
 /** 参数解析（B4）：留空=默认 20；正整数=原样；`0/负数/小数/非数字`=明确错误；超 200=截断并标记 */
 export function parseAuditLimit(raw: string | undefined): ParsedLimit | ParseFailure {
@@ -103,10 +104,10 @@ function formatLine(v: AuditView): string {
 }
 
 /** 格式化回看报告（B3/B7）：头部含可读范围声明（RR-2/E5）与截断提示（T1）；空态显式 */
-export function formatAuditReport(views: readonly AuditView[], limit: number, truncated = false): string {
-	if (views.length === 0) return `本会话无审计条目（${SCOPE_NOTE}）`;
+export function formatAuditReport(views: readonly AuditView[], limit: number, truncated = false, scope: string = SCOPE_NOTE): string {
+	if (views.length === 0) return scope === SCOPE_NOTE ? `本会话无审计条目（${scope}）` : `无审计条目（${scope}）`;
 	const recent = [...views].sort(byTsDesc).slice(0, limit);
 	const truncNote = truncated ? `；已截断至 ${AUDIT_LIMIT_MAX} 条上限` : "";
-	const head = `ops-audit：显示 ${recent.length} 条（${SCOPE_NOTE}${truncNote}）`;
+	const head = `ops-audit：显示 ${recent.length} 条（${scope}${truncNote}）`;
 	return [head, ...recent.map(formatLine)].join("\n");
 }

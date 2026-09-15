@@ -46,7 +46,7 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 		label: "File Read",
 		loadMode: "essential",
 		approval: READ,
-		description: "读取文本文件内容（只读；支持远程主机）。超过 2 MiB 或 3000 行时由宿主截断并存入 artifact。",
+		description: "读取文本文件内容（只读；支持远程主机）。超过 2 MiB 或 3000 行时由宿主截断并存入 artifact。本机机密根（模型凭据、SSH 私钥、vault、批准令牌）一律拒读。",
 		parameters: z.object({
 			path: z.string().describe("文件绝对路径"),
 			maxBytes: z.number().optional().describe("读取上限（字节），缺省 2 MiB"),
@@ -58,6 +58,8 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			if (!path) throw new Error("[INTERNAL] 缺少 path");
 			const authz = assertAuthorized("ops_file_read", p, ctx.authzView);
 			const ops = ctx.forHost(typeof p.host === "string" ? p.host : undefined);
+			// 机密根不可读（模型凭据/SSH 私钥/vault/令牌）：read 档自动放行不覆盖此边界（仅本机）
+			if (ops.host === undefined) ctx.pathGuard.assertReadable(path);
 			const text = await ops.files.read(path, { maxBytes: p.maxBytes !== undefined ? Number(p.maxBytes) : undefined, signal });
 			return { content: [{ type: "text", text }], details: { authz } };
 		},
@@ -80,6 +82,7 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			if (!path) throw new Error("[INTERNAL] 缺少 path");
 			const authz = assertAuthorized("ops_file_ls", p, ctx.authzView);
 			const ops = ctx.forHost(typeof p.host === "string" ? p.host : undefined);
+			if (ops.host === undefined) ctx.pathGuard.assertReadable(path);
 			const result = await ops.shell.exec(["ls", "-lh", "--time-style=full-iso", path], { signal, timeoutMs: 10_000 });
 			return { content: [{ type: "text", text: result.stdout }], details: { authz } };
 		},

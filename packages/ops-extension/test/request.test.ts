@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { DefaultDenyPolicy, LOCAL_HOST, READ, StaticTokenStore, WRITE, tierOf } from "@ops-pi/core";
 import { policyRequestFor } from "../src/request.ts";
+import { READ_ACTIONS, TIER_TABLE } from "../src/approvals.ts";
+import { assertAuthorized, standardAuthzView } from "../src/guards.ts";
 
 /** P7：host 维度透传——远程主机名进入策略匹配维度（此前一律 @local） */
 describe("policyRequestFor · host 维度", () => {
@@ -35,5 +38,53 @@ describe("policyRequestFor · write 档显式 action（P11）", () => {
 	test("ops_vault_rekey → action='vault-rekey'（P14 口令轮换独立授权粒度）", () => {
 		expect(policyRequestFor("ops_vault_rekey", { newPassphrase: "n" }))
 			.toEqual({ host: "@local", action: "vault-rekey" });
+	});
+	test("ops_kb_save / ops_kb_sync → 显式 action，host 恒 @local（知识仓为控制节点本地）", () => {
+		expect(policyRequestFor("ops_kb_save", { slug: "s", title: "t", content: "c" }))
+			.toEqual({ host: LOCAL_HOST, action: "kb-write" });
+		expect(policyRequestFor("ops_kb_sync", {})).toEqual({ host: LOCAL_HOST, action: "kb-sync" });
+		// host 入参不改变知识仓位置：不得借远程 host 规则放行本机知识写入
+		expect(policyRequestFor("ops_kb_sync", { host: "web-01" })).toEqual({ host: LOCAL_HOST, action: "kb-sync" });
+	});
+});
+
+describe("policyRequestFor · default 分支 fail-fast（非 read 档不得以 {host} 宽松语义参与授权）", () => {
+	test("★ 一致性：TIER_TABLE 中所有非 read 档工具（含多态工具的非 read 动作）必须产出显式 action", () => {
+		for (const name of Object.keys(TIER_TABLE)) {
+			const entry = TIER_TABLE[name];
+			const args = typeof entry === "function" ? { action: "__non_read__" } : {};
+			if (tierOf(name, args, TIER_TABLE) === READ) continue;
+			const request = policyRequestFor(name, args);
+			const hasAction = typeof request.action === "string" && request.action !== "";
+			expect(hasAction ? name : `${name} 缺少显式 action`).toBe(name);
+		}
+	});
+
+	test("多态工具的 read 动作与纯 read 档工具落 {host}（判定前短路，仅供一致性）", () => {
+		for (const [name, actions] of Object.entries(READ_ACTIONS)) {
+			for (const action of actions) expect(policyRequestFor(name, { action }).host).toBe(LOCAL_HOST);
+		}
+		expect(policyRequestFor("ops_file_read", { path: "/etc/hosts" })).toEqual({ host: LOCAL_HOST });
+	});
+
+	test("未登记工具（按最严档 EXEC）落 default → 抛错而非 {host}", () => {
+		expect(() => policyRequestFor("ops_x", { host: "whatever" })).toThrow(/未在 policyRequestFor 登记显式 action/);
+	});
+
+	test("★ 回归：仅授权 shell 的规则不再连带放行 ops_kb_save / ops_kb_sync（P11 同类漏洞）", () => {
+		const shellOnly = standardAuthzView(
+			new DefaultDenyPolicy([{ host: LOCAL_HOST, actions: ["shell"] }]),
+			new StaticTokenStore([]),
+		);
+		expect(tierOf("ops_kb_save", {}, TIER_TABLE)).toBe(WRITE);
+		expect(() => assertAuthorized("ops_kb_save", { slug: "s", title: "t" }, shellOnly)).toThrow(/未获预授权/);
+		expect(() => assertAuthorized("ops_kb_sync", { sync: true }, shellOnly)).toThrow(/未获预授权/);
+
+		const kbRule = standardAuthzView(
+			new DefaultDenyPolicy([{ host: LOCAL_HOST, actions: ["kb-write", "kb-sync"] }]),
+			new StaticTokenStore([]),
+		);
+		expect(assertAuthorized("ops_kb_save", { slug: "s", title: "t" }, kbRule)).toBe("policy");
+		expect(assertAuthorized("ops_kb_sync", { sync: true }, kbRule)).toBe("policy");
 	});
 });

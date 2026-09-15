@@ -3,6 +3,7 @@ import { assertPlatformAtSessionStart } from "./platform.ts";
 import { buildomoSystemPrompt } from "./commands.ts";
 import { probeBwrap } from "./sandbox.ts";
 import { LOCAL_HOST } from "@ops-pi/core";
+import { recordAudit } from "./audit-sink.ts";
 import type { OpsContext } from "./context.ts";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
@@ -32,6 +33,12 @@ export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
 		// 品牌标识：omp TUI 由宿主控制，ops-pi 通过 notify 展示身份
 		sessionCtx.ui.notify("omo 运维智能体已加载", "info");
 
+		// ④¼ 独立审计可写性探测（写失败不阻断业务，但必须可发现）
+		const probe = ctx.audit.append({ tool: "session_start", host: LOCAL_HOST, isError: false, ts: new Date().toISOString(), authz: "read" });
+		if (probe === undefined) {
+			sessionCtx.ui.notify(`omo：独立审计文件不可写（${ctx.audit.path}）：${ctx.audit.lastError ?? "未知错误"}——本次运行仅有会话内审计`, "warning");
+		}
+
 		// ④½ vault 解锁（口令仅来自环境变量 OPS_VAULT_PASSPHRASE，§7.7）
 		if (ctx.vault && process.env.OPS_VAULT_PASSPHRASE) {
 			const okUnlock = ctx.vault.unlock(process.env.OPS_VAULT_PASSPHRASE);
@@ -49,7 +56,7 @@ export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
 					["sh", "-c", "uptime && free -h | head -3 && df -h / | tail -1"],
 					{ timeoutMs: 30_000 },
 				);
-				pi.appendEntry("ops_audit", {
+				recordAudit(pi, ctx, {
 					tool: "ops_health_poll(auto)",
 					host: LOCAL_HOST,
 					isError: report.exitCode !== 0,
@@ -87,13 +94,14 @@ export function setupHooks(pi: ExtensionAPI, ctx: OpsContext): void {
 		const reason = event.isError && Array.isArray(contentArr) ? contentArr[0]?.text : undefined;
 		const details = result?.details as Record<string, unknown> | undefined;
 
-		pi.appendEntry("ops_audit", {
+		recordAudit(pi, ctx, {
 			tool: event.toolName,
 			toolCallId: event.toolCallId,
 			isError: event.isError,
 			ts: new Date().toISOString(),
 			// authz 来源由 assertAuthorized 返回值落 details（read|policy|token）；被拒调用记 blocked
 			authz: (details?.authz as string) ?? (event.isError ? "blocked" : "unknown"),
+			host: typeof details?.host === "string" ? details.host : undefined,
 			reasonClass: reason?.startsWith("[ERR_PERMISSION]") ? "ERR_PERMISSION"
 				: reason?.startsWith("[ERR_POLICY]") ? "ERR_POLICY"
 				: undefined,

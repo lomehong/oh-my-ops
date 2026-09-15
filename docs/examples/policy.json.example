@@ -2,7 +2,8 @@
   "$comment": "OpsPi 目标策略模板（Owner 编辑，defaultDeny）",
   "$comment1": "host 填 '@local' 表示本机；远程主机填真实 hostname（须 SSH 密钥可达且本规则显式授权，P7 起 host 参与策略匹配）；",
   "$comment1b": "'@@' 非法 hostname 字符，不存在与真实主机名伪造冲突。服务维度显式性：带 services 的规则不覆盖无 service 维度的请求（如文件写入）。",
-  "$comment2": "action 维度示例：service 用 start/stop/restart/status/enable/disable；shell 用 'shell'（授权本机命令执行）；docker/k8s exec 用 'exec'；写档用 'file-write'（ops_file_write）与 'vault-write'（ops_vault_store）。",
+  "$comment2": "action 维度示例：service 用 start/stop/restart/status/enable/disable；shell 用 'shell'（授权本机命令执行）；docker/k8s exec 用 'exec'；写档用 'file-write'（ops_file_write）、'vault-write'（ops_vault_store）、'vault-rekey'（ops_vault_rekey）、'kb-write'（ops_kb_save）、'kb-sync'（ops_kb_sync，含 git push）。",
+  "$comment2b": "★ 权限等级提示：@local 上的 'shell' 在语义上等价于该用户的全部权限（第②层内容硬拒只是绊线，不是边界）；'file-write' 可写本机任意非信任根路径。信任根（policy.json/approval-token.json/config/审计/omo 安装域）与机密根（模型凭据/SSH 私钥/vault/令牌）由 PathGuard 无条件拒写/拒读，不受本文件授权影响。",
   "$comment3": "production: true 只做生产标记——本身不授予任何放行，无人值守变更由 ①-b 拒（guard-production）；放行须批准令牌（approval-token.json）。",
   "$comment4": "expiresAt 到期规则自动失效；文件保存后 mtime 热加载，下次判定即生效（无需重启会话）。",
   "targets": [
@@ -24,6 +25,12 @@
       "$comment": "本机写档白名单：actions=['file-write'] 授权 ops_file_write（P11 起写档须显式授权，不再被 shell/services 规则连带放行）",
       "host": "@local",
       "actions": ["file-write"],
+      "expiresAt": "2027-12-31T23:59:59Z"
+    },
+    {
+      "$comment": "本机知识库写档：actions=['kb-write','kb-sync'] 授权 ops_kb_save / ops_kb_sync（P15 起显式授权，不再被 shell/file-write 规则连带放行）",
+      "host": "@local",
+      "actions": ["kb-write", "kb-sync"],
       "expiresAt": "2027-12-31T23:59:59Z"
     },
     {

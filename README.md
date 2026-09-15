@@ -132,8 +132,15 @@ omo 自包含安装器部署下由启动器注入 `OMO_POLICY_PATH=~/.omo/policy
 ```
 
 - `actions: ["shell"]` 授权本机命令执行（`ops_shell_exec`/`ops_shell_script`）；service 维度工具按 `start/stop/restart/status/…` 匹配。
-- **write 档须显式授权**：`ops_file_write` 要求规则 `actions` 含 `file-write`，`ops_vault_store` 要求含 `vault-write`（P11 起 shell/services 规则不再连带放行写档工具）。
+- **write 档须显式授权**：`ops_file_write` 要求规则 `actions` 含 `file-write`，`ops_vault_store` 含 `vault-write`，`ops_vault_rekey` 含 `vault-rekey`，`ops_kb_save` 含 `kb-write`，`ops_kb_sync` 含 `kb-sync`（shell/services 规则不连带放行任何写档工具；未登记显式 action 的非 read 工具在 `policyRequestFor` 直接 fail-fast）。
 - `production: true` 只做生产标记：本身不授予放行，无人值守变更被 `guard-production` 拒，放行只能凭批准令牌。
+
+> **⚠ 权限等级须知**：`@local` + `actions:["shell"]` 在语义上等价于**授予 omo 进程用户的全部权限**——第②层内容硬拒是对灾难性命令的绊线，不是边界（`find -delete`、`python -c`、重定向覆盖等均不在其覆盖内）。无人值守场景请优先用 service/docker/k8s 的动作级授权或批准令牌，把 `shell` 留给交互模式。
+>
+> **路径守卫（不受 policy 授权影响，仅本机）**：
+> - **机密根拒读拒写**：`$HOME/.omp`（模型凭据/会话）、`$HOME/.ssh`、vault 密文、`approval-token.json`、`~/.omo/home`——`ops_file_read`/`ops_file_ls`/`ops_log_tail`/`ops_log_grep` 一律拒绝（`grep -r` 范围覆盖机密根亦拒）。
+> - **信任根拒写**：`policy.json`、`.ops-pi/config.json`、审计文件、整个 `~/.omo` 私有域——拿到 `file-write` 授权的 Agent 也不能改写自身授权。
+> - 远程主机文件系统不套本机守卫，由该 host 的策略规则负责。
 
 ### 批准令牌（approval-token.json）
 
@@ -173,7 +180,7 @@ omo 自包含安装器部署下由启动器注入 `OMO_POLICY_PATH=~/.omo/policy
 | 档位 | 工具 | 说明 |
 |---|---|---|
 | **read**（自动放行） | `ops_file_read` `ops_file_ls` `ops_process_list` `ops_log_tail` `ops_log_journalctl` `ops_log_grep` `ops_health_check` `ops_health_poll` `ops_vault_list` `ops_docker_ps` `ops_docker_logs` `ops_docker_compose(ps\|logs)` `ops_k8s_pods` `ops_k8s_logs` `ops_k8s_rollout(status)` `ops_service(status)` | 只读诊断 |
-| **write**（需批准） | `ops_file_write`（policy action=`file-write`，支持远程） `ops_vault_store`（`vault-write`） `ops_vault_rekey`（`vault-rekey`，P14 口令轮换） | 文件写入/凭据管理 |
+| **write**（需批准） | `ops_file_write`（policy action=`file-write`，支持远程） `ops_vault_store`（`vault-write`） `ops_vault_rekey`（`vault-rekey`，P14 口令轮换） `ops_kb_save`（`kb-write`） `ops_kb_sync`（`kb-sync`） | 文件写入/凭据管理/知识库 |
 | **exec**（需批准） | `ops_shell_exec` `ops_shell_script` `ops_docker_exec` `ops_docker_compose(除 ps\|logs)` `ops_k8s_exec` `ops_k8s_rollout(除 status)` `ops_service(start\|stop\|restart\|enable\|disable)` | 变更/执行 |
 
 > write 档的 policy action 粒度见上表括注——P11 起须显式授权对应 action，shell/services 规则不连带放行。新工具于实现时加入 `TIER_TABLE`（提示词随之更新，不会提前宣告）。
@@ -191,7 +198,7 @@ omo 自包含安装器部署下由启动器注入 `OMO_POLICY_PATH=~/.omo/policy
 | `/ops-inspect [host]` | 标准巡检（留空/`@local` = 本机；远程主机经 SshPool 只读探针，非法主机名诚实化拒绝） |
 | `/ops-health` | 快速健康检查 |
 | `/ops-status` | ops-pi 运行状态 |
-| `/ops-audit [n]` | 回看当前会话分支最近 n 条 `ops_audit` 审计条目（只读；留空=20，上限 200，超限提示截断） |
+| `/ops-audit [n] [file]` | 回看最近 n 条 `ops_audit` 审计条目（只读；留空=20，上限 200，超限提示截断）。缺省读当前会话分支；加 `file` 读独立审计文件（跨会话） |
 
 ## 安全模型
 
@@ -205,9 +212,11 @@ omo 自包含安装器部署下由启动器注入 `OMO_POLICY_PATH=~/.omo/policy
 | **② 内容硬拒** | 灾难性命令 | 纯同步正则（`rm -rf /`、`sudo rm`、`curl\|bash` 等） | 不可关 |
 | **③ 目标策略** | 越权目标/服务 | `targetPolicy` defaultDeny（`@local` 维度，mtime 热加载） | 不可关 |
 | **execute 复核** | 入参篡改 | execute 首行独立重算（X19），通过后才消费令牌（单次批准） | 不可关 |
+| **路径守卫** | 读机密 / 改写自身信任根 | `PathGuard`：机密根拒读拒写、信任根拒写（realpath 归一，防符号链接绕行；仅本机） | 不可关 |
 | **注册表自愈** | 共载扩展覆盖 ops_*（last-wins 劫持） | session_start 检测 sourceInfo，重注册自愈，失败拒启 | 不可关 |
 
-每次 ops_* 调用（含被拒调用）在 `tool_execution_end` 落 `ops_audit` 审计条目，`authz` 记录授权来源（`read`/`policy`/`token`/`blocked`）。
+每次 ops_* 调用（含被拒调用）在 `tool_execution_end` **双写**审计：会话条目 `ops_audit`（供 `/ops-audit` 回看当前分支）+ 独立 append-only 文件（缺省 `<policy 同级>/audit/ops-audit.jsonl`，omo 部署下为 `~/.omo/audit/ops-audit.jsonl`；可用 `auditPath`/`OMO_AUDIT_PATH` 覆盖）。`authz` 记录授权来源（`read`/`policy`/`token`/`blocked`）。
+独立文件带 sha256 哈希链（`seq`/`prev`/`hash`），`/ops-status` 会校验链完整性并报告断链行号；`--no-session` 下宿主会话为内存态、退出即丢，独立文件是无人值守运行的唯一持久审计。
 
 ## 开发
 
@@ -231,7 +240,7 @@ bash packages/ops-extension/test/runtime/06-docker-k8s-acceptance.sh
 | 文档 | 内容 |
 |---|---|
 | [需求包](docs/requirements/ops-pi-requirement-package.md) | 可验收目标 A0–A6、范围、不做项 |
-| [设计方案](docs/designs/ops-pi-architecture-design.md) | 可执行技术方案 v4.3（已落定） |
+| [设计方案](docs/designs/ops-pi-architecture-design.md) | 可执行技术方案 v4.3（已落定）+ v4.4 实现期补录（§7.4.6 路径守卫/独立审计） |
 | [宿主能力矩阵](docs/reports/pi-vs-omp-host-capability-matrix.md) | 上游 pi ⨯ omp 逐条对照 |
 | [评审报告](docs/reports/ops-pi-review-v4-2026-09-12.md) | architect-review + 勘误 |
 | [独立复审①](docs/reports/independent-recheck-2026-09-12.md) | 三项绕过路径 + 审计覆盖 |

@@ -7,7 +7,7 @@ status: 已落定          # 草稿 → 已评审 → 已落定 → 已执行（
 requirement: docs/requirements/ops-pi-requirement-package.md
 author: 架构师会话（2026-09-12）
 created: 2026-09-12
-supersedes: v1.4 / v2.0 / v3.0 / v4.0 / v4.1 / v4.2（版本演进见附录 B）
+supersedes: v1.4 / v2.0 / v3.0 / v4.0 / v4.1 / v4.2 / v4.3（版本演进见附录 B；v4.4 为实现期补录，不改变 v4.3 定案）
 review:
   score: 56             # v4.1 修复后自评预估（56/60）；v4.0 实评 48/60
   conclusion: 通过（主人 2026-09-12 确认落定）
@@ -568,6 +568,33 @@ pi.on("tool_execution_end", async (event: any) => {
 
 > **相对 v4.2 的变化**：删除「在 `tool_call` 内写前置 `appendEntry`」的做法（无必要且引入额外写操作）；**RR-3 由「残留」降级为「有解」**——宿主拒绝也能拿到原因文本。
 
+#### 7.4.6 读侧机密性与信任根保护（v4.4 补录，OPSP-P18）
+
+> **背景**：§7.4.1–7.4.5 建模的是「谁能对什么目标做什么动作」。实现期复审（P18）指出三个未建模维度：**读取的机密性**（read 档零审批即可读 `~/.ssh`、模型凭据、vault 密文）、**Agent 对自身信任根的写入**（拿到 `file-write` 授权即可改写 `policy.json` 自我扩权）、**审计与宿主会话耦合**（`--no-session` 下 `appendEntry` 走 `MemorySessionStorage`，退出即丢，而这正是 README 推荐的无人值守用法）。三者均不依赖 policy 授权即可发生，故不能靠第③层解决，需要**独立于授权判定的路径层守卫 + 独立审计存储**。
+
+**PathGuard（`ops-core/path-guard.ts`，接入 `OpsContext`）**
+
+| 根类型 | 成员（由 `policyPath`/`tokenPath`/vault 路径/`$HOME` 推导） | 读 | 写 |
+|---|---|---|---|
+| **机密根** | `$HOME/.omp`（模型凭据/会话）、`$HOME/.ssh`、vault 密文、`approval-token.json`、`~/.omo/home` | **拒** | **拒** |
+| **信任根** | `policy.json`、`.ops-pi/config.json`、审计文件、整个 `~/.omo` 私有域（含 extensions/runtime） | 允 | **拒** |
+
+规范性要求：
+1. **不受 policy 影响**：守卫在 `assertAuthorized` 之外独立生效，任何 `actions` 授权（含 `shell`）都不解除；这是「Agent 不能改写自己的授权来源」的硬约束。
+2. **realpath 归一**：以「存在的最深祖先」做 `realpath` 后再比对，符号链接与 `..` 穿越不能绕行。
+3. **范围型读取用树判定**：`ops_log_grep` 之类接受目录的工具用 `denyReadTree`——`grep -r $HOME` 这类**覆盖**机密根的范围同样拒绝，而不只拒绝精确命中。
+4. **仅本机**：远程 host 文件系统不套本机守卫，由该 host 的策略规则负责（远程侧机密性属 §7.6/后续任务）。
+5. **`shell` 档不在守卫覆盖内**：`@local + actions:["shell"]` 在语义上等价于该用户全部权限，第②层内容硬拒是绊线不是边界——README 已明示，无人值守应优先用 service/docker/k8s 动作级授权或批准令牌。
+
+**独立审计存储（`ops-core/audit.ts` `AuditLog`，`ops-extension/audit-sink.ts` `recordAudit`）**
+
+- **双写**：`tool_execution_end` 与斜杠命令的审计经 `recordAudit` 唯一入口，同时写会话条目 `ops_audit`（供 `/ops-audit` 回看当前分支）与独立 append-only JSONL（缺省 `<policy 同级>/audit/ops-audit.jsonl`，omo 部署即 `~/.omo/audit/`；`auditPath`/`OMO_AUDIT_PATH` 可覆盖）。
+- **哈希链**：每行含 `seq`/`prev`/`hash`（sha256），跨进程续链；`verify()` 报告断链行号，`/ops-status` 启动即校验；`session_start` 探测可写性并 notify。
+- **失败不阻断**：写失败记 `lastError` 并在状态中暴露，不阻断业务工具——审计缺失是可观测的降级（§7.4.3 三要素），不是静默丢失。
+- 审计文件本身属**信任根**（PathGuard 拒写），Agent 不能用 `ops_file_write` 篡改自身审计。
+
+**与 §7.4.4 的关系**：PathGuard 不是第四层授权，它与 ①②③ 正交——①②③ 回答「此调用是否被授权」，PathGuard 回答「无论是否授权，这个路径都不能碰」。`policyRequestFor` 同步加固：所有非 read 工具必须登记显式 action（P18 起 `ops_kb_save→kb-write`、`ops_kb_sync→kb-sync`），`default` 分支对非 read 档 **fail-fast 抛 `INTERNAL`**，一致性测试遍历 `TIER_TABLE` 断言——避免 P11/P15 两次出现的「新增写档工具落入 `{host}` 宽松语义」回归。
+
 ### 7.5 输出截断（交宿主）
 
 **不自研截断**。宿主对每个工具结果集中处理（O7）：超 `tools.artifactSpillThreshold`（默认 50KB）时**全文存 artifact**、内联换 head+tail（默认 20KB+20KB），上限 `DEFAULT_MAX_LINES=3000` / `DEFAULT_MAX_BYTES=50*1024`；覆盖全部扩展工具（含本扩展）。
@@ -783,6 +810,16 @@ export function setupOpsHooks(pi: ExtensionAPI, ctx: OpsToolContext, config: Ops
 | **新增** | `loadMode` 默认 discoverable → 工具 `approval` 声明失效 | **§7.3 必修 + §5 Contract ③ + 负测 ⑤**（X4–X6 实证） |
 
 ## 附录 B：变更记录
+
+### v4.4（2026-09-15）——实现期补录：读侧机密性 / 信任根保护 / 独立审计（OPSP-P18）
+
+不改变 v4.3 的授权定案，补录三项在实现期复审中发现、且**不属于授权维度**的加固（台账 `OPSP-P18`，主人 2026-09-15 确认）：
+
+- **新增 §7.4.6**：`PathGuard` 机密根拒读拒写 + 信任根拒写（realpath 归一、树判定、仅本机、独立于 policy 授权）；独立 append-only 哈希链审计（双写、`--no-session` 下仍持久、`/ops-status` 校验链完整性、写失败可观测不阻断）。
+- **`policyRequestFor` 加固**：`ops_kb_save`/`ops_kb_sync` 登记显式 action；`default` 分支对非 read 档 fail-fast；一致性测试遍历 `TIER_TABLE`。修正 P15 引入的「仅 `shell` 规则可放行知识库写入」回归。
+- **`ops_shell_exec`/`ops_shell_script` `timeout`**：Zod 校验为 `number` 而读取按 `string`，实参被静默忽略——已修正并加测试。
+- **README 权限等级须知**：明示 `@local + shell` = 该用户全部权限，第②层是绊线不是边界。
+- **未收口**（台账 pending）：Linux 真机 `--no-session` 审计落盘与 bwrap 沙箱下 audit 目录可写性验收。
 
 ### v4.3（2026-09-12）——按独立复审（第二轮）定案 N-1 / N-4
 

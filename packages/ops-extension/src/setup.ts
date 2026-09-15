@@ -7,6 +7,8 @@ export interface OpsConfig {
 	hostMode?: "pi" | "omp";
 	policyPath?: string;
 	tokenPath?: string;
+	/** 独立审计文件（append-only JSONL）；缺省 = policyPath 同级 audit/ops-audit.jsonl */
+	auditPath?: string;
 	vault?: { dbPath?: string };
 	health?: { autoPollIntervalMs?: number };
 	ssh?: SshConfig;
@@ -17,6 +19,9 @@ export interface OpsConfig {
 export interface LoadedOpsConfig extends OpsConfig {
 	policyPath: string;
 	tokenPath: string;
+	auditPath: string;
+	/** 配置文件自身路径（信任根之一：决定 policy/token 位置） */
+	configPath: string;
 }
 
 const DEFAULT_POLICY_PATH = ".ops-pi/policy.json";
@@ -43,10 +48,14 @@ export function loadConfig(cwd: string): LoadedOpsConfig {
 	} catch {
 		raw = {}; // 无配置文件 → 使用缺省 + 全拒策略（保守侧）
 	}
+	const policyPath = resolvePath(raw.policyPath, "OMO_POLICY_PATH", cwd, DEFAULT_POLICY_PATH);
 	return {
 		hostMode: raw.hostMode === "pi" || raw.hostMode === "omp" ? raw.hostMode : "omp",
-		policyPath: resolvePath(raw.policyPath, "OMO_POLICY_PATH", cwd, DEFAULT_POLICY_PATH),
+		configPath,
+		policyPath,
 		tokenPath: resolvePath(raw.tokenPath, "OMO_TOKEN_PATH", cwd, DEFAULT_TOKEN_PATH),
+		// 审计缺省随 policy 落同一私有域（omo 部署 → ~/.omo/audit/），不随启动目录漂移
+		auditPath: resolvePath(raw.auditPath, "OMO_AUDIT_PATH", path.dirname(policyPath), "audit/ops-audit.jsonl"),
 		vault: isVaultConfig(raw.vault) ? raw.vault : undefined,
 		health: isHealthConfig(raw.health) ? raw.health : undefined,
 		ssh: isSshConfig(raw.ssh) ? raw.ssh : undefined,

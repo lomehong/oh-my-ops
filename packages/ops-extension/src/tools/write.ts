@@ -27,7 +27,8 @@ export function registerWriteTools(pi: ExtensionAPI, ctx: OpsContext, vault: Cre
 		approval: approval("ops_file_write"),
 		description:
 			"写入文本文件（write 档；支持远程主机经 SshPool）。父目录须已存在；mode 可指定八进制权限（如 600）。" +
-			"须 Owner 预授权：policy.json 对应 host 规则的 actions 须显式包含 'file-write'（远程主机填真实 hostname 规则），或批准令牌。",
+			"须 Owner 预授权：policy.json 对应 host 规则的 actions 须显式包含 'file-write'（远程主机填真实 hostname 规则），或批准令牌。" +
+			"本机信任根（policy.json / approval-token.json / config / 审计文件 / omo 安装域）与机密根一律拒写。",
 		parameters: z.object({
 			path: z.string().describe("文件绝对路径"),
 			content: z.string().describe("要写入的完整内容（覆盖式）"),
@@ -45,6 +46,8 @@ export function registerWriteTools(pi: ExtensionAPI, ctx: OpsContext, vault: Cre
 
 			// ③ 权威复核：host 透传进策略维度（action='file-write'，P11 显式授权）
 			const authz = assertAuthorized("ops_file_write", { path: pathVal, host: host ?? LOCAL_HOST }, ctx.authzView);
+			// 信任根/机密根不可写（仅本机）：file-write 授权不得用于改写 policy/token/config/审计/安装域——否则等价于自授权
+			if (host === undefined) ctx.pathGuard.assertWritable(pathVal);
 
 			const modeRaw = typeof p.mode === "string" ? p.mode.trim() : "";
 			const mode = /^[0-7]{3,4}$/.test(modeRaw) ? parseInt(modeRaw, 8) : undefined;

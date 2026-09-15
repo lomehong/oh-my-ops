@@ -1,5 +1,6 @@
-import { CredentialVault, FileOps, LogCollector, ProcessManager, ShellExec, ReloadableTargetPolicy, SshPool, loadTokenStore, normalizeTargetHost } from "@ops-pi/core";
+import { AuditLog, CredentialVault, FileOps, LogCollector, PathGuard, ProcessManager, ShellExec, ReloadableTargetPolicy, SshPool, loadTokenStore, normalizeTargetHost } from "@ops-pi/core";
 import { KnowledgeStore } from "./knowledge.ts";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { ExecOptions, ExecResult, PolicyRequest, Runner } from "@ops-pi/core";
 import { SandboxedShell } from "./sandbox.ts";
@@ -48,11 +49,15 @@ export class OpsContext {
 	readonly kb: KnowledgeStore;
 	readonly kbRepo: string | undefined;
 	readonly kbBranch: string;
+	/** 独立审计存储（与会话解耦；--no-session 下仍落盘） */
+	readonly audit: AuditLog;
+	/** 本机路径守卫：机密根不可读写、信任根不可写（仅 @local） */
+	readonly pathGuard: PathGuard;
 	readonly #remote = new Map<string, HostOps>();
 
 	constructor(
 		config: OpsConfig,
-		paths: { policyPath: string; tokenPath: string },
+		paths: { policyPath: string; tokenPath: string; auditPath?: string; configPath?: string },
 		l1: { files: FileOps; process: ProcessManager; log: LogCollector; shell: ShellExec } = {
 			files: new FileOps(),
 			process: new ProcessManager(),
@@ -72,6 +77,29 @@ export class OpsContext {
 		this.kb = new KnowledgeStore(config.knowledge?.dir ?? path.join(paths.policyPath, "..", "knowledge"));
 		this.kbRepo = config.knowledge?.repo;
 		this.kbBranch = config.knowledge?.branch ?? "main";
+
+		const privateDir = path.dirname(paths.policyPath);
+		const auditPath = paths.auditPath ?? path.join(privateDir, "audit", "ops-audit.jsonl");
+		this.audit = new AuditLog(auditPath);
+		const home = process.env.HOME ?? os.homedir();
+		this.pathGuard = new PathGuard({
+			// 机密根：读写皆拒——模型凭据/会话（$HOME/.omp）、SSH 私钥、vault 密文、批准令牌、omo 私有 HOME
+			secret: [
+				paths.tokenPath,
+				config.vault?.dbPath ?? "",
+				path.join(home, ".omp"),
+				path.join(home, ".ssh"),
+				path.join(os.homedir(), ".ssh"),
+				path.join(privateDir, "home"),
+			],
+			// 信任根：写拒——策略/令牌/配置/审计/运行时与扩展安装域（omo 部署下 privateDir = ~/.omo）
+			trust: [
+				privateDir,
+				paths.policyPath,
+				auditPath,
+				paths.configPath === undefined ? "" : path.dirname(paths.configPath),
+			],
+		});
 	}
 
 	/** 配置（供工具读取 vault 路径等运行时信息） */

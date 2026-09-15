@@ -29,7 +29,10 @@ export function registerLogTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			if (!path) throw new Error("[INTERNAL] 缺少 path");
 			// ★ 此前漏接 assertAuthorized——补齐统一授权接线（read 档免判定，但保持单一入口与审计一致性）
 			const authz = assertAuthorized("ops_log_tail", p, ctx.authzView);
-			const result = await opsFor(p.host).log.tailFile(path, { lines }, { signal, timeoutMs: 15_000 });
+			const ops = opsFor(p.host);
+			// 机密根不可读（仅本机）：read 档自动放行不覆盖此边界
+			if (ops.host === undefined) ctx.pathGuard.assertReadable(path);
+			const result = await ops.log.tailFile(path, { lines }, { signal, timeoutMs: 15_000 });
 			return {
 				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
 				details: { authz },
@@ -83,9 +86,13 @@ export function registerLogTools(pi: ExtensionAPI, ctx: OpsContext): void {
 		async execute(_toolCallId, params, signal) {
 			const p = params as Record<string, unknown>;
 			const authz = assertAuthorized("ops_log_grep", p, ctx.authzView);
-			const result = await opsFor(p.host).log.grep(
+			const ops = opsFor(p.host);
+			const paths = Array.isArray(p.paths) ? (p.paths as unknown[]).map(String) : [];
+			// grep -r 会遍历目录树：目标在机密根内、或机密根在目标之下（如 $HOME、/）均拒（仅本机）
+			if (ops.host === undefined) for (const target of paths) ctx.pathGuard.assertTreeReadable(target);
+			const result = await ops.log.grep(
 				String(p.pattern ?? ""),
-				(p.paths ?? []) as string[],
+				paths,
 				{ maxCount: p.maxCount !== undefined ? Number(p.maxCount) : 200 },
 				{ signal, timeoutMs: 30_000 },
 			);

@@ -26,7 +26,7 @@ export function registerShellTools(pi: ExtensionAPI, ctx: OpsContext, approval: 
 		}),
 		async execute(_toolCallId, params, signal) {
 			const cmd = readField(params, "command");
-			const timeout = clampTimeout(readField(params, "timeout", "30"), 600);
+			const timeout = readTimeoutSec(params, 30, 600);
 			const host = normalizeTargetHost(readField(params, "host") || undefined) ?? LOCAL_HOST;
 			const ops = ctx.forHost(host === LOCAL_HOST ? undefined : host);
 			// ③ 权威复核：返回授权来源（read|policy|token），原样落 details.authz 供审计
@@ -53,7 +53,7 @@ export function registerShellTools(pi: ExtensionAPI, ctx: OpsContext, approval: 
 		}),
 		async execute(_toolCallId, params, signal) {
 			const script = readField(params, "script");
-			const timeout = clampTimeout(readField(params, "timeout", "60"), 600);
+			const timeout = readTimeoutSec(params, 60, 600);
 			const host = normalizeTargetHost(readField(params, "host") || undefined) ?? LOCAL_HOST;
 			const ops = ctx.forHost(host === LOCAL_HOST ? undefined : host);
 			// ★ 修复：此前误用 "ops_shell_exec" 复核——档位相同但审计归属错误
@@ -72,7 +72,14 @@ function readField(source: unknown, key: string, fallback = ""): string {
 	for (const [k, v] of Object.entries(source)) { if (k === key && typeof v === "string") return v; }
 	return fallback;
 }
-function clampTimeout(raw: string, max: number): number {
-	const n = Number(raw);
-	return Number.isFinite(n) ? Math.min(n, max) : 30;
+/**
+ * 读取 timeout（秒）：schema 为 z.number()，宿主传入 number；兼容数字字符串。
+ * 缺失 / 非有限数 / ≤0 → fallback；超上限 → 截到 max。
+ */
+export function readTimeoutSec(source: unknown, fallback: number, max: number): number {
+	if (typeof source !== "object" || source === null) return fallback;
+	const raw: unknown = (source as Record<string, unknown>).timeout;
+	const n = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() !== "" ? Number(raw) : Number.NaN;
+	if (!Number.isFinite(n) || n <= 0) return fallback;
+	return Math.min(n, max);
 }
