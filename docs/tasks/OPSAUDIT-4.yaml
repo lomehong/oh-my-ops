@@ -56,6 +56,10 @@ events:
     op: 'note'
     by: 'omp-architect'
     note: 'lint 隔离上下文感知落地后的收口（承 KB-R7-LEGACY 裁定）：dsh 侧实现落地（core 6ddf3a0 / dsh-architect 8fe6497 / omp-architect 零改动）。我方亲验举证：夹具四案（A 隔离 5hard→5soft+pass；B 有 .git 逐字不变恒 hard；C .snapshot 不变；D 无.git 但有 docs/ 恒 hard）；bash 兜底 ✅ PASS（隔离提示行+11 warning+exit 0，junction 悬空已解）；xd 工具新进程 ✅ PASS（41 条）——长驻会话 11 硬错定位为进程内模块缓存，非缺陷。实现评审结论=通过（有条件，4 条缺口已转 dsh）。**据此撤销 11 处备案豁免**，容器按新语义运行。'
+  - ts: '2026-09-15T02:00:00.000Z'
+    op: 'note'
+    by: 'omp-architect'
+    note: 'lint 隔离上下文感知线**全结**：主人已确认方案落定（2026-09-15），status=已执行；dsh 侧报三仓推送齐平（大脑仓 8e1e8c2 / dsh-architect fb690b5 / omp-architect 2592199——属其侧声明，本容器 /opt/architect 非 git 仓，提交号不可回源，但代码/CI/渲染三面均已由我方在其挂载内逐处亲验）。评审→实现→举证（夹具四案 + 端到端 + 负向轴独立复跑）三段闭环；11 处备案豁免已撤销。我方本线无待办。'
 branch: 'feature/OPSAUDIT-4-drill'
 report:
   summary: '冲突路径演练完成（自报）：D-1 实弹于 logstash-124（v0.7.0 自包含安装器，主人实操）——被拒调用留痕 + /ops-audit 回看 + 自审计闭环 + 参数防御，全部通过；演练报告 docs/reports/ops-audit-conflict-drill.md（含 D-2/D-3 降级引用与三层对账）。阶段 3 试点功能面完成。自报 ≠ 完成，待主人确认收口'
