@@ -1161,6 +1161,7 @@ class ReplyLoop {
     this.sendReply = opts.sendReply;
     this.notify = opts.notify;
     this.log = opts.log;
+    this.selfDevice = opts.selfDevice ?? "";
     this.loadState();
     const scan = setInterval(() => this.scanPendingTimeout(), 60000);
     this.timers.push(scan);
@@ -1550,8 +1551,8 @@ ${msg.text}
       id: `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
       mode: "notify",
       text: replyText,
-      from: { device: "", sessionID, name: undefined },
-      to: { target: origMsg.from.name ?? origMsg.from.sessionID },
+      from: { device: this.selfDevice, sessionID, name: undefined },
+      to: { device: origMsg.from.device, target: origMsg.from.sessionID ?? origMsg.from.name },
       replyTo: origMsg.id,
       taskId: state.taskId ?? this.newTaskId(),
       traceId: state.traceId,
@@ -1608,8 +1609,8 @@ ${msg.text}
       id: `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
       mode: "notify",
       text: `[\u5FA1\u9A7F] ${reason}`,
-      from: { device: "", sessionID, name: undefined },
-      to: { target: origMsg.from.name ?? origMsg.from.sessionID },
+      from: { device: this.selfDevice, sessionID, name: undefined },
+      to: { device: origMsg.from.device, target: origMsg.from.sessionID ?? origMsg.from.name },
       replyTo: origMsg.id,
       taskId: origMsg.taskId ?? this.newTaskId(),
       traceId: origMsg.traceId,
@@ -2627,6 +2628,7 @@ function yuyi_default(pi) {
   const replyLoop = new ReplyLoop({
     autoRespond: process.env.YUYI_AUTO_RESPOND !== "false",
     taskFile: join9(LOG_DIR, "omp-tasks.json"),
+    selfDevice: device,
     inject: async (text, _sid, ctx) => {
       if (gateClient) {
         const g = await gateClient.gate(hub?.agentId ?? agentId ?? "", { op: "inject", sessionID });
@@ -2659,20 +2661,28 @@ function yuyi_default(pi) {
           return false;
         }
       }
+      const toLabel = `${reply.to?.device ? `${reply.to.device}:` : ""}${reply.to?.target ?? ""}`;
       try {
         const ack = await hub.send(reply);
         if (ack.ok) {
+          log(`回信已投递：msg=${reply.id} to=${toLabel} deliveredAs=${ack.deliveredAs ?? "ok"}`);
           if (reply.replyTo)
             hub.trace(reply.replyTo, "replied", `reply ${reply.id}`);
           return true;
         }
+        log(`回信投递失败（首次）：msg=${reply.id} to=${toLabel} detail=${ack.detail ?? "-"}`);
         await sleep(2000);
         const ack2 = await hub.send(reply);
-        if (ack2.ok && reply.replyTo)
-          hub.trace(reply.replyTo, "replied", "reply ${reply.id} (retry)");
-        return ack2.ok;
+        if (ack2.ok) {
+          log(`回信已投递（重试）：msg=${reply.id} to=${toLabel} deliveredAs=${ack2.deliveredAs ?? "ok"}`);
+          if (reply.replyTo)
+            hub.trace(reply.replyTo, "replied", `reply ${reply.id} (retry)`);
+          return true;
+        }
+        log(`回信投递失败（重试后）：msg=${reply.id} to=${toLabel} detail=${ack2.detail ?? "-"}`);
+        return false;
       } catch (err) {
-        log(`\u56DE\u4FE1\u5F02\u5E38: ${String(err)}`);
+        log(`回信异常: ${String(err)}`);
         return false;
       }
     },
