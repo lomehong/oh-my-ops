@@ -1,6 +1,6 @@
 id: 'OMOBRIDGE-2'
 title: 'yuyi 适配器回信路径修复——跨设备自动回信被 Hub 拒（回信目标无 agent 级解析）+ 契约对齐'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-15T10:35:18.421Z'
 accept:
@@ -21,4 +21,25 @@ events:
     op: 'claim'
     by: 'omp-architect'
     note: 'branch=feature/OMOBRIDGE-2'
+  - ts: '2026-09-15T10:59:13.532Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: 'yuyi 适配器回信路径修复完成（自报）：分支 feature/OMOBRIDGE-2，4 提交（fc463cf 夹具+记录 → cff62fe 回信帧寻址/from.device/结果日志 → 6002a7f 手工回信识别+目标归一 → 0719308 close 4008/4009）。改件 vendor/yuyi-omp-extension.js（= 部署件同源），已部署到运行扩展目录（md5 0675880b…）。夹具 11 项全绿（改动前 3/11），node --check PASS。'
 branch: 'feature/OMOBRIDGE-2'
+report:
+  summary: 'yuyi 适配器回信路径修复完成（自报）：分支 feature/OMOBRIDGE-2，4 提交（fc463cf 夹具+记录 → cff62fe 回信帧寻址/from.device/结果日志 → 6002a7f 手工回信识别+目标归一 → 0719308 close 4008/4009）。改件 vendor/yuyi-omp-extension.js（= 部署件同源），已部署到运行扩展目录（md5 0675880b…）。夹具 11 项全绿（改动前 3/11），node --check PASS。'
+  evidence:
+    - '桩夹具 scripts/probe-yuyi-reply-frame.mjs：改动前 3 通过/8 失败，桩 Hub 裁决复现生产原文「回信去向与原请求发送方不符：目标 "PEER-DEV-omp" 归属 agent (未解析)，原请求发送方为 peer-agent-id」；c2 后 7/11、c3 后 10/11、c4 后 11/11（exit 0）'
+    - '回信帧实测（夹具输出）：from={device:"HARNESS-DEV",sessionID:"omp_abc123"} to={device:"PEER-DEV",target:"omp_peer1"} replyTo=msg_peer_1 → 桩 Hub ok=true；日志「回信已投递：… deliveredAs=notify」'
+    - '别名手工回信：replyTo 自动补 msg_peer_2、目标归一为 {device:PEER-DEV,target:omp_peer1}、ack=ok；日志「手工回信检测」「手工回信目标归一」；重复回信数=0'
+    - 'close 语义：1006 触发重连（connections 2→3），4008 不重连（3→3）'
+    - '部署一致：md5sum vendor/… 与 ~/.omp/agent/extensions/… 均为 0675880b3bae25ba083f44866c22b0c5（旧件备份 /tmp/deployed-backup-yuyi-omp.js）'
+    - 'node --check vendor/yuyi-omp-extension.js PASS（每步提交前执行）'
+  pending:
+    - '端到端复验（真 Hub 跨设备 notify → 自动回信不再失败）需宿主重启会话加载新插件；运行中会话仍是旧插件内存态'
+    - '实现评审（architect-review 实现评审模式，建议非编码会话执行）+ 主人确认后方可合并 main'
+    - '上游分发：/dist/omp.js 0.1.0 与对端 omo-172-26-5-121 同源缺陷未修（本仓只修自用副本）'
+    - '偏离项待确认：⑦ 回信目标归一超出原 6 条清单（⑤ 的必要配套，证据在 3.3）'
+    - '备查发现（未改）：插件初始化 connect() 两次产生僵尸 Hub 连接'
+  at: '2026-09-15T10:59:13.531Z'
+  by: 'omp-architect'
