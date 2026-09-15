@@ -234,11 +234,14 @@ omo 自包含安装器部署下由启动器注入 `OMO_POLICY_PATH=~/.omo/policy
 ## 开发
 
 ```bash
-npm test                    # L1 测试（node:test）
-bun test packages/ops-extension/test/guards.test.ts \
-                        packages/ops-extension/test/platform.test.ts  # L2 测试
-npm run typecheck           # tsc strict
+npm test                    # L1（node --test）+ L2（bun test 指定文件），与 CI 同源
+npm run test:l1             # 仅 L1：packages/ops-core/test/*.test.ts —— 必须用 node:test 编写
+npm run test:l2             # 仅 L2：guards / platform / audit-view（bun test）
+npm run test:all            # 全量 bun test（含 Windows 上已知的平台性失败）
+npm run test:ci             # = test:l1 + test:l2 + typecheck:core，即 release.yml 测试 job
+npm run typecheck           # tsc strict（core + extension）
 npm run ledger:selftest     # 任务台账自检
+npm run hooks:install       # 启用 .githooks/pre-push：推送前本地跑 test:ci（OMO_SKIP_HOOKS=1 可跳过）
 
 # 运行时验收（omp 真机）
 bash packages/ops-extension/test/runtime/01-read-tier-probe.sh

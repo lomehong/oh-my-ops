@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# pre-push：按 CI 同一组脚本（test:l1 / test:l2 / typecheck:core）本地预跑，
+# 防止 "bun test 过、node --test 不过" 的 runner 分裂推到远程才暴露。
+# 启用：npm run hooks:install   跳过一次：OMO_SKIP_HOOKS=1 git push
+set -euo pipefail
+
+if [ "${OMO_SKIP_HOOKS:-}" = "1" ]; then
+	echo "pre-push: OMO_SKIP_HOOKS=1，跳过本地 CI 预跑"
+	exit 0
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+echo "pre-push: npm run test:ci（与 release.yml 测试 job 同源）"
+npm run test:ci

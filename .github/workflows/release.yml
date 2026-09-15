@@ -25,14 +25,16 @@ jobs:
       - name: 安装依赖
         run: npm install --ignore-scripts
 
+      # 三步与 package.json 的 test:l1 / test:l2 / typecheck:core 同源（本地 pre-push 跑同一组脚本），
+      # 避免 "本地 bun 过、CI node 不过" 的 runner 分裂（v0.8.0 首发即因此失败）
       - name: L1 测试
-        run: node --test packages/ops-core/test/*.test.ts
+        run: npm run test:l1
 
       - name: L2 测试
-        run: bun test packages/ops-extension/test/guards.test.ts packages/ops-extension/test/platform.test.ts packages/ops-extension/test/audit-view.test.ts
+        run: npm run test:l2
 
       - name: 类型检查
-        run: npx tsc -p packages/ops-core/tsconfig.json --noEmit
+        run: npm run typecheck:core
 
   release:
     name: 打包发布

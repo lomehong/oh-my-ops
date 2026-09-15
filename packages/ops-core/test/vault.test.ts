@@ -20,8 +20,10 @@ describe("CredentialVault", () => {
 		assert.deepEqual(vault.keys(), ["ssh/prod-db"]);
 		assert.equal(vault.read("ssh/prod-db"), "SECRET-1");
 		assert.ok(fs.existsSync(db));
-		const mode = fs.statSync(db).mode & 0o777;
-		assert.equal(mode, 0o600, "落盘权限须 0600");
+		if (process.platform !== "win32") {
+			const mode = fs.statSync(db).mode & 0o777;
+			assert.equal(mode, 0o600, "落盘权限须 0600");
+		}
 		vault.lock();
 	});
 

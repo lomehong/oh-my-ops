@@ -5,5 +5,5 @@
   "type": "module",
   "description": "omo L1：运维原子能力（纯 Node.js，不依赖 omp / Yuyi / 任何宿主）",
   "exports": { ".": "./src/index.ts" },
-  "scripts": { "test": "bun test" }
+  "scripts": { "test": "node --test test/*.test.ts" }
 }
