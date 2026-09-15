@@ -5,6 +5,7 @@ import { buildCapabilityLists } from "./approvals.ts";
 import { probeBwrap } from "./sandbox.ts";
 import { FILE_SCOPE_NOTE, formatAuditReport, parseAuditLimit, toAuditViews } from "./audit-view.ts";
 import { recordAudit, recordsToViews } from "./audit-sink.ts";
+import { explainAuthorization, formatExplain, formatLint, parseExplainArgs, runPolicyLint } from "./policy-explain.ts";
 
 /**
  * omo 系统提示词——在 `before_agent_start` 中注入。
@@ -144,6 +145,44 @@ export function registerOpsCommands(pi: ExtensionAPI, ctx: OpsContext): void {
 				return;
 			}
 			auditSelf(false);
+		},
+	});
+
+	pi.registerCommand("ops-policy", {
+		description: "策略可见性（只读）：`/ops-policy lint` 静态检查 policy.json 与令牌（缺省）；`/ops-policy explain <ops_工具> [key=value …]` 授权 dry-run（不消费令牌、不执行）",
+		handler: async (args, cmdCtx) => {
+			const raw = String(args ?? "").trim();
+			const [first, ...rest] = raw.split(/\s+/);
+			const sub = first ?? "";
+			const auditSelf = (isError: boolean, detail: string) =>
+				recordAudit(pi, ctx, { tool: "ops-policy", isError, ts: new Date().toISOString(), authz: "read", details: { sub: sub || "lint", detail } });
+			try {
+				if (sub === "" || sub === "lint") {
+					const report = runPolicyLint(ctx.targetPolicy.path, ctx.tokens.path);
+					cmdCtx.ui.notify(formatLint(report), report.summary.errors > 0 ? "error" : report.summary.warns > 0 ? "warning" : "info");
+					auditSelf(false, `errors=${report.summary.errors} warns=${report.summary.warns}`);
+					return;
+				}
+				if (sub === "explain") {
+					const parsed = parseExplainArgs(rest.join(" "));
+					if (!parsed.ok) {
+						cmdCtx.ui.notify(parsed.reason, "error");
+						auditSelf(true, parsed.reason);
+						return;
+					}
+					const report = explainAuthorization(ctx, parsed.tool, parsed.input);
+					const denied = report.verdict !== undefined && !report.verdict.allowed;
+					cmdCtx.ui.notify(formatExplain(report), report.contentGuard || denied || !report.registered ? "warning" : "info");
+					auditSelf(false, `${parsed.tool} → ${report.verdict?.allowed === undefined ? report.tier ?? "unregistered" : report.verdict.allowed ? "allow" : report.verdict.reason}`);
+					return;
+				}
+				cmdCtx.ui.notify(`未知子命令 ${sub}。用法：/ops-policy [lint] | /ops-policy explain <ops_工具> [key=value …]`, "error");
+				auditSelf(true, `unknown sub ${sub}`);
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : String(error);
+				cmdCtx.ui.notify(`ops-policy 失败：${msg}`, "error");
+				auditSelf(true, msg);
+			}
 		},
 	});
 

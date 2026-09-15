@@ -176,11 +176,16 @@ declare module "bun:test" {
 		toBeUndefined(): void;
 		toBeNull(): void;
 		toBeGreaterThan(expected: number): void;
+		toBeLessThan(expected: number): void;
 		toContain(expected: unknown): void;
 		toThrow(expected?: string | RegExp | (new (...args: never[]) => Error)): void;
 	}
 	export function describe(name: string, factory: () => void): void;
 	export function test(name: string, factory: () => void | Promise<void>): void;
+	export function beforeAll(factory: () => void | Promise<void>): void;
+	export function afterAll(factory: () => void | Promise<void>): void;
+	export function beforeEach(factory: () => void | Promise<void>): void;
+	export function afterEach(factory: () => void | Promise<void>): void;
 	export const expect: {
 		(value: unknown): Matchers<unknown> & {
 			rejects: { toThrow(expected?: string | RegExp | (new (...args: never[]) => Error)): Promise<void> };

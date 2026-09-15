@@ -93,6 +93,17 @@ omo serve --foreground # 前台启动
 omo status             # 查看运行状态
 ```
 
+### 策略可见性（编辑 policy.json 后先跑）
+
+```bash
+omo policy lint                                              # 静态检查：错别字字段、过期/不可解析时间、死规则、全权/shell 规则提示
+omo policy explain ops_service service=nginx action=restart  # 授权 dry-run：档位、策略请求、结论、逐条规则/令牌命中轨迹
+omo policy explain ops_shell_exec host=web-01 command="systemctl status nginx"
+```
+
+`lint` 把运行时**静默降级**的情形显式报出（解析失败→全拒、`expiresAt` 写错→规则永久失效、`action` 写成单数→全动作通配、`production:"true"` 字符串→变成放行规则）；退出码：有错误 = 1。
+`explain` 与 ①-a/①-b/③ 三层共用同一 `policyRequestFor` + `evaluateAuthorization`，看到的就是运行时会做的判定；不消费令牌、不执行工具；退出码：拒绝 = 2。会话内等价命令：`/ops-policy lint`、`/ops-policy explain …`。
+
 ### 跨 Agent 通信
 
 共载 Yuyi 适配器后，LLM 可直接调用 `yuyi_send`、`yuyi_peers` 等工具与其他 Agent 通信。
@@ -199,6 +210,8 @@ omo 自包含安装器部署下由启动器注入 `OMO_POLICY_PATH=~/.omo/policy
 | `/ops-health` | 快速健康检查 |
 | `/ops-status` | ops-pi 运行状态 |
 | `/ops-audit [n] [file]` | 回看最近 n 条 `ops_audit` 审计条目（只读；留空=20，上限 200，超限提示截断）。缺省读当前会话分支；加 `file` 读独立审计文件（跨会话） |
+| `/ops-policy [lint]` | 静态检查 `policy.json` 与 `approval-token.json`（只读；与 `omo policy lint` 同源） |
+| `/ops-policy explain <ops_工具> [k=v …]` | 授权 dry-run：档位、策略请求、结论、逐条规则/令牌轨迹（只读，不消费令牌） |
 
 ## 安全模型
 

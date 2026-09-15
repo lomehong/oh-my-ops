@@ -6,6 +6,7 @@
 #   omo serve                → 后台服务模式（RPC + 健康巡检轮询）
 #   omo serve --foreground   → 前台服务模式
 #   omo status               → ops-pi 状态
+#   omo policy lint|explain  → 策略静态检查 / 授权 dry-run（源码树内运行，需 bun）
 #   omo install              → 重新部署扩展
 #   其他参数                  → 直接透传给 omp
 
@@ -63,6 +64,14 @@ case "${1:-}" in
       echo "  沙箱：⚠ 未启用（进程级隔离）"
     fi
     ;;
+  policy)
+    shift
+    SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+    command -v bun >/dev/null 2>&1 || { echo "✗ omo policy 需要 bun"; exit 1; }
+    export OMO_POLICY_PATH="${OMO_POLICY_PATH:-$HOME/.ops-pi/policy.json}"
+    export OMO_TOKEN_PATH="${OMO_TOKEN_PATH:-$HOME/.ops-pi/approval-token.json}"
+    exec bun "$SCRIPT_DIR/packages/ops-extension/src/policy-cli.ts" "$@"
+    ;;
   install)
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
     if [ -f "$SCRIPT_DIR/scripts/install.sh" ]; then
@@ -80,6 +89,8 @@ case "${1:-}" in
     echo "  omo serve                后台服务模式（健康巡检轮询）"
     echo "  omo serve --foreground   前台服务模式"
     echo "  omo status               查看 ops-pi 状态"
+    echo "  omo policy lint          静态检查 policy.json / 令牌"
+    echo "  omo policy explain <ops_工具> [k=v …]   授权 dry-run"
     echo "  omo install              重新部署扩展"
     echo ""
     echo "其他参数透传给 omp："

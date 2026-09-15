@@ -201,7 +201,7 @@ export OMO_BIN="omo"
 # 有效配置路径固定到私有域（否则随启动目录漂移；config.json 显式值仍优先）
 export OMO_POLICY_PATH="\$OMO_DIR/policy.json"
 export OMO_TOKEN_PATH="\$OMO_DIR/approval-token.json"
-export OMO_TIPS=\$'/ops-audit [n] 回看最近 n 条审计条目（只读）\n/ops-inspect <主机> 执行标准巡检（只读）\n/ops-health 十秒健康快照；/ops-status 查看策略/沙箱/凭据状态\n只读 ops 工具自动放行；变更类需 Owner 预授权（policy.json）\n无人值守下生产目标变更一律拒绝——这是设计，不是故障\nomo serve 常驻后，cron/webhook 可直接触发巡检与诊断\nPress ctrl+r to search your prompt history\nCtrl+D exits but keeps your draft saved'
+export OMO_TIPS=\$'/ops-audit [n] 回看最近 n 条审计条目（只读）\n/ops-inspect <主机> 执行标准巡检（只读）\n/ops-health 十秒健康快照；/ops-status 查看策略/沙箱/凭据状态\n/ops-policy lint 检查 policy.json；/ops-policy explain <工具> k=v 授权 dry-run\n只读 ops 工具自动放行；变更类需 Owner 预授权（policy.json）\n无人值守下生产目标变更一律拒绝——这是设计，不是故障\nomo serve 常驻后，cron/webhook 可直接触发巡检与诊断\nPress ctrl+r to search your prompt history\nCtrl+D exits but keeps your draft saved'
 RUN="\$OMO_DIR/runtime/omp-single"
 EXT="\$OMO_DIR/extensions/ops-pi"
 YUYI="\$OMO_DIR/extensions/yuyi-omp-extension.js"
@@ -251,7 +251,7 @@ case "\${1:-}" in
     else
       echo "  服务：✗（omo serve 启动）"
     fi
-    [ -f "\$HOME/.ops-pi/policy.json" ] && echo "  策略：✓" || echo "  策略：⚠ 未配置（变更全拒）"
+    [ -f "\$OMO_POLICY_PATH" ] && echo "  策略：✓ \$OMO_POLICY_PATH（omo policy lint 可检查）" || echo "  策略：⚠ 未配置 \$OMO_POLICY_PATH（变更全拒）"
     grep -q '"token": "[^"]' "\$REAL_HOME/.yuyi/agent.json" 2>/dev/null && echo "  Yuyi：✓ 已配置" || echo "  Yuyi：✗ 缺 token（bash scripts/install.sh --token <token> 补上）"
     [ "\${OPS_PI_SANDBOX:-0}" = "1" ] && echo "  沙箱：✓" || echo "  沙箱：⚠" ;;
   update|upgrade)
@@ -263,6 +263,13 @@ case "\${1:-}" in
       fi
     done
     echo "✗ 升级失败：安装器下载不可达（可重试或手动下载 Release 包）"; exit 1 ;;
+  policy)
+    # 策略可见性（只读，宿主外运行）：lint 静态检查 / explain 授权 dry-run；与会话内 /ops-policy 同源
+    shift
+    BUN_BIN="\$(command -v bun 2>/dev/null || true)"; [ -z "\$BUN_BIN" ] && [ -x "\$REAL_HOME/.bun/bin/bun" ] && BUN_BIN="\$REAL_HOME/.bun/bin/bun"
+    [ -n "\$BUN_BIN" ] || { echo "✗ omo policy 需要 bun（安装器已装到 ~/.bun/bin；或在会话内用 /ops-policy）"; exit 1; }
+    [ -f "\$EXT/policy-cli.ts" ] || { echo "✗ 扩展缺 policy-cli.ts（重跑安装脚本）"; exit 1; }
+    exec "\$BUN_BIN" "\$EXT/policy-cli.ts" "\$@" ;;
   uninstall)
     echo "[omo] 卸载请执行：bash <Release 包解压目录>/scripts/install.sh --uninstall（会删除 \$OMO_DIR）" ;;
   help|--help|-h)
@@ -271,6 +278,8 @@ case "\${1:-}" in
     echo "  omo -p '巡检本机'        非交互执行"
     echo "  omo serve                后台服务（cron/webhook 入口）"
     echo "  omo status               状态"
+    echo "  omo policy lint          静态检查 policy.json / 令牌（错别字、过期、死规则、权限等级）"
+    echo "  omo policy explain <ops_工具> [k=v …]   授权 dry-run（不消费令牌、不执行）"
     echo "  omo update|upgrade       升级到最新 Release（安全通道；不触发上游自更新）"
     echo "  其他参数透传 omp" ;;
   *)

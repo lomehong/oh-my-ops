@@ -1,6 +1,16 @@
 import { LOCAL_HOST, OpsError, READ, normalizeTargetHost, tierOf } from "@ops-pi/core";
-import type { PolicyRequest } from "@ops-pi/core";
+import type { ActionVocabulary, PolicyRequest } from "@ops-pi/core";
 import { TIER_TABLE } from "./approvals.ts";
+
+/**
+ * policy.json `actions` 词表（与下方 policyRequestFor 映射同源，供 policy lint 识别死规则）：
+ *   serviceless  = 请求不带 service 维度的 action → 只能由**无 services** 的规则覆盖
+ *   serviceBound = 请求必带 service 维度的 action → 只能由**带 services** 的规则覆盖
+ */
+export const POLICY_ACTIONS: ActionVocabulary = {
+	serviceless: ["shell", "file-write", "vault-write", "vault-rekey", "kb-write", "kb-sync"],
+	serviceBound: ["start", "stop", "restart", "status", "enable", "disable", "exec", "ps", "logs", "up", "down", "undo"],
+};
 
 /**
  * 工具入参 → PolicyRequest 统一映射（单一事实源）。

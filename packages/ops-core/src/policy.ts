@@ -44,7 +44,7 @@ export interface PolicyFile {
 
 export class DefaultDenyPolicy implements TargetPolicy {
 	readonly isConfigured: boolean;
-	private readonly rules: readonly TargetRule[];
+	readonly rules: readonly TargetRule[];
 	constructor(rules: readonly TargetRule[]) {
 		this.rules = rules;
 		this.isConfigured = rules.length > 0;
@@ -69,9 +69,46 @@ export class DefaultDenyPolicy implements TargetPolicy {
 	}
 }
 
-function ruleActive(rule: TargetRule): boolean {
+export function ruleActive(rule: TargetRule, now: number = Date.now()): boolean {
 	if (rule.expiresAt === undefined) return true;
-	return Date.parse(rule.expiresAt) > Date.now();
+	return Date.parse(rule.expiresAt) > now;
+}
+
+/** 单条规则对请求的逐维度匹配轨迹（供 explain dry-run 展示；判定语义与 ruleCovers/ruleMarks 完全一致） */
+export interface RuleTrace {
+	index: number;
+	rule: TargetRule;
+	active: boolean;
+	hostMatch: boolean;
+	/** 放行语义（allows 的单条投影）：非生产规则 + 生效 + ruleCovers（规则未声明的维度 = 不覆盖） */
+	covers: boolean;
+	/** 生产标记语义（isProduction 的单条投影）：生产规则 + 生效 + ruleMarks（规则未声明的维度 = 通配） */
+	marks: boolean;
+	/** 放行失败的首个原因（expired / production / host / service / action），covers=true 时为 undefined */
+	failedOn?: "expired" | "production" | "host" | "service" | "action";
+}
+
+export function traceRule(rule: TargetRule, index: number, request: PolicyRequest, now: number = Date.now()): RuleTrace {
+	const active = ruleActive(rule, now);
+	const hostMatch = ruleMatchesHost(rule, request.host);
+	const covers = rule.production !== true && active && ruleCovers(rule, request);
+	const marks = rule.production === true && active && ruleMarks(rule, request);
+	let failedOn: RuleTrace["failedOn"];
+	if (!covers) {
+		if (!active) failedOn = "expired";
+		else if (rule.production === true) failedOn = "production";
+		else if (!hostMatch) failedOn = "host";
+		else if (
+			(request.service !== undefined && (rule.services === undefined || !rule.services.includes(request.service))) ||
+			(request.service === undefined && rule.services !== undefined)
+		) failedOn = "service";
+		else failedOn = "action";
+	}
+	return { index, rule, active, hostMatch, covers, marks, failedOn };
+}
+
+export function traceRules(rules: readonly TargetRule[], request: PolicyRequest, now: number = Date.now()): RuleTrace[] {
+	return rules.map((rule, index) => traceRule(rule, index, request, now));
 }
 
 function ruleMatchesHost(rule: TargetRule, host?: string): boolean {
@@ -169,6 +206,12 @@ export class ReloadableTargetPolicy implements TargetPolicy {
 	get isConfigured(): boolean {
 		this.refresh();
 		return this.current.isConfigured;
+	}
+
+	/** 当前生效的规则快照（懒刷新；供 explain/lint 只读展示） */
+	get rules(): readonly TargetRule[] {
+		this.refresh();
+		return this.current.rules;
 	}
 
 	isProduction(request: PolicyRequest): boolean {

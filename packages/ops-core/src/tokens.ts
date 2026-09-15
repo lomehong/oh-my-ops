@@ -36,7 +36,7 @@ export interface TokenStore {
  * 读取批准令牌库（静态快照）；文件缺失 → 空库（无令牌 = 无放行）。
  * ★ 令牌的「消费」不在此处——approval 被求值 3 次，消费必须发生在 ③ execute 复核通过之后。
  */
-export function loadTokenStore(path: string): TokenStore {
+export function loadTokenStore(path: string): ReloadableTokenStore {
 	return new ReloadableTokenStore(path);
 }
 
@@ -50,6 +50,11 @@ export class StaticTokenStore implements TokenStore {
 	find(request: PolicyRequest): { token: ApprovalToken; valid: true } | { valid: false } {
 		const token = this.tokens.find((candidate) => tokenActive(candidate) && tokenCovers(candidate, request));
 		return token === undefined ? { valid: false } : { token, valid: true };
+	}
+
+	/** 当前令牌快照（含已消费/过期；供 explain/lint 只读展示） */
+	list(): readonly ApprovalToken[] {
+		return this.tokens;
 	}
 
 	/** 内存消费：置 consumedAt，后续 find 不再命中 */
@@ -92,6 +97,12 @@ export class ReloadableTokenStore implements TokenStore {
 		return token === undefined ? { valid: false } : { token, valid: true };
 	}
 
+	/** 当前令牌快照（懒刷新；含已消费/过期；供 explain/lint 只读展示） */
+	list(): readonly ApprovalToken[] {
+		this.refresh();
+		return this.tokens;
+	}
+
 	consume(request: PolicyRequest): void {
 		this.refresh();
 		const found = this.find(request);
@@ -121,10 +132,30 @@ function readTokenFile(path: string): readonly ApprovalToken[] {
 	}
 }
 
-function tokenActive(token: ApprovalToken): boolean {
+export function tokenActive(token: ApprovalToken, now: number = Date.now()): boolean {
 	if (token.consumedAt !== undefined) return false; // 单次批准：已消费即失效
 	if (token.expiresAt === undefined) return true;
-	return Date.parse(token.expiresAt) > Date.now();
+	return Date.parse(token.expiresAt) > now;
+}
+
+/** 单枚令牌对请求的匹配轨迹（供 explain dry-run 展示；语义与 find 完全一致） */
+export interface TokenTrace {
+	token: ApprovalToken;
+	/** 未消费且未过期 */
+	active: boolean;
+	/** scope 逐段前缀覆盖请求 */
+	covers: boolean;
+	/** 不生效原因（consumed / expired），active=true 时为 undefined */
+	inactiveReason?: "consumed" | "expired";
+}
+
+export function traceTokens(tokens: readonly ApprovalToken[], request: PolicyRequest, now: number = Date.now()): TokenTrace[] {
+	return tokens.map((token) => {
+		const active = tokenActive(token, now);
+		let inactiveReason: TokenTrace["inactiveReason"];
+		if (!active) inactiveReason = token.consumedAt !== undefined ? "consumed" : "expired";
+		return { token, active, covers: tokenCovers(token, request), inactiveReason };
+	});
 }
 
 /**
@@ -132,7 +163,7 @@ function tokenActive(token: ApprovalToken): boolean {
  *   "@local" ⊂ 覆盖本机全部操作；"@local/nginx" 覆盖该服务任意 action；"@local/nginx/restart" 精确到动作。
  * host 维度必须存在（无 host 的请求无目标语义，不匹配任何令牌）。
  */
-function tokenCovers(token: ApprovalToken, request: PolicyRequest): boolean {
+export function tokenCovers(token: ApprovalToken, request: PolicyRequest): boolean {
 	if (request.host === undefined) return false;
 	const wanted = [request.host, request.service, request.action].filter((x) => x !== undefined);
 	const scope = token.scope.split("/");
