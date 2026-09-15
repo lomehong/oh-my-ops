@@ -1177,7 +1177,7 @@ class ReplyLoop {
     const state = this.inTurn.get(sessionID);
     if (!state)
       return;
-    return { msgId: state.msgId, taskId: state.taskId, senderSessionID: state.senderSessionID, fromAgentId: state.from };
+    return { msgId: state.msgId, taskId: state.taskId, senderSessionID: state.senderSessionID, senderDevice: state.senderDevice, senderName: state.senderName, fromAgentId: state.from };
   }
   clearStalePending(maxAgeMs = REPLY_PENDING_TIMEOUT_MS * 2) {
     const now = Date.now();
@@ -1291,7 +1291,7 @@ class ReplyLoop {
   }
   markManualReply(sessionID, replyTo) {
     const state = this.inTurn.get(sessionID);
-    if (state && state.replyTo === replyTo) {
+    if (state && state.msgId === replyTo) {
       state.manualReplied = true;
       this.log(`\u624B\u5DE5\u56DE\u4FE1\u68C0\u6D4B\uFF1AreplyTo=${replyTo} \u547D\u4E2D inTurn\uFF0C\u6291\u5236\u81EA\u52A8\u56DE\u4FE1`);
     }
@@ -1478,6 +1478,8 @@ ${msg.text}
       collector: [],
       seenMessages: new Set,
       senderSessionID,
+      senderDevice: msg.from.device,
+      senderName: msg.from.name,
       fromLocal,
       graceTimer: null,
       manualReplied: false,
@@ -3011,6 +3013,7 @@ ${sigNote}` : ""), (chunk) => pi.sendUserMessage(chunk, { deliverAs: "steer" }))
         return { content: [{ type: "text", text: "Hub \u672A\u8FDE\u63A5\uFF0C\u65E0\u6CD5\u53D1\u9001" }] };
       log(`yuyi_send \u53C2\u6570\uFF1Alen=${params.message.length} head=${JSON.stringify(params.message.slice(0, 40))} tail=${JSON.stringify(params.message.slice(-20))}`);
       const addr = parseAddress(params.to);
+      let replyTargetOverride = null;
       const expectReply = params.expectReply === true;
       if (expectReply && !alias) {
         alias = `omp-${sessionID.slice(-8)}`;
@@ -3021,7 +3024,7 @@ ${sigNote}` : ""), (chunk) => pi.sendUserMessage(chunk, { deliverAs: "steer" }))
         const target = replyLoop.getInTurnReplyTarget(sessionID);
         const isReplyToSender = target != null && (() => {
           const t = addr.target.toLowerCase();
-          return t === (target.senderSessionID ?? "").toLowerCase() || t === (target.fromAgentId ?? "").toLowerCase();
+          return t === (target.senderSessionID ?? "").toLowerCase() || t === (target.fromAgentId ?? "").toLowerCase() || t === (target.senderName ?? "").toLowerCase();
         })();
         if (target && isReplyToSender) {
           params.replyTo = target.msgId;
@@ -3029,6 +3032,10 @@ ${sigNote}` : ""), (chunk) => pi.sendUserMessage(chunk, { deliverAs: "steer" }))
             params.taskId = target.taskId;
           if (params.mode === "mail")
             params.mode = "notify";
+          if (target.senderSessionID) {
+            replyTargetOverride = { device: target.senderDevice, target: target.senderSessionID };
+            log(`手工回信目标归一：${addr.target} → ${target.senderDevice}:${target.senderSessionID}`);
+          }
         }
       }
       if (params.replyTo)
@@ -3038,7 +3045,7 @@ ${sigNote}` : ""), (chunk) => pi.sendUserMessage(chunk, { deliverAs: "steer" }))
         mode: params.mode ?? "notify",
         text: params.message,
         from: { device, sessionID, name: alias || undefined },
-        to: { owner: addr.owner, device: addr.device, target: addr.target },
+        to: replyTargetOverride ?? { owner: addr.owner, device: addr.device, target: addr.target },
         time: Date.now()
       };
       if (expectReply) {
