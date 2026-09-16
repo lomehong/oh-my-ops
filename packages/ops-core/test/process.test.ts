@@ -75,8 +75,11 @@ describe("ProcessManager.list（真实 ps 冒烟：argv 拼接必须正确）", 
 			},
 		};
 		await new ProcessManager(runner as never).list({ limit: 5 });
-		const eo = calls[0]?.[2] ?? "";
-		assert.ok(eo.includes(",--sort=-%cpu"), `-eo 取值未按逗号分隔 --sort：${eo}`);
-		assert.ok(!eo.includes("args--sort"), `字段与 --sort 粘连（旧缺陷形态）：${eo}`);
+		const argv = calls[0] ?? [];
+		const eo = argv[2] ?? "";
+		assert.equal(eo, "pid,user,%cpu,%mem,args", `-eo 取值应为纯字段列表：${eo}`);
+		assert.ok(!eo.includes("--sort"), `--sort 是选项，不得塞进 -eo 字段列表：${eo}`);
+		assert.ok(argv.includes("--sort=-%cpu"), `--sort=-%cpu 应作为独立 argv 元素：${JSON.stringify(argv)}`);
+		assert.ok(!argv.some((a) => a.includes("args--sort")), "字段与 --sort 不得粘连（旧缺陷形态）");
 	});
 });

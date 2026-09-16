@@ -27,9 +27,10 @@ export class ProcessManager {
 	}
 
 	async list(options: ProcessListOptions = {}, execOptions: ExecOptions = {}): Promise<ProcessInfo[]> {
-		// 字段与 --sort 必须各自作为逗号分隔项：旧写法 `join(",")}--sort=...` 漏逗号，
-		// 生成 `args--sort=-%cpu` 被 ps 当成字段描述符 → 恒定失败（2026-09-16 对端实测）
-		const argv = ["ps", "-eo", [...PS_FIELDS, "--sort=-%cpu"].join(","), "--no-headers"];
+		// `--sort` 是**选项**不是字段：必须作为独立 argv 元素（2026-09-16 两轮实测）——
+		// 旧写法 `${PS_FIELDS.join(",")}--sort=-%cpu` 漏逗号 → `args--sort=-%cpu` 当字段描述符；
+		// 而「补逗号后塞进 -eo 列表」同样非法（CI 实测 `improper AIX field descriptor`）。
+		const argv = ["ps", "-eo", PS_FIELDS.join(","), "--no-headers", "--sort=-%cpu"];
 		const result = await this.shell.exec(argv, { timeoutMs: 15_000, ...execOptions });
 		if (result.exitCode !== 0) {
 			throw new OpsError("EXEC_FAILED", `ps 退出码 ${result.exitCode}：${result.stderr.slice(0, 400)}`);
