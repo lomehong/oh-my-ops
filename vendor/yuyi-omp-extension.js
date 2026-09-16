@@ -448,7 +448,7 @@ class HubClient {
       }
       if (ev?.code === 4008 || ev?.code === 4009) {
         this.closed = true;
-        this.opts.log?.(`hub close ${ev.code}（${ev.code === 4008 ? "kicked by admin" : "replaced"}）：按协议不重连`);
+        this.opts.log?.(`hub close ${ev.code}\uFF08${ev.code === 4008 ? "kicked by admin" : "replaced"}\uFF09\uFF1A\u6309\u534F\u8BAE\u4E0D\u91CD\u8FDE`);
         return;
       }
       this.scheduleReconnect();
@@ -2672,24 +2672,24 @@ function yuyi_default(pi) {
       try {
         const ack = await hub.send(reply);
         if (ack.ok) {
-          log(`回信已投递：msg=${reply.id} to=${toLabel} deliveredAs=${ack.deliveredAs ?? "ok"}`);
+          log(`\u56DE\u4FE1\u5DF2\u6295\u9012\uFF1Amsg=${reply.id} to=${toLabel} deliveredAs=${ack.deliveredAs ?? "ok"}`);
           if (reply.replyTo)
             hub.trace(reply.replyTo, "replied", `reply ${reply.id}`);
           return true;
         }
-        log(`回信投递失败（首次）：msg=${reply.id} to=${toLabel} detail=${ack.detail ?? "-"}`);
+        log(`\u56DE\u4FE1\u6295\u9012\u5931\u8D25\uFF08\u9996\u6B21\uFF09\uFF1Amsg=${reply.id} to=${toLabel} detail=${ack.detail ?? "-"}`);
         await sleep(2000);
         const ack2 = await hub.send(reply);
         if (ack2.ok) {
-          log(`回信已投递（重试）：msg=${reply.id} to=${toLabel} deliveredAs=${ack2.deliveredAs ?? "ok"}`);
+          log(`\u56DE\u4FE1\u5DF2\u6295\u9012\uFF08\u91CD\u8BD5\uFF09\uFF1Amsg=${reply.id} to=${toLabel} deliveredAs=${ack2.deliveredAs ?? "ok"}`);
           if (reply.replyTo)
             hub.trace(reply.replyTo, "replied", `reply ${reply.id} (retry)`);
           return true;
         }
-        log(`回信投递失败（重试后）：msg=${reply.id} to=${toLabel} detail=${ack2.detail ?? "-"}`);
+        log(`\u56DE\u4FE1\u6295\u9012\u5931\u8D25\uFF08\u91CD\u8BD5\u540E\uFF09\uFF1Amsg=${reply.id} to=${toLabel} detail=${ack2.detail ?? "-"}`);
         return false;
       } catch (err) {
-        log(`回信异常: ${String(err)}`);
+        log(`\u56DE\u4FE1\u5F02\u5E38: ${String(err)}`);
         return false;
       }
     },
@@ -3039,7 +3039,7 @@ ${sigNote}` : ""), (chunk) => pi.sendUserMessage(chunk, { deliverAs: "steer" }))
             params.mode = "notify";
           if (target.senderSessionID) {
             replyTargetOverride = { device: target.senderDevice, target: target.senderSessionID };
-            log(`手工回信目标归一：${addr.target} → ${target.senderDevice}:${target.senderSessionID}`);
+            log(`\u624B\u5DE5\u56DE\u4FE1\u76EE\u6807\u5F52\u4E00\uFF1A${addr.target} \u2192 ${target.senderDevice}:${target.senderSessionID}`);
           }
         }
       }

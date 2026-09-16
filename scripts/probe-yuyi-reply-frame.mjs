@@ -166,6 +166,13 @@ await sleep(400);
 const ws = () => hub.sockets.filter((s) => s.gotWelcome && !s.closed).at(-1);
 check("桩握手：收到 hello 并回 welcome", Boolean(ws()), `connections=${hub.connections}`);
 
+// T12：bundle 必须为纯 ASCII —— 宿主加载器对 literal UTF-8 中文按非 UTF-8 解码，写日志会变乱码
+// （实测 2026-09-16：新加的中文日志行在生产日志里成 mojibake，而既有实现全部用 \uXXXX 转义故无恙）
+{
+	const nonAscii = [...readFileSync(BUNDLE).toString("latin1")].filter((c) => c.charCodeAt(0) > 127).length;
+	check("T12 bundle 纯 ASCII（防宿主加载致日志乱码）", nonAscii === 0, `非 ASCII 字节数=${nonAscii}`);
+}
+
 // 场景 A：入站 notify（无 replyTo）→ 自动回信（T2/T3/T4）
 console.log("\n[场景 A] 跨设备 notify 入站（无 replyTo）→ turn 末自动回信");
 const msg1 = { id: "msg_peer_1", mode: "notify", text: "请回执", taskId: "task_peer_1", from: { ...PEER }, to: { target: SELF.alias }, time: Date.now() };
