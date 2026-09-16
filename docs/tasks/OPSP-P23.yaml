@@ -1,6 +1,6 @@
 id: 'OPSP-P23'
 title: '错误回显可读性：长失败输出改「头 5 行 + 省略 + 尾 3 行」（traceback 场景可行动结论在尾部）+ 受限网络取包说明'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-16T10:08:30.468Z'
 accept:
@@ -16,4 +16,18 @@ events:
     op: 'claim'
     by: 'omp-architect'
     note: 'branch=feature/OPSP-P23'
+  - ts: '2026-09-16T10:09:30.190Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: '错误回显可读性修复完成（自报）：长失败输出改「头 5 行 + 省略 + 尾 3 行」（traceback 尾部结论不再被截）；bootstrap 头注补受限网络 API 资产端点取包说明。'
 branch: 'feature/OPSP-P23'
+report:
+  summary: '错误回显可读性修复完成（自报）：长失败输出改「头 5 行 + 省略 + 尾 3 行」（traceback 尾部结论不再被截）；bootstrap 头注补受限网络 API 资产端点取包说明。'
+  evidence:
+    - '绿：bun test read-tier-structure.test.ts → 14 pass（长输出形态 + traceback 用例断言尾部结论可见）；npm run test:ci 全绿（L2 60 pass）'
+    - '红（对端实测）：compose v1 daemon 不可达时返回 exit=255 + PyInstaller traceback，前 5 行全是栈帧，结论被截'
+  pending:
+    - '真机复验：对端升级后复验「daemon 不可达 + compose v1」场景可读性（其 dockerd 当前 stopped+disabled）'
+    - '发布 v0.9.6（待主人授权打 tag）'
+  at: '2026-09-16T10:09:30.189Z'
+  by: 'omp-architect'
