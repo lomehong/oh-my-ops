@@ -29,6 +29,18 @@ warn() { printf '%s  ⚠ %s%s\n' "$Y" "$1" "$N"; }
 die()  { printf '%s  ✗ %s%s\n' "$R" "$1" "$N" >&2; exit 1; }
 if ! grep -q "bootstrap-end" "$0" 2>/dev/null; then echo "  ✗ 脚本下载不完整（网络截断？）请重试" >&2; exit 1; fi
 
+# ── 参数预扫描：--resolve-only（仅解析并打印版本后退出；供运维排查与回归守卫用）
+#    其余参数原样透传给 install.sh（install.sh 对未知参数忽略）
+RESOLVE_ONLY=false
+_fwd=()
+for _a in "$@"; do
+  case "$_a" in
+    --resolve-only) RESOLVE_ONLY=true ;;
+    *)              _fwd+=("$_a") ;;
+  esac
+done
+set -- ${_fwd[@]+"${_fwd[@]}"}
+
 # ── 下载：多源回退（直连 → OMO_MIRROR → 内置镜像），重试 + 进度条
 CURL_QUIET=""; [ -t 2 ] && CURL_QUIET="--progress-bar" || CURL_QUIET="-sS"
 # --retry-all-errors 需 curl ≥ 7.71（老 curl 遇未知选项整条失败，logstash-124 实测）→ 能力探测后按需附加；
@@ -74,28 +86,51 @@ fetch() { # $1=github绝对路径  $2=输出文件
   （网络受限可设置镜像：OMO_MIRROR=https://ghproxy.cn …）"
 }
 # ── [1/4] 解析版本
+# 版本解析三策略（历史只认 302 重定向 → 代理/镜像以 200 直返页面时 basename 恒为 "latest"，
+# 对端 2026-09-16 实测三源全落 latest、安装被拒）：
+#   ① 资产重定向：releases/latest/download/install.sh 的 Location 头 → /download/vX.Y.Z
+#   ② 页面解析：releases/latest 返回 200 HTML 时抓页面内 /releases/tag/vX.Y.Z
+#   ③ 兜底：url_effective 的 basename（原有策略，直连正常时命中）
+resolve_version() { # $1=源基址（direct=https://github.com/owner/repo；镜像=镜像前缀+该 URL）
+  local base="$1" v
+  v="$(curl -fsSI --retry 2 --connect-timeout 8 "$base/releases/latest/download/install.sh" 2>/dev/null \
+        | tr -d '\r' | sed -n 's/^[Ll]ocation: //p' | tail -1 \
+        | grep -oE '/download/v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's#.*/download/##')"
+  semver_ok "${v:-}" && { printf '%s' "$v"; return 0; }
+  v="$(curl -fsSL --retry 2 --connect-timeout 8 "$base/releases/latest" 2>/dev/null \
+        | grep -oE '/releases/tag/v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's#.*/tag/##')"
+  semver_ok "${v:-}" && { printf '%s' "$v"; return 0; }
+  v="$(basename "$(curl -fsSL -o /dev/null -w '%{url_effective}' --retry 2 --connect-timeout 8 "$base/releases/latest" 2>/dev/null || true)")"
+  printf '%s' "${v:-}"
+}
 VER="${OMO_VERSION:-}"
 if [ -z "$VER" ]; then
   step "解析最新版本…"
-  # 逐源解析 releases/latest 重定向（直连 → OMO_MIRROR → 内置镜像）；非 semver 响应视为该源失败（A6）
   sources=()
   [ -n "${OMO_MIRROR:-}" ] && sources+=("$OMO_MIRROR")
   sources+=("direct" "https://gh-proxy.com" "https://ghproxy.cn")
   for src in "${sources[@]}"; do
     case "$src" in
-      direct) url="$BASE/releases/latest" ;;
-      *)      url="$src/$BASE/releases/latest" ;;
+      direct) base_url="$BASE" ;;
+      *)      base_url="$src/$BASE" ;;
     esac
-    VER="$(basename "$(curl -fsSL -o /dev/null -w '%{url_effective}' --retry 2 --connect-timeout 8 "$url" 2>/dev/null || true)")"
+    VER="$(resolve_version "$base_url")"
     if semver_ok "$VER"; then { ok "版本 $VER（via $src）"; break; }
     else [ -n "$VER" ] && warn "源 $src 返回非 semver 版本「$VER」，跳过"
     fi
   done
+  # 末位回退：GitHub API（直连被代理、镜像全挂时仍可能可达；未鉴权有 60 次/时/IP 限额）
+  if ! semver_ok "${VER:-}"; then
+    VER="$(curl -fsSL --retry 2 --connect-timeout 8 "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+          | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)"
+    semver_ok "${VER:-}" && ok "版本 $VER（via api.github.com）"
+  fi
 fi
-[ -n "$VER" ] || die "无法解析最新版本。手动指定：OMO_VERSION=v0.6.1 重试"
-semver_ok "$VER" || die "版本「$VER」非 semver——拒绝下载。手动指定：OMO_VERSION=v0.6.1 重试"
+[ -n "$VER" ] || die "无法解析最新版本。手动指定：OMO_VERSION=v0.9.1 重试"
+semver_ok "$VER" || die "版本「$VER」非 semver——拒绝下载。手动指定：OMO_VERSION=v0.9.1 重试"
 case "$VER" in v*) ;; *) VER="v$VER" ;; esac
 ok "版本 $VER"
+if [ "$RESOLVE_ONLY" = true ]; then printf '%s\n' "$VER"; exit 0; fi
 
 # ── [2/4] 下载 + 校验
 step "下载 $VER（tarball + sha256）…"
