@@ -21,7 +21,7 @@
 
 | 缺陷 | 根因 | 落点 |
 |---|---|---|
-| ① `ops_process_list` 恒定失败 | `${PS_FIELDS.join(",")}--sort=-%cpu` **漏逗号** → `args--sort=-%cpu` 被 ps 当字段描述符 | `packages/ops-core/src/process.ts`：`[...PS_FIELDS, "--sort=-%cpu"].join(",")` |
+| ① `ops_process_list` 恒定失败 | `${PS_FIELDS.join(",")}--sort=-%cpu` **漏逗号** → `args--sort=-%cpu` 被 ps 当字段描述符；**注意：补逗号后塞进 `-eo` 字段列表同样非法**（`--sort` 是选项而非字段）——见 §三 CI 证据 | `packages/ops-core/src/process.ts`：`["ps", "-eo", PS_FIELDS.join(","), "--no-headers", "--sort=-%cpu"]`（`--sort` **独立 argv**） |
 | ② `ops_docker_ps` 吞 daemon 不可达 | `text: result.stdout \|\| "(no containers)"` 未判 exitCode/stderr（同文件另有 3 种口径） | 新增 `packages/ops-extension/src/tools/exec-output.ts` 的 `fmtExecResult()`；统一 **13 处**（docker-k8s 8 / read-only 3 / service 2） |
 | ③ `ops_log_grep` 字段错位 | 单路径时部分 grep 实现不加文件名前缀，而解析用惰性正则 `/^(.+?):(\d+):(.+)$/` → 锚到行内容里的 `:数字:`，**静默产出貌似合理的错位数据** | `packages/ops-core/src/log.ts`：`-rnH` 强制前缀 + 已知路径锚定（file 必须落在给定 paths 之内）+ 无前缀时单路径显式分支；无法锚定则丢弃 |
 | ④ `ops_docker_compose` 无诊断 | 直接执行 `docker compose -f …`；compose 缺件时回显 docker usage（约 60 行）；文件名硬编码 | `docker-k8s.ts`：预探测 `docker compose version` → 缺失直说；`file` 参数可选（缺省 `docker-compose.yml`） |
@@ -36,10 +36,13 @@
 | 绿（单元/结构） | `node --test process.test.ts` → 5 pass / 2 skipped（本容器无 ps 二进制）；`node --test log.test.ts` → 7 pass / 1 skipped；`bun test read-tier-structure.test.ts` → 5 pass |
 | 全量门 | `npm run test:ci`（L1 132 pass；L2 51 pass ×4 文件；typecheck；install 守卫；bootstrap 守卫）全绿 |
 | 真机对照 | 对端 v0.9.2 冒烟：18 项中 11 ✅ / 3 ❌ / 2 ⚠️ / 3 ➖（环境缺件）；本批修复后其 ❌/⚠️ 四类应全部转 ✅ |
+| **CI 真机守卫（关键）** | v0.9.3 首轮 CI `测试` job **failure**：`ps 退出码 1：error: improper AIX field descriptor` —— 证明「补逗号塞进 -eo 列表」那版修法**错误**（`--sort` 是选项不是字段）；`打包发布` 因此 **skipped（未发布）**。修正为独立 argv 后：`node --test process.test.ts` 5 pass/2 skip（本地无真实 ps）、`npm run test:ci` 全绿、CI run 35070274266 两 job success |
+| 守卫价值实证 | 本容器无真实 `ps`（bash 侧 ps 为宿主内建）→ 本地必然跳过；**CI（ubuntu/procps）有真实 ps 才拦住错误修法**。这正是对端元结论「守卫从『能加载』扩到『能跑对』」的直接收益 |
+| 发布修正 | 首轮 tag 未产出 Release（安全）；已删除并按修正后提交重打 `v0.9.3`（8460169），CI 复跑成功、Release 已发布（2026-09-16T07:47:47Z，三资产齐） |
 
 ## 四、未兑现项
 
-- **真机复验**：需 v0.9.3 发布后由对端重跑 18 项矩阵（我方无 docker/kubectl 环境，docker/compose 分支用脚本化 Runner 断言，未真机跑）。
+- **真机复验**：需 v0.9.3 发布后由对端重跑 18 项矩阵（v0.9.3 已于 2026-09-16T07:47:47Z 发布，含本修正）（我方无 docker/kubectl 环境，docker/compose 分支用脚本化 Runner 断言，未真机跑）。
 - **`PS_AVAILABLE` 跳过**：本容器无真实 `ps` 二进制（bash 侧 ps 为宿主内建），真实 ps 冒烟在 CI/真机执行；本地以 argv 形态守卫兜底。
 - **未纳入本批**：对端另报的 2 条（SshPool host key 策略与文档不符、PathGuard 机密根漏真实 home `.ssh`）→ 单独立项 `OPSP-P21`，与本批一并发 v0.9.3。
 - **已知未修**：启动时 7 条 `Custom tool load failed`（宿主扫描 `$EXT/ops-pi/tools/*.ts`）。
