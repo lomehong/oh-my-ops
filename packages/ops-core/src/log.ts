@@ -54,15 +54,32 @@ export class LogCollector {
 
 	/** 多文件 grep（正则） */
 	async grep(pattern: string, paths: readonly string[], opts: { context?: number; maxCount?: number } = {}, execOpts: ExecOptions = {}): Promise<GrepResult> {
-		const argv = ["grep", "-rn", "--include=*", pattern, ...paths];
+		// -H 强制每条匹配都带文件名前缀：部分 grep 实现（或环境差异）在单文件路径时不加前缀，
+		// 会让下方解析锚到行内容里的 `:数字:` 产出错位数据（2026-09-16 对端实测）
+		const argv = ["grep", "-rnH", "--include=*", pattern, ...paths];
 		if (opts.maxCount !== undefined) argv.splice(3, 0, "-m", String(opts.maxCount));
 		const result = await this.shell.exec(argv, { timeoutMs: 30_000, ...execOpts });
 		const matches: GrepResult["matches"] = [];
+		// 已知路径锚定：file 必须落在给定 paths（自身或其后代）之内，否则视为不可信
+		const underGiven = (file: string): boolean =>
+			paths.some((p) => file === p || file.startsWith(p.endsWith("/") ? p : `${p}/`));
 		for (const line of result.stdout.split("\n")) {
-			const match = line.match(/^(.+?):(\d+):(.+)$/);
-			if (match !== null) {
-				matches.push({ file: match[1]!, line: Number.parseInt(match[2]!, 10), text: match[3]!.trim() });
+			if (line === "") continue;
+			const match = line.match(/^(.+?):(\d+):(.*)$/);
+			if (match === null) continue;
+			let file = match[1]!;
+			let lineNo = Number.parseInt(match[2]!, 10);
+			let text = match[3]!.trim();
+			if (!underGiven(file)) {
+				// 兜底：输出无文件名前缀（单路径且实现未加 -H）→ 首段是行号、其余是行内容
+				const only = paths.length === 1 ? paths[0] : undefined;
+				const plain = only === undefined ? null : line.match(/^(\d+):(.*)$/);
+				if (plain === null) continue; // 无法锚定 → 丢弃（宁缺勿错，不产出貌似合理的错位数据）
+				file = only!;
+				lineNo = Number.parseInt(plain[1]!, 10);
+				text = plain[2]!.trim();
 			}
+			matches.push({ file, line: lineNo, text });
 		}
 		return { matches, totalMatches: matches.length };
 	}

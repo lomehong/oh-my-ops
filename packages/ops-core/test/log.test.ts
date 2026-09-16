@@ -39,3 +39,43 @@ describe("LogCollector", () => {
 		assert.ok(result.matches.some((m) => m.file.includes("b.log")));
 	});
 });
+
+describe("LogCollector.grep 解析（防字段错位：2026-09-16 对端实测）", () => {
+	const POSIX_ONLY2 = process.platform === "win32" ? "win32：依赖 POSIX 命令（grep）" : false;
+	const stub = (stdout: string) =>
+		({ exec: async () => ({ stdout, stderr: "", exitCode: 0, durationMs: 0, truncated: false }) }) as never;
+
+	it("单路径、带文件名前缀（-H 形态）→ 正确切分", async () => {
+		const g = new LogCollector(stub("/etc/passwd:2:bin:x:1:1:bin:/bin:/sbin/nologin\n"));
+		const r = await g.grep("nologin", ["/etc/passwd"]);
+		assert.deepStrictEqual(r.matches[0], { file: "/etc/passwd", line: 2, text: "bin:x:1:1:bin:/bin:/sbin/nologin" });
+	});
+
+	it("★ 单路径、无文件名前缀 → 按行号锚定，不得产出错位数据", async () => {
+		const g = new LogCollector(stub("2:bin:x:1:1:bin:/bin:/sbin/nologin\n"));
+		const r = await g.grep("nologin", ["/etc/passwd"]);
+		assert.deepStrictEqual(r.matches[0], { file: "/etc/passwd", line: 2, text: "bin:x:1:1:bin:/bin:/sbin/nologin" });
+	});
+
+	it("多路径、无前缀 → 无法锚定则丢弃（宁缺勿错）", async () => {
+		const g = new LogCollector(stub("2:bin:x:1:1:bin:/bin:/sbin/nologin\n"));
+		const r = await g.grep("nologin", ["/etc/passwd", "/etc/group"]);
+		assert.equal(r.matches.length, 0);
+	});
+
+	it("目录递归输出（dir/sub/file）→ 视为已知路径之内，正常保留", async () => {
+		const g = new LogCollector(stub("/var/log/nginx/access.log:7:hit\n"));
+		const r = await g.grep("hit", ["/var/log/nginx"]);
+		assert.deepStrictEqual(r.matches[0], { file: "/var/log/nginx/access.log", line: 7, text: "hit" });
+	});
+
+	it("真实 grep：单路径结构断言（file/line/text 三者对齐）", { skip: POSIX_ONLY2 }, async () => {
+		const f = "/tmp/ops-log-test-single.log";
+		fs.writeFileSync(f, "alpha\nbeta nologin\ngamma\n");
+		const r = await new LogCollector().grep("nologin", [f], { maxCount: 5 }, { timeoutMs: 10_000 });
+		assert.equal(r.matches.length, 1);
+		assert.equal(r.matches[0]!.file, f);
+		assert.equal(r.matches[0]!.line, 2);
+		assert.equal(r.matches[0]!.text, "beta nologin");
+	});
+});
