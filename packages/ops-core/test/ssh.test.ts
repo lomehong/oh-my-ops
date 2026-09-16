@@ -116,3 +116,29 @@ describe("SshPool", () => {
 		assert.ok(runner.calls.some((argv) => argv.includes("-O") && argv.includes("exit")));
 	});
 });
+
+describe("SshPool host key 策略（缺陷 5：文档承诺 TOFU，实现此前无任何 host key 选项）", () => {
+	it("支持 accept-new（OpenSSH ≥7.6）→ StrictHostKeyChecking=accept-new + 受管 known_hosts", () => {
+		const pool = new SshPool({}, new GateRunner(), "/tmp/cp-hk-a", true);
+		const wrapped = pool.wrap("web-01", ["uptime"]);
+		assert.ok(wrapped.includes("StrictHostKeyChecking=accept-new"), "应带 accept-new");
+		assert.ok(wrapped.some((o) => o === "UserKnownHostsFile=/tmp/cp-hk-a/known_hosts"), "应指向受管 known_hosts");
+		assert.deepStrictEqual(pool.hostKeyPolicy().mode, "accept-new");
+	});
+
+	it("不支持 accept-new（el7 仅 7.4）→ 退化为 no + 受管 known_hosts（仍记录指纹）", () => {
+		const pool = new SshPool({}, new GateRunner(), "/tmp/cp-hk-b", false);
+		const wrapped = pool.wrap("web-01", ["uptime"]);
+		assert.ok(wrapped.includes("StrictHostKeyChecking=no"), "应退化为 no");
+		assert.ok(wrapped.some((o) => o === "UserKnownHostsFile=/tmp/cp-hk-b/known_hosts"));
+		assert.deepStrictEqual(pool.hostKeyPolicy().mode, "no+managed-known-hosts");
+	});
+
+	it("调用方 options 可覆盖（OpenSSH 首值生效 → 默认项排在 caller 之后）", () => {
+		const pool = new SshPool({ options: ["StrictHostKeyChecking=yes"] }, new GateRunner(), "/tmp/cp-hk-c", true);
+		const wrapped = pool.wrap("web-01", ["uptime"]);
+		const caller = wrapped.indexOf("StrictHostKeyChecking=yes");
+		const fallback = wrapped.indexOf("StrictHostKeyChecking=accept-new");
+		assert.ok(caller >= 0 && fallback >= 0 && caller < fallback, "caller 的取值必须排在默认值之前");
+	});
+});

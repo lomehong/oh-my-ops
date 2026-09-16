@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { DefaultDenyPolicy, FileOps, LOCAL_HOST, LogCollector, ProcessManager, StaticTokenStore } from "@ops-pi/core";
 import type { ExecOptions, ExecResult, Runner } from "@ops-pi/core";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { registerDockerTools } from "../src/tools/docker-k8s.ts";
+import { registerReadOnlyTools } from "../src/tools/read-only.ts";
 import { makeApprovalFactory } from "../src/approvals.ts";
 import { standardAuthzView } from "../src/guards.ts";
-import { OpsContext } from "../src/context.ts";
+import { OpsContext, realUserHome } from "../src/context.ts";
 import type { OpsContext as OpsContextType } from "../src/context.ts";
 
 /**
@@ -107,5 +111,34 @@ describe("ops_docker_compose：缺件给诊断，不回显 usage 转储", () => 
 		const runner2 = new ScriptedRunner([{ exitCode: 0 }, { exitCode: 0, stdout: "ok" }]);
 		await makeDocker(runner2).tools.get("ops_docker_compose")!.execute("c3", { projectDir: "/srv/app", file: "compose.yaml", action: "ps" });
 		expect(runner2.calls[1]!.cmd).toEqual(["docker", "compose", "-f", "/srv/app/compose.yaml", "ps"]);
+	});
+});
+
+describe("PathGuard 机密根：真实用户 home 的 .ssh（缺陷 6：HOME 重定向导致真实 home 漏出）", () => {
+	test("★ 真实 home 的 .ssh 必须被拒（不得可列）", async () => {
+		// 复刻 omo 部署：HOME 被重定向到私有域；Node 的 os.homedir() 优先 $HOME → 旧实现下
+		// join(home,".ssh") 与 join(os.homedir(),".ssh") 塌缩，真实 home 的 .ssh 落到 secret 之外
+		const base = fs.mkdtempSync(path.join(os.tmpdir(), "omo-secret-"));
+		const omo = path.join(base, ".omo");
+		const fakeHome = path.join(omo, "home");
+		fs.mkdirSync(path.join(fakeHome, ".omp"), { recursive: true });
+		fs.writeFileSync(path.join(omo, "policy.json"), JSON.stringify({ targets: [{ host: LOCAL_HOST, actions: ["shell", "file-write"] }] }));
+		const saved = process.env.HOME;
+		process.env.HOME = fakeHome;
+		let ctx: OpsContextType;
+		try {
+			ctx = new OpsContext(
+				{ policyPath: path.join(omo, "policy.json"), tokenPath: path.join(omo, "approval-token.json") },
+				{ policyPath: path.join(omo, "policy.json"), tokenPath: path.join(omo, "approval-token.json"), configPath: path.join(base, "proj", ".ops-pi", "config.json") },
+				{ files: new FileOps(), process: new ProcessManager(), log: new LogCollector(), shell: new ScriptedRunner([]) as never },
+			);
+		} finally {
+			if (saved === undefined) delete process.env.HOME;
+			else process.env.HOME = saved;
+		}
+		const pi = new FakePi();
+		registerReadOnlyTools(pi as never, ctx);
+		const realHome = realUserHome();
+		await expect(pi.tools.get("ops_file_ls")!.execute("p1", { path: path.join(realHome, ".ssh") })).rejects.toThrow(/机密根/);
 	});
 });

@@ -36,6 +36,17 @@ class SshRemoteRunner implements Runner {
  * P7：forHost(host) 返回目标主机的能力束——本机复用全局实例；远程主机经 SshPool
  * （ControlMaster 复用，按主机缓存实例），policy.json 需有对应 host 的授权规则。
  */
+/** 真实用户 home（不随 $HOME 漂移）：POSIX 取 getpwuid；极端环境（无 passwd 条目）退回 $HOME */
+export function realUserHome(): string {
+	try {
+		const h = os.userInfo().homedir;
+		if (typeof h === "string" && h !== "") return h;
+	} catch {
+		/* os.userInfo 在无 passwd 条目的环境下会抛 → 退回 */
+	}
+	return process.env.HOME ?? os.homedir();
+}
+
 export class OpsContext {
 	readonly targetPolicy: ReloadableTargetPolicy;
 	readonly tokens: ReturnType<typeof loadTokenStore>;
@@ -82,14 +93,20 @@ export class OpsContext {
 		const auditPath = paths.auditPath ?? path.join(privateDir, "audit", "ops-audit.jsonl");
 		this.audit = new AuditLog(auditPath);
 		const home = process.env.HOME ?? os.homedir();
+		// 真实用户 home：omo 启动器把 HOME 重定向到私有域，而 Node 的 os.homedir() 在 POSIX 下**优先 $HOME**
+		// → `join(home, ".ssh")` 与 `join(os.homedir(), ".ssh")` 会塌缩成同一路径（~/.omo/home/.ssh），
+		// 真实用户家目录的 `.ssh` 反而落在 secret/trust 之外（对端 2026-09-16 实测：ops_file_ls 可列它）。
+		// 改用 getpwuid 口径（os.userInfo().homedir）取真实 home，不随 $HOME 漂移。
+		const realHome = realUserHome();
 		this.pathGuard = new PathGuard({
-			// 机密根：读写皆拒——模型凭据/会话（$HOME/.omp）、SSH 私钥、vault 密文、批准令牌、omo 私有 HOME
+			// 机密根：读写皆拒——模型凭据/会话（$HOME/.omp）、SSH 私钥（真实 home 与私有 home 两处）、
+			// vault 密文、批准令牌、omo 私有 HOME
 			secret: [
 				paths.tokenPath,
 				config.vault?.dbPath ?? "",
 				path.join(home, ".omp"),
 				path.join(home, ".ssh"),
-				path.join(os.homedir(), ".ssh"),
+				path.join(realHome, ".ssh"),
 				path.join(privateDir, "home"),
 			],
 			// 信任根：写拒——策略/令牌/配置/审计/运行时与扩展安装域（omo 部署下 privateDir = ~/.omo）
