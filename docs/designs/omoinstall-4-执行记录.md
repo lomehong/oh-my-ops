@@ -32,10 +32,11 @@
 | 全量门 | `npm run test:ci`（L1 + L2 + typecheck:core + **test:install**）全绿 |
 | 既有修复未回退 | yuyi 夹具 15/15 |
 | 语法 | `bash -n scripts/install.sh` PASS |
+| **v0.9.1 发布包全量复验** | 下载 `oh-my-ops-v0.9.1.tar.gz`（127,523,222B）→ `sha256sum -c` 对发布侧 `.sha256`（`7f2b5beb…`）**OK**；包内 `scripts/install.sh` 含 `CORE_DST`×5 与启动器转义修复；包内 `vendor/yuyi-omp-extension.js` md5 `5f4df589…`（yuyi 修复保留）；包内含 `scripts/probe-install-ops-core.sh` 与 `omp-single` |
 
 ## 四、未兑现项
 
-- **v0.9.1 发布**：需主人授权打 tag（`release.yml` 仅 `v*` tag 触发）——发布后对端可重装恢复 ops 通道。
+- **v0.9.1 发布**：✅ 已完成（tag `v0.9.1` → 主干 `18b47b0`；CI run 35059903972 两 job success；发布包全量复验通过，见 §三）。
 - **对端验收**：对端以 `ops_*` 工具可用 + `omo serve` 后台可用为验收；本记录提交时对端尚未执行（其变更需 Owner 预授权）。
 - **未修（已登记）**：启动时 7 条 `Custom tool load failed: "Tool must export a default function"` 噪音（宿主把 `$EXT/ops-pi/tools/*.ts` 当自定义工具扫描）——既有、非本次病因，需先确认宿主扫描规则再定修法。
 - **止血已同步对端**：`rm -rf .../@ops-pi/core` 后重装，或 `core/` 根加 `export * from "./src/index.ts";` shim（两条我均本地验证等价可用）。
