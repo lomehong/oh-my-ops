@@ -1,6 +1,6 @@
 id: 'OMOINSTALL-4'
 title: 'v0.9.0 生产回归热修：ops-core 安装未整包替换（升级路径 ops_* 全灭）+ 启动器 $0/$@ 生成期展开'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-16T05:01:35.962Z'
 accept:
@@ -22,13 +22,17 @@ events:
     op: 'report'
     by: 'omp-architect'
     note: 'v0.9.0 生产回归热修完成（自报）：① install.sh 的 ops-core 安装改整包替换（rm -rf + package.json + src/），修复升级路径 ops_* 全灭；② 启动器 heredoc 内 $0/$@ 转义，修复 omo serve 后台写死安装器路径；③ 新增沙箱回归守卫并并入 test:ci。已合并 main（18b47b0）并发布 v0.9.1（tag → 18b47b0）。'
+  - ts: '2026-09-16T09:48:13.599Z'
+    op: 'confirm'
+    by: '主人'
+    note: '未兑现项：真机复验已由对端完成（ops_* 恢复 + omo serve 可用）；7 条启动噪音仍跨任务登记未修'
 branch: 'feature/OMOINSTALL-4'
 report:
   summary: 'v0.9.0 生产回归热修完成（自报）：① install.sh 的 ops-core 安装改整包替换（rm -rf + package.json + src/），修复升级路径 ops_* 全灭；② 启动器 heredoc 内 $0/$@ 转义，修复 omo serve 后台写死安装器路径；③ 新增沙箱回归守卫并并入 test:ci。已合并 main（18b47b0）并发布 v0.9.1（tag → 18b47b0）。'
   evidence:
     - '回归守卫 scripts/probe-install-ops-core.sh：对旧安装器（v0.9.0 HEAD 版）红 7 项，含「升级后解析异常（回归复现）：CredentialVault」——与对端生产症状一致；对修复件全绿 10 项'
-    - '全量门 npm run test:ci（L1+L2+typecheck:core+test:install）全绿；bash -n scripts/install.sh PASS；yuyi 回信夹具 15/15（既有修复未回退）'
-    - '推送：905074d..18b47b0 main -> main（pre-push 自动跑 test:ci 全绿）'
+    - '全量门 npm run test: 'ci（L1+L2+typecheck:core+test:install）全绿；bash -n scripts/install.sh PASS；yuyi 回信夹具 15/15（既有修复未回退）'''
+    - '推送：905074d..18b47b0 main -> main（pre-push 自动跑 test: 'ci 全绿）'''
     - 'v0.9.1 发布：CI run 35059903972 测试/打包发布 均 success；资产 install.sh + oh-my-ops-v0.9.1.tar.gz(127,523,222B) + .sha256；tag 内容抽验：install.sh 含 CORE_DST/rm -rf/package.json+src 与 exec \"\$0\" 转义，probe-install-ops-core.sh 在包内（API 200）'
     - '已通知对端 omo-172-26-5-121：重装 v0.9.1 即恢复，验收判据 ops_* 可用 + 无 AuditLog 报错 + omo serve 后台可用（其变更需 Owner 预授权）'
   pending:
@@ -37,3 +41,5 @@ report:
     - '未修已登记：启动时 7 条 Custom tool load failed 噪音（宿主扫描 $EXT/ops-pi/tools/*.ts），需先确认宿主扫描规则'
   at: '2026-09-16T05:37:39.213Z'
   by: 'omp-architect'
+confirmedBy: '主人'
+confirmedVia: '会话确认 2026-09-16（主人「同意1」）：对端装 v0.9.1 后 ops 通道恢复、18 项矩阵全绿；修复含整包替换（package.json+src/）与启动器 $0/$@ 转义，守卫已入 test:ci'
