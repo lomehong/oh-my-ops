@@ -130,6 +130,19 @@ omp 适配器的**自动回信**（`finalizeTurn` / `sendFailureReply` 构造的
 
 ---
 
+## 八、基准与可回源性（便于维护方核对，按 practice/review-baseline-discipline.md）
+
+| 基准 | 来源 | 取证方式 |
+|---|---|---|
+| 契约 | `/docs/hub-plugin` §3.3.3 / §3.5.1 / §3.5.2 / §3.6 / §6.1-D（文档头部 v1.2 / 2026-08-13） | `GET http://172.20.10.91:7377/docs/hub-plugin`（2026-09-16 取用；内容随 Hub 演进，引用未固定版本号） |
+| 上游实现 | `/dist/omp.js` v0.1.0，md5 `393e21ba0700a4d5e3008fc80cc65b1b`，142382 B / 3419 行 | `curl -sSL http://172.20.10.91:7377/dist/omp.js`（2026-09-16）；本报告 D4/D5 的行号引用取自该副本 |
+| 本仓被评对象 | `vendor/yuyi-omp-extension.js` v0.2.0，原 md5 `6ff79a0fd051f08464513e2f6f423b0f` / 修后 `0675880b3bae25ba083f44866c22b0c5` | git（`feature/OMOBRIDGE-2`） |
+| 生产实测 | Hub 回执原文（五组对照探针） | 2026-09-15 与 `omo-172-26-5-121` 双向排障；离线夹具 `scripts/probe-yuyi-reply-frame.mjs` 的桩 Hub 规则为按该实测**手写复刻**（非 Hub 源码回源） |
+
+**不可回源/第二手项**：① 桩 Hub 裁决为手写复刻，只能证明「帧形态落在被接受的集合内」；② 对端部署件内容与行号来自对端自述；③ `/dist/omp.tar.gz` 当前 404（安装器文档 §3.4 所列产物与实际不符），仅 `/dist/omp.js` 可取。
+
+---
+
 附：本报告同步以三段式评论形式提交至 Hub 文档（`POST /docs/comments`，doc=`hub-plugin`）：
 
 - 评论 id：`2026-09-16T00-05-14-5d5dx2`
