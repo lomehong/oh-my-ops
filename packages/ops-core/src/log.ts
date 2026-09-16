@@ -10,6 +10,12 @@ export interface TailResult {
 export interface JournalctlResult {
 	lines: string[];
 	query: string;
+	/** 退出码（非 0 时 lines 可能为空，原因看 stderr） */
+	exitCode: number;
+	/** 原样保留 stderr：非特权用户的「看不到系统/他人日志」提示、易失 journal 提示都在这里（2026-09-16 对端实测） */
+	stderr: string;
+	/** stderr 非空时给出人读提示（权限/存储语义） */
+	note?: string;
 }
 
 export interface GrepResult {
@@ -46,9 +52,18 @@ export class LogCollector {
 		if (opts.priority !== undefined) argv.push("-p", String(opts.priority));
 		if (opts.lines !== undefined) argv.push("-n", String(opts.lines));
 		const result = await this.shell.exec(argv, { timeoutMs: 30_000, ...execOpts });
+		const stderr = result.stderr.trim();
 		return {
 			lines: result.stdout.split("\n").filter((line) => line !== ""),
 			query: argv.join(" "),
+			exitCode: result.exitCode,
+			stderr,
+			// 空结果 + stderr 提示是最容易被误读为「没有日志」的情形（对端实测：非特权用户 + 易失 journal）
+			...(stderr === ""
+				? {}
+				: {
+						note: "journal 返回了 stderr 提示：常见于非特权用户（只能看到自己的消息，需加入 systemd-journal 组）或 journal 为易失存储（仅 /run/log/journal，重启即丢）。空结果不等于无日志。",
+					}),
 		};
 	}
 

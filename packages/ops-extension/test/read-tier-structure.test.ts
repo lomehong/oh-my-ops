@@ -5,6 +5,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { registerDockerTools } from "../src/tools/docker-k8s.ts";
+import { fmtExecResult } from "../src/tools/exec-output.ts";
 import { registerReadOnlyTools } from "../src/tools/read-only.ts";
 import { makeApprovalFactory } from "../src/approvals.ts";
 import { standardAuthzView } from "../src/guards.ts";
@@ -142,3 +143,37 @@ describe("PathGuard 机密根：真实用户 home 的 .ssh（缺陷 6：HOME 重
 		await expect(pi.tools.get("ops_file_ls")!.execute("p1", { path: path.join(realHome, ".ssh") })).rejects.toThrow(/机密根/);
 	});
 });
+
+describe("fmtExecResult：失败与「成功但有 stderr」都必须可见（缺陷 7 同族）", () => {
+	const r = (stdout: string, stderr: string, exitCode = 0) => ({ stdout, stderr, exitCode });
+
+	test("成功且无 stderr → 原样 stdout", () => {
+		expect(fmtExecResult(r("ok", ""))).toBe("ok");
+	});
+
+	test("★ 成功但 stderr 非空 → 追加 (stderr) 段（不得吞掉）", () => {
+		const text = fmtExecResult(r("NAME  STATUS", "Warning: /srv/app is not a directory"));
+		expect(text).toContain("NAME  STATUS");
+		expect(text).toContain("(stderr)");
+		expect(text).toContain("Warning: /srv/app is not a directory");
+	});
+
+	test("★ 成功、stdout 空但 stderr 有权限提示 → 回显提示而非空占位", () => {
+		const warn = "You are currently not seeing messages from other users and the system.";
+		const text = fmtExecResult(r("", warn));
+		expect(text).toContain("You are currently not seeing messages");
+		expect(text).not.toBe("(no output)");
+	});
+
+	test("成功且两者皆空 → 占位文案（可自定义）", () => {
+		expect(fmtExecResult(r("", ""), "(no containers)")).toBe("(no containers)");
+	});
+
+	test("失败 → exit=N + stderr，限 5 行", () => {
+		const text = fmtExecResult(r("", Array.from({ length: 9 }, (_, i) => `L${i}`).join("\n"), 1));
+		expect(text.startsWith("exit=1")).toBe(true);
+		expect(text).toContain("L0");
+		expect(text).not.toContain("L8");
+	});
+});
+

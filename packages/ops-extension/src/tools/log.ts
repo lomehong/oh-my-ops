@@ -46,7 +46,7 @@ export function registerLogTools(pi: ExtensionAPI, ctx: OpsContext): void {
 		label: "Journalctl",
 		loadMode: "essential",
 		approval: READ,
-		description: "查询 systemd journal 日志。可用 unit/since/priority 过滤。输出超 3000 行时由宿主截断。",
+		description: "查询 systemd journal 日志。可用 unit/since/priority 过滤。注意：非特权用户只能看到自己的消息（需加入 systemd-journal 组）；journal 若为易失存储（仅 /run/log/journal）重启即丢——stderr 提示会随结果回显，空结果不等于无日志。",
 		parameters: z.object({
 			unit: z.string().optional().describe("服务单元名（如 nginx）"),
 			since: z.string().optional().describe("起始时间（如 '1 hour ago'）"),

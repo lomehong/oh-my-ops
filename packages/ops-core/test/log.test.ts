@@ -79,3 +79,30 @@ describe("LogCollector.grep 解析（防字段错位：2026-09-16 对端实测�
 		assert.equal(r.matches[0]!.text, "beta nologin");
 	});
 });
+
+describe("LogCollector.journalctl 结果结构（缺陷 7：stderr 曾被丢弃）", () => {
+	const stub = (stdout: string, stderr: string, exitCode = 0) =>
+		({ exec: async () => ({ stdout, stderr, exitCode, durationMs: 0, truncated: false }) }) as never;
+
+	it("★ 非特权用户提示在 stderr（exit=0、stdout 空）→ 必须回显且带 note", async () => {
+		const warn = "You are currently not seeing messages from other users and the system.";
+		const r = await new LogCollector(stub("", warn)).journalctl({ unit: "sshd", lines: 10 });
+		assert.equal(r.exitCode, 0);
+		assert.equal(r.lines.length, 0);
+		assert.ok(r.stderr.includes("not seeing messages"), "stderr 必须原样保留");
+		assert.ok((r.note ?? "").includes("systemd-journal"), "应给出权限/存储语义提示");
+	});
+
+	it("失败（exit!=0）→ exitCode/stderr 一并可见", async () => {
+		const r = await new LogCollector(stub("", "Failed to connect to bus", 1)).journalctl({ lines: 5 });
+		assert.equal(r.exitCode, 1);
+		assert.ok(r.stderr.includes("Failed to connect to bus"));
+	});
+
+	it("正常输出且无 stderr → 无 note", async () => {
+		const r = await new LogCollector(stub("line-a\nline-b\n", "")).journalctl({ lines: 5 });
+		assert.deepStrictEqual(r.lines, ["line-a", "line-b"]);
+		assert.equal(r.note, undefined);
+	});
+});
+

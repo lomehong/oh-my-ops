@@ -40,6 +40,18 @@
 | 守卫价值实证 | 本容器无真实 `ps`（bash 侧 ps 为宿主内建）→ 本地必然跳过；**CI（ubuntu/procps）有真实 ps 才拦住错误修法**。这正是对端元结论「守卫从『能加载』扩到『能跑对』」的直接收益 |
 | 发布修正 | 首轮 tag 未产出 Release（安全）；已删除并按修正后提交重打 `v0.9.3`（8460169），CI 复跑成功、Release 已发布（2026-09-16T07:47:47Z，三资产齐） |
 
+## 三补、缺陷 7（对端矩阵复跑后新报，同族：exit=0 分支的 stderr 被吞）
+
+| 项 | 内容 |
+|---|---|
+| 现象 | `ops_log_journalctl` 对 `journalctl -u sshd --since 2h` 返回空；而 journald active、sshd 有活动连接 |
+| 根因 | 非特权用户（不在 `systemd-journal` 组）只能看自己的消息，systemd 把提示打到 **stderr 且 exit=0**；旧 `journalctl()` 只取 `stdout` → 使用者无法区分「真没日志」与「读取受限」 |
+| 红证据 | 旧返回 `{"lines":[],"query":"journalctl --no-pager -q -u sshd"}`；`权限提示是否可见: false` |
+| 修法 | ① `JournalctlResult` 增 `exitCode` / `stderr` / `note`（stderr 非空时给权限与易失存储语义提示）；② 统一回显 `fmtExecResult()` 覆盖 **exit=0 且 stderr 非空**（追加 `(stderr)` 段；stdout 空时回显 stderr 段而非空占位）——13 处口径同受益；③ `ops_log_journalctl` 描述补权限/易失语义（对端第五节建议） |
+| 守卫 | `read-tier-structure.test.ts` +5 例（fmtExecResult 成功/stderr/空/限行）；`log.test.ts` +3 例（journalctl 权限提示必可见、失败可见、正常无 note） |
+| 实跑 | `node --test log.test.ts` 10 pass/1 skip；`bun test read-tier-structure.test.ts` 11 pass；`npm run test:ci` 全绿（L2 57 pass） |
+| 环境提示（对端建议，已入工具描述） | 本机 journal 为**易失**（仅 `/run/log/journal`，`#Storage=auto`）→ 重启即丢；可回溯需 `Storage=persistent` + 建 `/var/log/journal`，或把受管用户加入 `systemd-journal` 组（均为环境变更，走其 Owner） |
+
 ## 四、未兑现项
 
 - **真机复验**：需 v0.9.3 发布后由对端重跑 18 项矩阵（v0.9.3 已于 2026-09-16T07:47:47Z 发布，含本修正）（我方无 docker/kubectl 环境，docker/compose 分支用脚本化 Runner 断言，未真机跑）。
