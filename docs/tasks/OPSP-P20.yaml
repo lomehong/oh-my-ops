@@ -1,6 +1,6 @@
 id: 'OPSP-P20'
 title: 'read 档工具冒烟缺陷批（对端 18 项矩阵）：ps argv 漏逗号 / grep 字段错位 / docker 吞错 / compose 无诊断'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-16T07:26:47.831Z'
 accept:
@@ -22,13 +22,17 @@ events:
     op: 'report'
     by: 'omp-architect'
     note: 'read 档冒烟缺陷批修复完成（自报）：① ps argv 漏逗号（恒定失败）② grep 单路径字段错位（静默错数据）③ 统一命令输出回显 13 处（docker_ps 不再把 daemon 不可达显示成空结果）④ compose 缺件给诊断 + file 参数可选。新增结构守卫并入 test:ci。'
+  - ts: '2026-09-16T08:09:20.133Z'
+    op: 'confirm'
+    by: '主人'
+    note: '未兑现项更新：真机矩阵复验已由对端完成（4 条回归全绿）；仍余「7 条启动噪音未修」（跨任务登记）与 v0.9.4 发布（缺陷 7 + 平台分支）'
 branch: 'feature/OPSP-P20'
 report:
   summary: 'read 档冒烟缺陷批修复完成（自报）：① ps argv 漏逗号（恒定失败）② grep 单路径字段错位（静默错数据）③ 统一命令输出回显 13 处（docker_ps 不再把 daemon 不可达显示成空结果）④ compose 缺件给诊断 + file 参数可选。新增结构守卫并入 test:ci。'
   evidence:
-    - '红证据：旧 -eo 取值 `pid,user,%cpu,%mem,args--sort=-%cpu`（含 args--sort）；旧 docker_ps 口径回显 "(no containers)"；旧 grep 解析对同一条输入产出 {"file":"2:bin:x","line":1,"text":"1:bin:/bin:/sbin/nologin"}（与对端报告逐字一致）'
+    - '红证据：旧 -eo 取值 `pid,user,%cpu,%mem,args--sort=-%cpu`（含 args--sort）；旧 docker_ps 口径回显 "(no containers)"；旧 grep 解析对同一条输入产出 {"file": '"2:bin:x","line":1,"text":"1:bin:/bin:/sbin/nologin"}（与对端报告逐字一致）'''
     - '绿：node --test process.test.ts → 5 pass/2 skip（本容器无 ps 二进制，CI/真机真跑）；log.test.ts → 7 pass/1 skip；bun test read-tier-structure.test.ts → 5 pass'
-    - 'npm run test:ci 全绿（L1 135、L2 52 ×4 文件、typecheck、install 守卫、bootstrap 守卫）'
+    - 'npm run test: 'ci 全绿（L1 135、L2 52 ×4 文件、typecheck、install 守卫、bootstrap 守卫）'''
     - '推送：f6e66c1..e3519c3 main -> main（含 P21）'
   pending:
     - '真机复验：v0.9.3 后由对端重跑 18 项矩阵（我方无 docker/kubectl 环境）'
@@ -36,3 +40,5 @@ report:
     - '已知未修：启动 7 条 Custom tool load failed（宿主扫描 tools/*.ts）'
   at: '2026-09-16T07:38:39.987Z'
   by: 'omp-architect'
+confirmedBy: '主人'
+confirmedVia: '会话确认 2026-09-16（主人「认」）：对端已装 v0.9.3 并复跑 18 项矩阵——①③ 由 ❌ 转 ✅（③ 输出与其上轮「应为」逐字一致）、②④ 由 ⚠️ 转 ✅（docker_ps 回 exit=1+stderr；compose 回明确诊断），0 条旧缺陷残留；另报缺陷 7（journalctl 丢 stderr）与 ④ 平台分支（CLI 18.09 无插件机制）均已修复入库'

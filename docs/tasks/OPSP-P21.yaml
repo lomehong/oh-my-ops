@@ -1,6 +1,6 @@
 id: 'OPSP-P21'
 title: 'SshPool host key 策略（文档承诺 TOFU/实现缺选项，el7 首连必失败）+ PathGuard 机密根漏真实 home .ssh'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-16T07:36:22.057Z'
 accept:
@@ -21,16 +21,22 @@ events:
     op: 'report'
     by: 'omp-architect'
     note: 'SshPool host key 策略 + PathGuard 真实 home 机密根修复完成（自报）：host key 改为能力探测 + 退化（accept-new ≥7.6 / no + 受管 known_hosts），注释与实现对平；PathGuard 机密根改用 realUserHome()（getpwuid 口径）。'
+  - ts: '2026-09-16T08:09:20.346Z'
+    op: 'confirm'
+    by: '主人'
+    note: '未兑现项：known_hosts 落盘取证仍待对端（其 controlDir 空 + policy 无目标授权，需 Owner 授权白名单后回报）；ssh-keyscan 指纹入审计未实现（增强项）'
 branch: 'feature/OPSP-P21'
 report:
   summary: 'SshPool host key 策略 + PathGuard 真实 home 机密根修复完成（自报）：host key 改为能力探测 + 退化（accept-new ≥7.6 / no + 受管 known_hosts），注释与实现对平；PathGuard 机密根改用 realUserHome()（getpwuid 口径）。'
   evidence:
     - '红：旧 ssh.ts 实现中 StrictHostKeyChecking/UserKnownHostsFile 0 处（唯一命中是 options 注释示例）；HOME 重定向下 os.homedir() 塌缩实测 true、getpwuid 真实 home=/home/pi（真实 .ssh 漏出）'
     - '绿：node --test ssh.test.ts → 10 pass（+3 例：accept-new / el7 退化 / caller 覆盖次序）；bun test read-tier-structure.test.ts → 6 pass（+1 例：真实 ~/.ssh 被拒）'
-    - 'npm run test:ci 全绿；typecheck 首轮暴露缺 execFileSync 导入已修'
+    - 'npm run test: 'ci 全绿；typecheck 首轮暴露缺 execFileSync 导入已修'''
   pending:
     - '真机复验：el7（OpenSSH 7.4）首连行为与受管 known_hosts 落盘路径（我方无 el7 目标机）'
     - '未实现（登记）：首连后 ssh-keyscan 指纹入审计（受管 known_hosts 已提供记录语义，属增强项）'
     - '文档口径已确认：vault 配置在 trust 列表内 → 设计上写拒、Owner 手工落盘'
   at: '2026-09-16T07:38:40.130Z'
   by: 'omp-architect'
+confirmedBy: '主人'
+confirmedVia: '会话确认 2026-09-16（主人「认」）：对端 v0.9.3 代码级核验通过（sshSupportsAcceptNew 探测、双分支均配受管 known_hosts、hostKeyMode 两态 + hostKeyPolicy 可观测、caller 可覆盖）；el7 现场证据确认走退化分支（no+managed-known-hosts）'
