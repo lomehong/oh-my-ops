@@ -170,7 +170,15 @@ for f in "$REPO_ROOT/packages/ops-extension/src"/*.ts; do
   base=$(basename "$f"); [ "$base" = "index.ts" ] && continue; cp "$f" "$EXT_DIR/ops-pi/"
 done
 for f in "$REPO_ROOT/packages/ops-extension/src/tools/"*.ts; do cp "$f" "$EXT_DIR/ops-pi/tools/"; done
-cp -r "$REPO_ROOT/packages/ops-core/src" "$EXT_DIR/ops-pi/node_modules/@ops-pi/core"
+# ops-core 安装：**整包替换**（先清旧文件再拷 package.json + src/）。
+# 反面教材（2026-09-16 实测）：`cp -r <src> <dest>` 在 dest **已存在**时生成 dest/src 并保留旧平铺文件，
+# 裸 import "@ops-pi/core" 会命中旧 index.ts（缺 AuditLog 等新导出）→ 扩展整体加载失败 → ops_* 全灭；
+# dest 不存在时才恰好扁平落位。整包替换后布局与源码一致，靠 core/package.json 的 exports 解析。
+CORE_DST="$EXT_DIR/ops-pi/node_modules/@ops-pi/core"
+rm -rf "$CORE_DST"
+mkdir -p "$CORE_DST/src"
+cp "$REPO_ROOT/packages/ops-core/package.json" "$CORE_DST/package.json"
+cp -r "$REPO_ROOT/packages/ops-core/src/." "$CORE_DST/src/"
 echo 'export { default } from "./extension.ts";' > "$EXT_DIR/ops-pi/index.ts"
 echo '{"name":"ops-pi","private":true,"type":"module","dependencies":{"@ops-pi/core":"*"}}' > "$EXT_DIR/ops-pi/package.json"
 echo "  ✓ $EXT_DIR/ops-pi（自包含，含 ops-core）"
@@ -234,7 +242,9 @@ case "\${1:-}" in
     if [ "\$FOREGROUND" = true ]; then
       exec "\$RUN" --profile ops "\${EXT_ARGS[@]}" --mode rpc "\${EXTRA_ARGS[@]}"
     else
-      setsid bash -c 'tail -f /dev/null | exec "$0" --profile ops "$@"' "\$RUN" --mode rpc "\${EXTRA_ARGS[@]}" >> /tmp/omo-serve.log 2>&1 < /dev/null &
+      # 注意：本行位于**未加引号 heredoc** 内，$0/$@ 必须转义，否则在生成启动器时被展开成
+      # 安装器自身路径与其参数（2026-09-16 实测：serve 后台模式写死 /tmp/.../install.sh）
+      setsid bash -c 'tail -f /dev/null | exec "\$0" --profile ops "\$@"' "\$RUN" --mode rpc "\${EXTRA_ARGS[@]}" >> /tmp/omo-serve.log 2>&1 < /dev/null &
       sleep 1; { rpc_pids | tail -1 > /tmp/omo-serve.pid; } || true
       echo "[omo] ✓ 服务已启动 PID \$(cat /tmp/omo-serve.pid)"
     fi ;;
