@@ -208,11 +208,31 @@ describe("fmtExecResult：失败与「成功但有 stderr」都必须可见（�
 		expect(fmtExecResult(r("", ""), "(no containers)")).toBe("(no containers)");
 	});
 
-	test("失败 → exit=N + stderr，限 5 行", () => {
-		const text = fmtExecResult(r("", Array.from({ length: 9 }, (_, i) => `L${i}`).join("\n"), 1));
+	test("失败 → exit=N + stderr，长输出取「头 5 行 + 省略 + 尾 3 行」", () => {
+		const text = fmtExecResult(r("", Array.from({ length: 20 }, (_, i) => `L${i}`).join("\n"), 1));
 		expect(text.startsWith("exit=1")).toBe(true);
 		expect(text).toContain("L0");
-		expect(text).not.toContain("L8");
+		expect(text).toContain("省略");
+		expect(text).toContain("L19"); // 尾部保留（可行动结论常在此）
+		expect(text).not.toContain("L10"); // 中段被省略
+	});
+
+	test("★ traceback 形态：可行动结论在尾部，必须可见（对端观察）", () => {
+		const tb = [
+			"[20033] Failed to execute script docker-compose",
+			"Traceback (most recent call last):",
+			'  File "docker_compose/cli/main.py", line 67, in main',
+			'  File "docker_compose/cli/main.py", line 121, in perform_command',
+			'  File "urllib3/connectionpool.py", line 677, in urlopen',
+			'  File "urllib3/connectionpool.py", line 445, in _make_request',
+			'  File "urllib3/connection.py", line 170, in _new_conn',
+			'  File "socket.py", line 716, in create_connection',
+			"urllib3.exceptions.NewConnectionError: <urllib3.connection.HTTPConnection object at 0x7f>: Failed to establish a new connection",
+			"Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
+		].join("\n");
+		const text = fmtExecResult(r("", tb, 255));
+		expect(text.startsWith("exit=255")).toBe(true);
+		expect(text).toContain("Cannot connect to the Docker daemon");
 	});
 });
 

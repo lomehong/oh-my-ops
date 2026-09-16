@@ -9,6 +9,13 @@
 #   传参透传：  curl -fsSL ... | bash -s -- --token <yuyi-token> --name <设备名>
 #
 # 下载策略：直连 → OMO_MIRROR → 内置镜像列表，逐个回退；带重试与进度条。
+#
+# 受限网络取包（2026-09-16 对端实测）：部分企业网络**按主机放行**——`github.com:443` 可能不通，而
+# `api.github.com` / `objects.githubusercontent.com` / `codeload.github.com` / 镜像站可用。此时 release
+# 资产可用 **API 端点**取到同一产物（同一哈希，需 token）：
+#   curl -L -H "Authorization: Bearer <token>" -H "Accept: application/octet-stream" \
+#        "https://api.github.com/repos/lomehong/oh-my-ops/releases/assets/<asset_id>" -o oh-my-ops.tar.gz
+# （asset_id 从 `GET /repos/<o>/<r>/releases/tags/<tag>` 的 assets[].id 取）
 set -euo pipefail
 
 REPO="lomehong/oh-my-ops"
