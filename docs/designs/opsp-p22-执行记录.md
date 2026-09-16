@@ -34,5 +34,6 @@
 ## 四、未兑现项
 
 - **真机复验**：对端升级 v0.9.5 后复验 C3/C1 两条（其机 v2/v1 皆缺 → 应看到「无 CLI 插件机制 + 建议装 v1 单文件」；若其装上 v1 单文件，应自动回退执行）。
-- **缺陷 7 收口**：对端已确认修复（实测返回含 `exitCode:1` / `stderr:"No journal files were opened due to insufficient permissions"` / `note`）——其 [INFERENCE] 由此升级为实测，可收口。
+- **缺陷 7 收口**：✅ **已收口（对端 2026-09-16 09:10 正式回执）**。依据：实测返回含 `exitCode:1` / `stderr:"No journal files were opened due to insufficient permissions."` / `note`；代码级核验 `JournalctlResult` 三字段齐、`stderr===""` 时不产出 note。对端业务结论：其 [INFERENCE] 升级为实测事实，并据此判定「容器日志走 json-file 落盘 → 影响可控」，已写入其 Runbook。
+- **对端知识沉淀（供互相印证）**：其对本次事件立了 KB 条目 `omo-upgrade-breaks-ops-channel`，含现象/根因（`cp -r` 不对称 + 目录索引赢得解析）/两种止血/正式修复（v0.9.1 整包替换 + 启动器转义）/18 项矩阵/el7 平台约束（OpenSSH 7.4 无 accept-new、Docker CLI 18.09.6 无插件机制、git 1.8.3.1 无 GIT_SSH_COMMAND、journal 易失）/遗留规避（单路径 log_grep、docker_ps 空输出、journalctl 空结果三类不可信）。
 - **环境侧建议（不属缺陷）**：对端需 Owner 侧两项变更才能让系统日志可读可回溯——加入 `systemd-journal` 组 + 启用持久化（现仅 `/run/journal`，重启即丢）；其容器日志走 json-file 落盘，影响可控。
