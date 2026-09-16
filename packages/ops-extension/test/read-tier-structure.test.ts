@@ -95,7 +95,7 @@ describe("ops_docker_compose：缺件给诊断，不回显 usage 转储", () => 
 	test("★ compose 全缺（v2+v1）→ 明确诊断 + 平台分支建议（老 CLI 不得被建议装 v2 插件）", async () => {
 		const runner = new ScriptedRunner([
 			{ exitCode: 1, stderr: "docker: 'compose' is not a docker command." }, // v2 探测
-			{ exitCode: 1, stderr: "docker-compose: command not found" }, // v1 探测
+			{ exitCode: 1, stdout: "" }, // v1 存在性探测（command -v 未命中 → 非 0）
 			{ exitCode: 0, stdout: "Docker version 18.09.6, build 481bc77" }, // docker --version（老平台）
 		]);
 		const pi = makeDocker(runner);
@@ -106,15 +106,34 @@ describe("ops_docker_compose：缺件给诊断，不回显 usage 转储", () => 
 		expect(text).toContain("standalone docker-compose v1");
 		expect(runner.calls.map((c) => c.cmd)).toEqual([
 			["docker", "compose", "version"],
-			["docker-compose", "version"],
+			["sh", "-c", "command -v docker-compose"],
 			["docker", "--version"],
 		]);
+	});
+
+	test("★ v1 二进制不存在导致 spawn 抛错时，仍落到「两者皆无」建议分支（缺陷 8）", async () => {
+		class ThrowOnComposeRunner extends ScriptedRunner {
+			async exec(cmd: string | readonly string[], options?: ExecOptions): Promise<ExecResult> {
+				if (Array.isArray(cmd) && cmd[0] === "docker-compose") throw new Error("[EXEC_FAILED] 命令执行失败：docker-compose");
+				return super.exec(cmd, options);
+			}
+		}
+		const runner = new ThrowOnComposeRunner([
+			{ exitCode: 1, stderr: "docker: 'compose' is not a docker command." },
+			{ exitCode: 1, stdout: "" }, // command -v 未命中
+			{ exitCode: 0, stdout: "Docker version 24.0.7, build afdd53b" }, // 新平台 → 建议 v2 插件
+		]);
+		const text = textOf(await makeDocker(runner).tools.get("ops_docker_compose")!.execute("c1b", { projectDir: "/srv/app", action: "ps" }));
+		expect(text).toContain("docker compose 不可用");
+		expect(text).toContain("24.0");
+		expect(text).toContain("支持 CLI 插件");
+		expect(runner.calls.some((c) => Array.isArray(c.cmd) && c.cmd[0] === "docker-compose")).toBe(false); // 不再直接执行 v1 探测
 	});
 
 	test("★ v2 缺但 v1 在 → 自动回退 standalone docker-compose 执行", async () => {
 		const runner = new ScriptedRunner([
 			{ exitCode: 1, stderr: "docker: 'compose' is not a docker command." },
-			{ exitCode: 0, stdout: "docker-compose version 1.29.2" },
+			{ exitCode: 0, stdout: "/usr/local/bin/docker-compose" },
 			{ exitCode: 0, stdout: "   Name   Command\n   web    nginx" },
 		]);
 		const text = textOf(await makeDocker(runner).tools.get("ops_docker_compose")!.execute("c2", { projectDir: "/srv/app", action: "ps" }));

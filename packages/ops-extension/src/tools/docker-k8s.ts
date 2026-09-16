@@ -102,34 +102,45 @@ export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval:
 			const { ops, host } = route(p.host);
 			const authz = assertAuthorized("ops_docker_compose", { ...p, host }, ctx.authzView);
 			const fileName = String(p.file ?? "docker-compose.yml");
-			// 平台分支探测（2026-09-16 对端实测两轮）：compose v2 走 CLI 插件机制，而插件目录扫描是
+			// 平台分支探测（2026-09-16 对端三轮实测）：compose v2 走 CLI 插件机制，而插件目录扫描是
 			// Docker CLI **19.03** 才引入的——老平台（如 18.09）装 v2 插件也不会被识别，只能走 standalone
-			// `docker-compose` v1（Python/PyInstaller 单文件，直连 daemon API，与 CLI 版本无关）。
-			const v2 = await ops.shell.exec(["docker", "compose", "version"], { signal, timeoutMs: 10_000 });
-			if (v2.exitCode === 0) {
+			// `docker-compose` v1（直连 daemon API，与 CLI 版本无关）。
+			// 探测统一包 try/catch：**二进制不存在时 ShellExec 抛 EXEC_FAILED（spawn ENOENT）而非返回非 0**
+			// ——首版直接「执行 docker-compose」探测，v1 缺失时异常穿透，绕过了「两者皆无」建议分支（缺陷 8）。
+			const probe = async (argv: string[]): Promise<{ ok: boolean; out: string; err: string; code: number }> => {
+				try {
+					const r = await ops.shell.exec(argv, { signal, timeoutMs: 10_000 });
+					return { ok: r.exitCode === 0, out: r.stdout, err: r.stderr, code: r.exitCode };
+				} catch (err) {
+					return { ok: false, out: "", err: String((err as Error)?.message ?? err), code: -1 };
+				}
+			};
+			const v2 = await probe(["docker", "compose", "version"]);
+			if (v2.ok) {
 				const result = await ops.shell.exec(["docker", "compose", "-f", `${dir}/${fileName}`, action], { signal, timeoutMs: 60_000 });
 				return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };
 			}
-			// v2 不可用 → 试 v1 standalone（可用则自动回退执行，老平台因此可用）
-			const v1 = await ops.shell.exec(["docker-compose", "version"], { signal, timeoutMs: 10_000 });
-			if (v1.exitCode === 0) {
+			// v2 不可用 → **存在性探测** v1（`command -v`，不执行 compose 本体；缺失时 shell 返回非 0 而非抛错）
+			const v1 = await probe(["sh", "-c", "command -v docker-compose"]);
+			if (v1.ok) {
 				const result = await ops.shell.exec(["docker-compose", "-f", `${dir}/${fileName}`, action], { signal, timeoutMs: 60_000 });
 				return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };
 			}
-			// 两者皆无 → 给平台分支的处置建议（避免让老平台去装一个装不上的插件）
-			const cliVer = await ops.shell.exec(["docker", "--version"], { signal, timeoutMs: 10_000 });
-			const verMatch = /version\s+(\d+)\.(\d+)/.exec(cliVer.stdout || cliVer.stderr || "");
+			// 两者皆无 → 平台分支建议（避免让老平台去装一个装不上的插件）
+			const cliVer = await probe(["docker", "--version"]);
+			// 版式兼容：`Docker version 18.09.6, build …` / `Docker version 24.0.7, build …`（v 前缀可选）
+			const verMatch = /version[,\s]+v?(\d+)\.(\d+)/i.exec(cliVer.out || cliVer.err || "");
 			const ver = verMatch ? `${verMatch[1]}.${verMatch[2]}` : "未知";
 			const pluginCapable = verMatch !== null && (Number(verMatch[1]) > 19 || (Number(verMatch[1]) === 19 && Number(verMatch[2]) >= 3));
-			const detail = (v2.stderr || v2.stdout).trim().split("\n").slice(0, 3).join("\n");
+			const detail = (v2.err || v2.out).trim().split("\n").slice(0, 3).join("\n");
 			const advice = pluginCapable
-				? "· 本机 Docker CLI " + ver + " 支持 CLI 插件：安装 compose v2 插件（放到 ~/.docker/cli-plugins/docker-compose 或 /usr/libexec/docker/cli-plugins/，chmod +x）；或装 standalone docker-compose v1。"
-				: "· 本机 Docker CLI " + ver + " **低于 19.03，无 CLI 插件机制**——装 compose v2 插件不会被识别，请改用 standalone docker-compose v1 单文件（放 /usr/local/bin/docker-compose，chmod +x；本工具会自动回退使用它）。";
+				? `· 本机 Docker CLI ${ver} 支持 CLI 插件：安装 compose v2 插件（放到 ~/.docker/cli-plugins/docker-compose 或 /usr/libexec/docker/cli-plugins/，chmod +x）；或装 standalone docker-compose v1。`
+				: `· 本机 Docker CLI ${ver} **低于 19.03，无 CLI 插件机制**——装 compose v2 插件不会被识别，请改用 standalone docker-compose v1 单文件（放 /usr/local/bin/docker-compose，chmod +x；本工具会自动回退使用它）。`;
 			return {
 				content: [{
 					type: "text",
 					text: [
-						`docker compose 不可用（v2 插件 exit=${v2.exitCode}${detail === "" ? "" : `：${detail}`}；docker-compose v1 exit=${v1.exitCode}）`,
+						`docker compose 不可用（v2 插件 ${v2.ok ? "ok" : `exit=${v2.code}`}${detail === "" ? "" : `：${detail}`}；docker-compose v1 ${v1.ok ? "ok" : "未安装/不可执行"}）`,
 						"处置建议：",
 						advice,
 					].join("\n"),
