@@ -91,9 +91,20 @@
   「回信已投递：msg=msg_mu3eil16_h4c4re to=sec-agent-manager-172-26-5-121:omp_fc94937432eb …」。
   说明：**无需整机重启**——同设备另一会话已加载修复版，`device:sessionID` 可精确路由到它；当前会话（`omp_600d821f33e3`）
   仍为旧插件内存态，其自动回信仍会失败（已知，非新问题），待该会话自然重启后消失。
-  - **仍未知（评审 G3）**：对端若为未升级上游件（`from.device` 空串），我方回给它的目标会变成
-    `to={device:"", target:<sessionID>}`——**该形态真机可解析性未验证**（本次 E2E 的对端已带 device，未覆盖此分支）。
-    若被拒，回退为不带 device、仅 `target=sessionID`（§3.5.1 合法形式），按知识漂移流程回改实现。
+  - **仍未知（评审 G3，对端建议降级）**：`to={device:"", target:<sessionID>}`（对端未升级件 `from.device` 空）——
+    对端判定该分支**真机基本不可达**：`from.device=""` 只出现在回信帧，而这类帧会被 Hub 回信校验先拒，到不了接收方。
+    本项**接受降级为理论分支**（残留未验证：第三方适配器以空 `from.device` 直发普通消息的情形未观测）；
+    根治方向仍是端侧补 `from.device`（已在上游报告 D2）。若被触达且被拒，回退为不带 device、仅 `target=sessionID`。
+- **对端独立实收确认（2026-09-16 01:18）**：对端复核本侧 01:07:40 回信已实收，依据两条——① 其插件日志自触发件后
+  **零新增**（不带 `replyTo` 的 notify 必然走 enqueue 并留痕，无留痕即走 replyTo 展示分支）；② 时间戳与本侧
+  「回信已投递 01:07:40.482」一致；显示名 `omp-architect`（Hub 权威名）而非别名 `omp-docker`，佐证来自修复版会话。
+- **别名歧义实测（对端提供，2026-09-16）**：对端以 `to="PC-SZ-375:omp-docker"` 发消息被 Hub 拒：
+  `ambiguous target "omp-docker": PC-SZ-375:omp-docker, PC-SZ-375:omp-docker`——本机**两个会话共用派生别名**
+  （`<device>-omp`）。登记为独立发现（未改）：本修复的回信目标取 `device:sessionID`，**免疫该歧义**；
+  roster 侧是否约束别名冲突属上游议题。
+- **备查项「初始化双连接」跨节点复现（对端提供）**：对端日志两次会话启动各出现「同 tick 两次连接」
+  （`连接 Hub …` ×2，与 `session_start` 同秒）→ 非单机偶发，疑为**启动竞态**（工厂末尾 `connect()` 与
+  `session_start` 的 `connect()` 并发）；未定性、未修，已同步进知识库条目「未知/待验证」。
 - **上游分发**：`/dist/omp.js` 0.1.0 与对端 `omo-172-26-5-121` 部署件同源缺陷（回信目标裸别名、`from.device` 空、
   `ack.detail` 丢弃）未修，本仓只修自用副本。**我方已提交上游**（2026-09-16）：
   - 正式报告 `docs/reports/yuyi-omp-adapter-reply-path-defects-2026-09-16.md`（D1–D5 + 文档缺口 + 复现方法）；
