@@ -67,6 +67,12 @@
 
 > 对端另有环境提示（非缺陷、不需动作）：其 git 为 1.8.3.1（`GIT_SSH_COMMAND`/`core.sshCommand` 需 2.3+），故其计划用 `~/.ssh/config` 的 Host/IdentityFile 指定私钥；且 `~/.ssh` 属我方 PathGuard 机密根（写拒），该 config 与 known_hosts 需 Owner 手工或经 shell 落盘——与其结论一致。
 
+## 三补三、知识回写（主人同意，已执行 2026-09-16）
+
+- 条目：`architect-knowledge/practice/argv-and-output-parsing-guard-discipline.md`（status `待审核`）——三型根因（拼接/解析/边界）+ 8 条可复用纪律（argv 一选项一元素、解析锚定已知输入、回显三态、可选依赖探测须 try/catch 或存在性探测、平台能力探测后分支、守卫分层「能加载≠能跑对」、守卫跨环境可判、时间判据盖过最坏时延）。
+- 三台账同步（`practice/index.md` / `review-queue.yaml` / `source-manifest.yaml` 增 `src-omo-read-tier-defect-batch`）；`knowledge-lint` **PASS（0 error，44 条目：已确认 43 / 待审核 1）**。
+- **偏差登记**：大脑仓容器内无 git（同 OMOBRIDGE-2 记录），该条目未进版本控制，需在有 git 的宿主补提交。
+
 ## 四、未兑现项
 
 - **真机复验**：需 v0.9.3 发布后由对端重跑 18 项矩阵（v0.9.3 已于 2026-09-16T07:47:47Z 发布，含本修正）（我方无 docker/kubectl 环境，docker/compose 分支用脚本化 Runner 断言，未真机跑）。
