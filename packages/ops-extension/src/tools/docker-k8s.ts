@@ -101,18 +101,41 @@ export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval:
 			const action = String(p.action ?? "ps");
 			const { ops, host } = route(p.host);
 			const authz = assertAuthorized("ops_docker_compose", { ...p, host }, ctx.authzView);
-			// 先探测 compose 可用性：缺失时直说，避免回显 docker 全量 usage（约 60 行噪音，2026-09-16 对端实测）
-			const probe = await ops.shell.exec(["docker", "compose", "version"], { signal, timeoutMs: 10_000 });
-			if (probe.exitCode !== 0) {
-				const detail = (probe.stderr || probe.stdout).trim().split("\n").slice(0, 3).join("\n");
-				return {
-					content: [{ type: "text", text: `docker compose 不可用（exit=${probe.exitCode}）${detail === "" ? "" : `：${detail}`}\n请安装 compose v2 插件（或改用 docker-compose），再重试。` }],
-					details: { authz, host },
-				};
-			}
 			const fileName = String(p.file ?? "docker-compose.yml");
-			const result = await ops.shell.exec(["docker", "compose", "-f", `${dir}/${fileName}`, action], { signal, timeoutMs: 60_000 });
-			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };
+			// 平台分支探测（2026-09-16 对端实测两轮）：compose v2 走 CLI 插件机制，而插件目录扫描是
+			// Docker CLI **19.03** 才引入的——老平台（如 18.09）装 v2 插件也不会被识别，只能走 standalone
+			// `docker-compose` v1（Python/PyInstaller 单文件，直连 daemon API，与 CLI 版本无关）。
+			const v2 = await ops.shell.exec(["docker", "compose", "version"], { signal, timeoutMs: 10_000 });
+			if (v2.exitCode === 0) {
+				const result = await ops.shell.exec(["docker", "compose", "-f", `${dir}/${fileName}`, action], { signal, timeoutMs: 60_000 });
+				return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };
+			}
+			// v2 不可用 → 试 v1 standalone（可用则自动回退执行，老平台因此可用）
+			const v1 = await ops.shell.exec(["docker-compose", "version"], { signal, timeoutMs: 10_000 });
+			if (v1.exitCode === 0) {
+				const result = await ops.shell.exec(["docker-compose", "-f", `${dir}/${fileName}`, action], { signal, timeoutMs: 60_000 });
+				return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };
+			}
+			// 两者皆无 → 给平台分支的处置建议（避免让老平台去装一个装不上的插件）
+			const cliVer = await ops.shell.exec(["docker", "--version"], { signal, timeoutMs: 10_000 });
+			const verMatch = /version\s+(\d+)\.(\d+)/.exec(cliVer.stdout || cliVer.stderr || "");
+			const ver = verMatch ? `${verMatch[1]}.${verMatch[2]}` : "未知";
+			const pluginCapable = verMatch !== null && (Number(verMatch[1]) > 19 || (Number(verMatch[1]) === 19 && Number(verMatch[2]) >= 3));
+			const detail = (v2.stderr || v2.stdout).trim().split("\n").slice(0, 3).join("\n");
+			const advice = pluginCapable
+				? "· 本机 Docker CLI " + ver + " 支持 CLI 插件：安装 compose v2 插件（放到 ~/.docker/cli-plugins/docker-compose 或 /usr/libexec/docker/cli-plugins/，chmod +x）；或装 standalone docker-compose v1。"
+				: "· 本机 Docker CLI " + ver + " **低于 19.03，无 CLI 插件机制**——装 compose v2 插件不会被识别，请改用 standalone docker-compose v1 单文件（放 /usr/local/bin/docker-compose，chmod +x；本工具会自动回退使用它）。";
+			return {
+				content: [{
+					type: "text",
+					text: [
+						`docker compose 不可用（v2 插件 exit=${v2.exitCode}${detail === "" ? "" : `：${detail}`}；docker-compose v1 exit=${v1.exitCode}）`,
+						"处置建议：",
+						advice,
+					].join("\n"),
+				}],
+				details: { authz, host },
+			};
 		},
 	});
 }

@@ -52,6 +52,21 @@
 | 实跑 | `node --test log.test.ts` 10 pass/1 skip；`bun test read-tier-structure.test.ts` 11 pass；`npm run test:ci` 全绿（L2 57 pass） |
 | 环境提示（对端建议，已入工具描述） | 本机 journal 为**易失**（仅 `/run/log/journal`，`#Storage=auto`）→ 重启即丢；可回溯需 `Storage=persistent` + 建 `/var/log/journal`，或把受管用户加入 `systemd-journal` 组（均为环境变更，走其 Owner） |
 
+## 三补二、④ 的平台分支化（对端第二轮平台发现）
+
+对端 Docker CLI 为 **18.09.6**，而 CLI 插件目录扫描是 **19.03** 才引入 → 原建议「装 compose v2 插件」在其机器上**不可执行**。
+已改为平台分支：
+
+| 分支 | 行为 |
+|---|---|
+| v2 可用（`docker compose version` exit=0） | 走 `docker compose -f …` |
+| v2 不可用、**v1 可用**（`docker-compose version` exit=0） | **自动回退** `docker-compose -f …`（老平台因此可用；v1 单文件直连 daemon API，与 CLI 版本无关） |
+| 两者皆无 | 探测 `docker --version` → 分支化建议：≥19.03 建议装 v2 插件；**<19.03（如 18.09）明确说明「无 CLI 插件机制」，建议装 standalone v1 单文件** |
+
+守卫更新：`read-tier-structure.test.ts` 的 compose 用例改为 3 例（全缺 → 平台分支建议 + 调用序列断言；v2 缺 v1 在 → 自动回退；v2 可用 → file 参数透传）。实跑 12 pass；`npm run test:ci` 全绿（L2 58 pass）。
+
+> 对端另有环境提示（非缺陷、不需动作）：其 git 为 1.8.3.1（`GIT_SSH_COMMAND`/`core.sshCommand` 需 2.3+），故其计划用 `~/.ssh/config` 的 Host/IdentityFile 指定私钥；且 `~/.ssh` 属我方 PathGuard 机密根（写拒），该 config 与 known_hosts 需 Owner 手工或经 shell 落盘——与其结论一致。
+
 ## 四、未兑现项
 
 - **真机复验**：需 v0.9.3 发布后由对端重跑 18 项矩阵（v0.9.3 已于 2026-09-16T07:47:47Z 发布，含本修正）（我方无 docker/kubectl 环境，docker/compose 分支用脚本化 Runner 断言，未真机跑）。

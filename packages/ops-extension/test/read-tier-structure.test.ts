@@ -92,25 +92,45 @@ describe("ops_docker_ps：失败不得伪装成空结果", () => {
 });
 
 describe("ops_docker_compose：缺件给诊断，不回显 usage 转储", () => {
-	test("★ compose 不可用（probe exit=1）→ 明确诊断且不再执行 compose 本体", async () => {
-		const runner = new ScriptedRunner([{ exitCode: 1, stderr: "docker: 'compose' is not a docker command.\nSee 'docker --help'\nUsage:  docker [OPTIONS] COMMAND" }]);
+	test("★ compose 全缺（v2+v1）→ 明确诊断 + 平台分支建议（老 CLI 不得被建议装 v2 插件）", async () => {
+		const runner = new ScriptedRunner([
+			{ exitCode: 1, stderr: "docker: 'compose' is not a docker command." }, // v2 探测
+			{ exitCode: 1, stderr: "docker-compose: command not found" }, // v1 探测
+			{ exitCode: 0, stdout: "Docker version 18.09.6, build 481bc77" }, // docker --version（老平台）
+		]);
 		const pi = makeDocker(runner);
 		const text = textOf(await pi.tools.get("ops_docker_compose")!.execute("c1", { projectDir: "/srv/app", action: "ps" }));
 		expect(text).toContain("docker compose 不可用");
-		expect(text).toContain("is not a docker command");
-		expect(runner.calls.length).toBe(1); // 只做了探测，未执行 compose
-		expect(runner.calls[0]!.cmd).toEqual(["docker", "compose", "version"]);
+		expect(text).toContain("18.09"); // 版本取 major.minor
+		expect(text).toContain("无 CLI 插件机制");
+		expect(text).toContain("standalone docker-compose v1");
+		expect(runner.calls.map((c) => c.cmd)).toEqual([
+			["docker", "compose", "version"],
+			["docker-compose", "version"],
+			["docker", "--version"],
+		]);
 	});
 
-	test("compose 可用 → 按 file 参数执行（缺省 docker-compose.yml）", async () => {
+	test("★ v2 缺但 v1 在 → 自动回退 standalone docker-compose 执行", async () => {
+		const runner = new ScriptedRunner([
+			{ exitCode: 1, stderr: "docker: 'compose' is not a docker command." },
+			{ exitCode: 0, stdout: "docker-compose version 1.29.2" },
+			{ exitCode: 0, stdout: "   Name   Command\n   web    nginx" },
+		]);
+		const text = textOf(await makeDocker(runner).tools.get("ops_docker_compose")!.execute("c2", { projectDir: "/srv/app", action: "ps" }));
+		expect(text).toContain("web");
+		expect(runner.calls[2]!.cmd).toEqual(["docker-compose", "-f", "/srv/app/docker-compose.yml", "ps"]);
+	});
+
+	test("compose v2 可用 → 按 file 参数执行（缺省 docker-compose.yml）", async () => {
 		const runner = new ScriptedRunner([{ exitCode: 0 }, { exitCode: 0, stdout: "NAME  STATUS\nweb   running" }]);
 		const pi = makeDocker(runner);
-		const text = textOf(await pi.tools.get("ops_docker_compose")!.execute("c2", { projectDir: "/srv/app", action: "ps" }));
+		const text = textOf(await pi.tools.get("ops_docker_compose")!.execute("c3", { projectDir: "/srv/app", action: "ps" }));
 		expect(text).toContain("web");
 		expect(runner.calls[1]!.cmd).toEqual(["docker", "compose", "-f", "/srv/app/docker-compose.yml", "ps"]);
 
 		const runner2 = new ScriptedRunner([{ exitCode: 0 }, { exitCode: 0, stdout: "ok" }]);
-		await makeDocker(runner2).tools.get("ops_docker_compose")!.execute("c3", { projectDir: "/srv/app", file: "compose.yaml", action: "ps" });
+		await makeDocker(runner2).tools.get("ops_docker_compose")!.execute("c4", { projectDir: "/srv/app", file: "compose.yaml", action: "ps" });
 		expect(runner2.calls[1]!.cmd).toEqual(["docker", "compose", "-f", "/srv/app/compose.yaml", "ps"]);
 	});
 });
