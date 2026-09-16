@@ -29,10 +29,11 @@
 | 绿 | `node --test ssh.test.ts` → 10 pass / 0 fail（含 S1–S3 三例）；`bun test read-tier-structure.test.ts` → 6 pass（含 S4） |
 | 全量门 | `npm run test:ci` 全绿（L1 135 pass；L2 52 pass ×4 文件；typecheck:core；install/bootstrap 守卫） |
 | 类型门 | 首轮暴露 `ssh.ts` 缺 `execFileSync` 导入 → 已补，typecheck 通过 |
+| **el7 现场证据（对端提供）** | 对端控制节点（CentOS/RHEL 7，OpenSSH 7.4）实测：宿主 harness 的 ssh:// 通道报 `command-line line 0: unsupported option "accept-new"`（**配置解析阶段即失败**）→ 该节点上 `ssh -G -o StrictHostKeyChecking=accept-new` 必然判不支持，我方 SshPool 将走 **`no` + 受管 known_hosts 退化分支**（与其版本推断一致）。注：该报错源自宿主 harness、非 omo；对本仓而言是「el7 上 accept-new 不可用」的现成现场证据 |
 
 ## 四、未兑现项
 
-- **真机复验**：el7（OpenSSH 7.4）控制节点首连行为、以及 SSH 远程能力端到端，需对端在其环境复验（我方无 el7 目标机）；建议对端复验项：`ssh -G` 探测结论、首连成功后 `known_hosts` 是否落在 `<controlDir>/known_hosts`。
+- **真机复验**：el7 控制节点的 `ssh -G` 探测结论已由对端现场证据**间接确认**（accept-new 不可用 → 走退化分支）；**首连后 `known_hosts` 落盘路径**仍待对端复验——其 controlDir（`$HOME/.ops-pi/ssh`，launcher 重定向后为 `~/.omo/home/.ops-pi/ssh`）当前为空目录且 `policy.json` 无目标授权，需等其升级 v0.9.3 + Owner 授权白名单 + 配置目标主机后回报。
 - **未实现（登记）**：对端建议的「首连后 `ssh-keyscan` 指纹落审计」未做——受管 `known_hosts` 已提供「记录」语义，指纹入审计属增强项，留待需要时再评估。
 - **文档口径确认**：`dirname(configPath)`（~/.omo/home/.ops-pi）在 trust 列表内 → vault 配置（含 `dbPath`）**设计上写拒、只能 Owner 手工落盘**；已在对端回信中确认，供其文档按此写。
 - **跨任务未修**：启动时 7 条 `Custom tool load failed`（宿主扫描 `$EXT/ops-pi/tools/*.ts`）。
