@@ -3,6 +3,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { ApprovalFn } from "../approvals.ts";
 import { registerOpsTool } from "../approvals.ts";
 import { assertAuthorized } from "../guards.ts";
+import { fmtExecResult } from "./exec-output.ts";
 import type { OpsContext } from "../context.ts";
 
 /**
@@ -48,7 +49,7 @@ export function registerServiceTools(pi: ExtensionAPI, ctx: OpsContext, approval
 					{ signal, timeoutMs: 10_000 },
 				);
 				return {
-					content: [{ type: "text", text: result.stdout || `(no output, exit=${result.exitCode})` }],
+					content: [{ type: "text", text: fmtExecResult(result) }],
 					details: { authz, service, host, action },
 				};
 			}
@@ -59,7 +60,7 @@ export function registerServiceTools(pi: ExtensionAPI, ctx: OpsContext, approval
 				{ signal, timeoutMs: 30_000 },
 			);
 			return {
-				content: [{ type: "text", text: result.stdout || `exit=${result.exitCode}` }],
+				content: [{ type: "text", text: fmtExecResult(result) }],
 				details: { authz, service, host, action },
 			};
 		},

@@ -3,6 +3,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { ApprovalFn } from "../approvals.ts";
 import { registerOpsTool } from "../approvals.ts";
 import { assertAuthorized } from "../guards.ts";
+import { fmtExecResult } from "./exec-output.ts";
 import { policyRequestFor } from "../request.ts";
 import type { OpsContext } from "../context.ts";
 
@@ -32,7 +33,7 @@ export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval:
 			const args = ["docker", "ps", "--format", "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}"];
 			if (p.all === true) args.push("--all");
 			const result = await ops.shell.exec(args, { signal, timeoutMs: 15_000 });
-			return { content: [{ type: "text", text: result.stdout || "(no containers)" }], details: { authz, host } };
+			return { content: [{ type: "text", text: fmtExecResult(result, "(no containers)") }], details: { authz, host } };
 		},
 	});
 
@@ -55,7 +56,7 @@ export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval:
 			const { ops, host } = route(p.host);
 			const authz = assertAuthorized("ops_docker_logs", { ...p, host }, ctx.authzView);
 			const result = await ops.shell.exec(["docker", "logs", "--tail", String(lines), container], { signal, timeoutMs: 15_000 });
-			return { content: [{ type: "text", text: result.stdout || result.stderr }], details: { authz, host } };
+			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };
 		},
 	});
 
@@ -78,7 +79,7 @@ export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval:
 			// ③ 复核走统一映射：{ host, service:容器名, action:"exec", command }
 			const authz = assertAuthorized("ops_docker_exec", { ...p, host }, ctx.authzView);
 			const result = await ops.shell.exec(["docker", "exec", container, "sh", "-c", command], { signal, timeoutMs: 30_000 });
-			return { content: [{ type: "text", text: result.stdout || result.stderr }], details: { authz, host, request: policyRequestFor("ops_docker_exec", { ...p, host }) } };
+			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host, request: policyRequestFor("ops_docker_exec", { ...p, host }) } };
 		},
 	});
 
@@ -89,7 +90,8 @@ export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval:
 		approval: approval("ops_docker_compose"),
 		description: "Docker Compose 操作（仅本机）。ps/logs 为只读；up/down/restart 为变更类（须 Owner 预授权）。",
 		parameters: z.object({
-			projectDir: z.string().describe("docker-compose.yml 所在目录"),
+			projectDir: z.string().describe("compose 文件所在目录"),
+			file: z.string().optional().describe("compose 文件名（缺省 docker-compose.yml，可传 compose.yaml）"),
 			action: z.enum(["ps", "logs", "up", "down", "restart"]).describe("Compose 操作"),
 			host: z.string().optional().describe("目标主机（留空 = 本机）"),
 		}),
@@ -99,8 +101,18 @@ export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval:
 			const action = String(p.action ?? "ps");
 			const { ops, host } = route(p.host);
 			const authz = assertAuthorized("ops_docker_compose", { ...p, host }, ctx.authzView);
-			const result = await ops.shell.exec(["docker", "compose", "-f", `${dir}/docker-compose.yml`, action], { signal, timeoutMs: 60_000 });
-			return { content: [{ type: "text", text: result.stdout || result.stderr || `exit=${result.exitCode}` }], details: { authz, host } };
+			// 先探测 compose 可用性：缺失时直说，避免回显 docker 全量 usage（约 60 行噪音，2026-09-16 对端实测）
+			const probe = await ops.shell.exec(["docker", "compose", "version"], { signal, timeoutMs: 10_000 });
+			if (probe.exitCode !== 0) {
+				const detail = (probe.stderr || probe.stdout).trim().split("\n").slice(0, 3).join("\n");
+				return {
+					content: [{ type: "text", text: `docker compose 不可用（exit=${probe.exitCode}）${detail === "" ? "" : `：${detail}`}\n请安装 compose v2 插件（或改用 docker-compose），再重试。` }],
+					details: { authz, host },
+				};
+			}
+			const fileName = String(p.file ?? "docker-compose.yml");
+			const result = await ops.shell.exec(["docker", "compose", "-f", `${dir}/${fileName}`, action], { signal, timeoutMs: 60_000 });
+			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };
 		},
 	});
 }
@@ -130,7 +142,7 @@ export function registerK8sTools(pi: ExtensionAPI, ctx: OpsContext, approval: (n
 			const authz = assertAuthorized("ops_k8s_pods", { ...p, host }, ctx.authzView);
 			const ns = p.namespace !== undefined ? String(p.namespace) : "default";
 			const result = await ops.shell.exec(["kubectl", "get", "pods", "-n", ns, "-o", "wide"], { signal, timeoutMs: 15_000 });
-			return { content: [{ type: "text", text: result.stdout || "(no pods)" }], details: { authz, host } };
+			return { content: [{ type: "text", text: fmtExecResult(result, "(no pods)") }], details: { authz, host } };
 		},
 	});
 
@@ -152,7 +164,7 @@ export function registerK8sTools(pi: ExtensionAPI, ctx: OpsContext, approval: (n
 			const { ops, host } = route(p.host);
 			const authz = assertAuthorized("ops_k8s_logs", { ...p, host }, ctx.authzView);
 			const result = await ops.shell.exec(["kubectl", "logs", pod, "-n", ns, "--tail=200"], { signal, timeoutMs: 15_000 });
-			return { content: [{ type: "text", text: result.stdout || result.stderr }], details: { authz, host } };
+			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };
 		},
 	});
 
@@ -180,7 +192,7 @@ export function registerK8sTools(pi: ExtensionAPI, ctx: OpsContext, approval: (n
 			const cmdArgs = ["kubectl", "rollout", action, `${kind}/${name}`, "-n", ns];
 			if (action === "status") cmdArgs.push("--watch=false");
 			const result = await ops.shell.exec(cmdArgs, { signal, timeoutMs: 60_000 });
-			return { content: [{ type: "text", text: result.stdout || `exit=${result.exitCode}` }], details: { authz, host } };
+			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };
 		},
 	});
 
@@ -209,7 +221,7 @@ export function registerK8sTools(pi: ExtensionAPI, ctx: OpsContext, approval: (n
 			if (container !== undefined) args.push("-c", container);
 			args.push("--", "sh", "-c", command);
 			const result = await ops.shell.exec(args, { signal, timeoutMs: 30_000 });
-			return { content: [{ type: "text", text: result.stdout || result.stderr }], details: { authz, host } };
+			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };
 		},
 	});
 }

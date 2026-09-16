@@ -2,6 +2,7 @@ import { LOCAL_HOST, READ } from "@ops-pi/core";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { registerOpsTool } from "../approvals.ts";
 import { assertAuthorized } from "../guards.ts";
+import { fmtExecResult } from "./exec-output.ts";
 import type { OpsContext } from "../context.ts";
 
 /**
@@ -84,7 +85,7 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			const ops = ctx.forHost(typeof p.host === "string" ? p.host : undefined);
 			if (ops.host === undefined) ctx.pathGuard.assertReadable(path);
 			const result = await ops.shell.exec(["ls", "-lh", "--time-style=full-iso", path], { signal, timeoutMs: 10_000 });
-			return { content: [{ type: "text", text: result.stdout }], details: { authz } };
+			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz } };
 		},
 	});
 
@@ -110,7 +111,7 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			].join(" && ");
 			const result = await ops.shell.exec(["sh", "-c", commands], { signal, timeoutMs: 30_000 });
 			return {
-				content: [{ type: "text", text: result.stdout }],
+				content: [{ type: "text", text: fmtExecResult(result) }],
 				details: { authz, host: ops.host ?? LOCAL_HOST },
 			};
 		},
@@ -137,7 +138,7 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 				"echo '=== TOP3 ===' && ps aux --sort=-%cpu | head -4",
 			].join(" && ");
 			const result = await ops.shell.exec(["sh", "-c", commands], { signal, timeoutMs: 30_000 });
-			return { content: [{ type: "text", text: result.stdout }], details: { authz, host: ops.host ?? LOCAL_HOST } };
+			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host: ops.host ?? LOCAL_HOST } };
 		},
 	});
 
