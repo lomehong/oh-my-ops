@@ -1,6 +1,6 @@
 id: 'OPSP-P22'
 title: 'compose 探测缺陷 8：v1 用「执行探测」而非「存在性探测」，二进制缺失时异常穿透、绕过「两者皆无」建议分支'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-16T09:07:28.784Z'
 accept:
@@ -17,4 +17,20 @@ events:
     op: 'claim'
     by: 'omp-architect'
     note: 'branch=feature/OPSP-P22'
+  - ts: '2026-09-16T09:09:50.613Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: 'compose 探测缺陷 8 修复完成（自报）：探测统一 try/catch + v1 改存在性探测（command -v）+ docker --version 解析健壮化；「两者皆无」分支现可达并给平台分支建议。'
 branch: 'feature/OPSP-P22'
+report:
+  summary: 'compose 探测缺陷 8 修复完成（自报）：探测统一 try/catch + v1 改存在性探测（command -v）+ docker --version 解析健壮化；「两者皆无」分支现可达并给平台分支建议。'
+  evidence:
+    - '红（对端 v0.9.4 实测）：[EXEC_FAILED] 命令执行失败：docker-compose（异常穿透，未进建议分支）'
+    - '绿：bun test read-tier-structure.test.ts → 13 pass（新增 ThrowOnComposeRunner 例：v1 spawn 抛错仍落建议分支，且全程不再直接执行 docker-compose 探测）'
+    - 'npm run test:ci 全绿（L2 59 pass ×4 文件）'
+    - '旁证：CI 早期无 ps 容器同样得 [EXEC_FAILED] 命令执行失败：ps → 证实「二进制缺失=抛错」，故可选依赖探测必须 try/catch 或存在性探测'
+  pending:
+    - '真机复验：对端升级 v0.9.5 后复验（v2/v1 皆缺 → 应见「无 CLI 插件机制 + 建议装 v1 单文件」；装上 v1 后应自动回退执行）'
+    - '缺陷 7 收口确认（对端已实测确认修复，待其正式回执）'
+  at: '2026-09-16T09:09:50.613Z'
+  by: 'omp-architect'
