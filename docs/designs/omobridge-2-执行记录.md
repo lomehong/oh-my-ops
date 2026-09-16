@@ -67,7 +67,7 @@
   「回信走 replyTo 权威路由」。已在此登记，请主人在实现评审时确认。
 - **新增使用侧规则（非代码改动）**：跨设备回信的目标必须是 agent 级（`agent_name` / `device:sessionID` / `agentId`）；
   裸别名与 `device:别名` 仅适用于非回信的新消息。
-- **⑦ 状态**：评审已独立反证「⑦ 必要性成立（去归一保留 ⑤ → T6 红、投递反而失败）」，并判定「实现可保留，但属扩围待主人确认」（评审 G6）→ **本项仍待主人显式确认**。
+- **⑦ 状态**：评审已独立反证其必要性（去归一保留 ⑤ → T6 红、投递反而失败）；**主人 2026-09-16 已确认放行**（同日台账 OMOBRIDGE-2 `confirm` 落定）。
 
 ### 3.4 不做项（Don't，评审 G6 要求显式）
 
@@ -95,6 +95,11 @@
   - Hub 文档评论 `2026-09-16T00-05-14-5d5dx2`（doc=`hub-plugin`，三段式，已 GET 校验 200）；
   - 已知会 `omo-172-26-5-121`（其部署件同源，需同步升级）。
   待上游修复并随安装器分发。
+- **知识回写（评审建议，已执行 2026-09-16）**：`architect-knowledge/practice/yuyi-reply-addressing-contract.md` 已入库
+  （status `待审核`），三台账同步（`practice/index.md` / `review-queue.yaml` / `source-manifest.yaml`），
+  knowledge-lint **PASS（0 error，42 条目：已确认 41 / 待审核 1）**。
+  - **偏差登记**：大脑仓在容器内**无 git 仓库**（`/opt/architect` 仅 `dsh-architect`、`omp-architect` 两个子仓有 `.git`），
+    故该条目未能按 knowledge-distill 第 8 步提交版本控制——需在有 git 的宿主侧补提交。
 - **待确认发现（未改，登记备查）**：插件初始化会 `connect()` 两次（工厂末尾 + `session_start`），产生一条
   僵尸 Hub 连接（本夹具实测 `connections=2`；生产日志亦有两条「连接 Hub」）。疑与「同 agent 多连接合并投递」
   语义相关，未在本次范围内改动。

@@ -1,6 +1,6 @@
 id: 'OMOBRIDGE-2'
 title: 'yuyi 适配器回信路径修复——跨设备自动回信被 Hub 拒（回信目标无 agent 级解析）+ 契约对齐'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-09-15T10:35:18.421Z'
 accept:
@@ -33,12 +33,16 @@ events:
     op: 'report'
     by: 'omp-architect'
     note: '评审整改完成（自报）：G1/G2 改夹具（观察窗 12s；新增 T9/T10/T11 覆盖 sendFailureReply 与重试语义），G3–G6 改文档（未知项登记/影响面与回滚/基准可回源性/不做项清单 + ⑦ 待确认标注）。夹具 14 通过 / 0 失败（改动前 3 通过 / 11 失败，连跑 2 次稳定）。提交 ee3f260（test）、a1d1995（docs），分支 feature/OMOBRIDGE-2。'
+  - ts: '2026-09-16T00:51:19.305Z'
+    op: 'confirm'
+    by: '主人'
+    note: '⑦ 回信目标归一放行；E2E（宿主重启后跨设备 notify → 自动回信不再失败）与上游分发仍为未兑现项，已登记；实践条目 practice/yuyi-reply-addressing-contract.md 已入库（status 待审核，lint PASS）'
 branch: 'feature/OMOBRIDGE-2'
 report:
   summary: '评审整改完成（自报）：G1/G2 改夹具（观察窗 12s；新增 T9/T10/T11 覆盖 sendFailureReply 与重试语义），G3–G6 改文档（未知项登记/影响面与回滚/基准可回源性/不做项清单 + ⑦ 待确认标注）。夹具 14 通过 / 0 失败（改动前 3 通过 / 11 失败，连跑 2 次稳定）。提交 ee3f260（test）、a1d1995（docs），分支 feature/OMOBRIDGE-2。'
   evidence:
     - 'G1：T7 观察窗 5s→12s（> 最坏重连 2000ms + jitter ≤5000ms = 7s）；红基线连跑 2 次均 3 通过/11 失败且 T7b 两次都红（评审前 5s 窗曾 1 次假绿）'
-    - 'G2：夹具场景 D —— T9 sendFailureReply 帧形态合规（to=device:sessionID、from.device=HARNESS-DEV、text="[御驿] 注入失败：…"）；T10 首投拒→重试成功（acks=false,true，日志双段）；T11 两次均拒（acks=false,false + detail + 「回信发送失败（msg …），B 侧提示」）'
+    - 'G2：夹具场景 D —— T9 sendFailureReply 帧形态合规（to=device: 'sessionID、from.device=HARNESS-DEV、text="[御驿] 注入失败：…"）；T10 首投拒→重试成功（acks=false,true，日志双段）；T11 两次均拒（acks=false,false + detail + 「回信发送失败（msg …），B 侧提示」）'''
     - '绿基线：node --check PASS；node scripts/probe-yuyi-reply-frame.mjs → 14 通过 / 0 失败（exit 0，约 31s）'
     - 'G5：夹具头注 + 执行记录 §六 + 上游报告 §八 标注基准 A（/docs/hub-plugin，2026-09-16 取用）/ B（/dist/omp.js 0.1.0 md5 393e21ba…）/ C（本仓 md5 6ff79a0f→0675880b）/ D（生产实测，桩为手写复刻），并列 3 条不可回源/第二手项'
     - 'G4：执行记录 §五 影响面（含「vendor 为上游构建拷贝 → 未上游化前同步会静默回退」及检测器）+ 三步回滚命令（回滚后自证应回到 3 通过 11 失败）'
@@ -46,8 +50,10 @@ report:
   pending:
     - '主人显式确认 ⑦（回信目标归一）扩围项'
     - '实现评审复核（G1–G6 是否闭合）+ 主人确认后方可合并 main'
-    - '真机 E2E：宿主重启后跨设备 notify → 自动回信不再失败；并单列观察 G3（对端 from.device 空 → to={device:""}）'
+    - '真机 E2E：宿主重启后跨设备 notify → 自动回信不再失败；并单列观察 G3（对端 from.device 空 → to={device: '""}）'''
     - '上游分发：/dist/omp.js 0.1.0 与对端同源缺陷未修（报告 + Hub 评论 2026-09-16T00-05-14-5d5dx2 已提交）'
     - '备查发现（未改）：插件初始化 connect() 两次产生僵尸 Hub 连接'
   at: '2026-09-16T00:39:21.350Z'
   by: 'omp-architect'
+confirmedBy: '主人'
+confirmedVia: '会话确认 2026-09-16（主人「同意」：⑦ 扩围放行 + 采纳评审建议「真机 E2E 前不合并」+ 上游化归属确认 + 同意蒸馏实践条目）'
