@@ -68,12 +68,12 @@ describe("syncKb：分支纪律（真 git + file:// 裸仓）", () => {
 			// 克隆到**全新空目录**（fixture 里的 coord 目录已含 knowledge/，非空 → clone 会失败）
 			const coordClone = path.join(path.dirname(bare), "coordinator-clone");
 			const cloned = await shell.exec(["git", "clone", bare, coordClone], { timeoutMs: 30_000 });
-			expect(cloned.exitCode, cloned.stderr).toBe(0);
+			expect(cloned.exitCode).toBe(0);
 			const fetched = await shell.exec(["git", "fetch", "origin", "instance/node-a"], { cwd: coordClone, timeoutMs: 30_000 });
 			expect(fetched.exitCode).toBe(0);
 			// 直接把取到的提交推进 main（等价于 PR 合并；空裸仓克隆无本地分支，避免 checkout 分支纠缠）
 			const pushMain = await shell.exec(["git", "push", "origin", "FETCH_HEAD:refs/heads/main"], { cwd: coordClone, timeoutMs: 30_000 });
-			expect(pushMain.exitCode, pushMain.stderr).toBe(0);
+			expect(pushMain.exitCode).toBe(0);
 
 			// B 再同步 → 见到条目
 			const rb2 = await syncKb({ omoDir: dirs.b, kbDir: path.join(dirs.b, "knowledge"), repo: bare, branch: "main", device: "node-b", runner: shell, push: false });

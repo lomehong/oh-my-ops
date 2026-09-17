@@ -3,7 +3,8 @@ import * as path from "node:path";
 import { rm, stat } from "node:fs/promises";
 import { ShellExec } from "@ops-pi/core";
 import { loadConfig } from "./setup.ts";
-import { syncKb } from "./kb-sync.ts";
+import { syncKb, deviceName } from "./kb-sync.ts";
+import { enroll, parseEnrollArgs } from "./kb-enroll.ts";
 import {
 	daysUntilExpiry,
 	omoHomeDir,
@@ -127,6 +128,33 @@ async function runLoop(env: KbCliEnv, intervalSec: number): Promise<number> {
 	}
 }
 
+/**
+ * `omo kb enroll`：向自注册服务兑换一次性码 → 落盘凭据（0600）→ **就地自证**（拉一次主线）。
+ * 秘密只经 HTTPS 响应进入；失败给出可操作原因（码无效/过期/已用/设备不匹配）。
+ */
+async function runEnroll(env: KbCliEnv, argv: string[]): Promise<number> {
+	const opts = await parseEnrollArgs(argv);
+	opts.device = opts.device === "" ? deviceName() : opts.device;
+	let r;
+	try {
+		r = await enroll(opts, env.omoDir);
+	} catch (err) {
+		console.error(`✗ ${String((err as Error)?.message ?? err)}`);
+		return 1;
+	}
+	console.log(`✓ ${r.message}`);
+	if (r.revoked === true) return 0;
+	// 自证：立刻拉一次主线（pull-only），确证「凭据 + 授权 + 网络」同时可用
+	env.repo = env.repo ?? r.credential?.repo;
+	const code = await runSync(env, { push: false, quiet: false });
+	if (code !== 0) {
+		console.error("✗ 凭据已落盘，但自证同步失败：请检查网络/服务端授权（凭据保留，可重试 `omo kb sync`）");
+		return code;
+	}
+	console.log("✓ 自证通过：知识库已可同步");
+	return 0;
+}
+
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
 	const cmd = argv.find((a) => !a.startsWith("--")) ?? "status";
 	const env = resolveKbEnv();
@@ -143,10 +171,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 		case "disable":
 			return await runDisable(env);
 		case "enroll":
-			console.error("enroll 属 P3（供给服务部署决策后启用）；当前请 Owner 发放凭据并写入 kb/credential.json");
-			return 2;
+			return await runEnroll(env, argv);
 		default:
-			console.log("用法：omo kb <sync [--push] [--quiet] | status | disable | loop [--interval 秒]>");
+			console.log("用法：omo kb <sync [--push] [--quiet] | status | disable | loop [--interval 秒] | enroll --server <url> --code-file <0600> [--device 名]>");
 			return 2;
 	}
 }

@@ -154,3 +154,28 @@ git ls-remote（同凭据）          → ✓（自证二；**证明生产允许
    已改为按 `hasCommitsToPush`（`rev-list --count <远端 tip>..HEAD`）判定。
 
 三项均有回归守卫（`kb-sync.test.ts` 15 pass）。至此 **P1 的凭据/同步/分支纪律在真实生产上全部闭环**。
+
+---
+
+## 第五轮：P3 自注册服务落地（2026-09-17）
+
+**交付**
+- `scripts/lib/kb-gitea.mjs`（Gitea 原语，供给 CLI 与服务**共用一份实现**）、`scripts/lib/kb-registry.mjs`（登记表 + 一次性码，只存 sha256/sha1）；
+- `scripts/ops-kb-enroll-server.mjs`（`/healthz` + `/enroll`；一次性码授权；TLS 默认强制；哈希链审计）；
+- `omo kb enroll`（客户端：兑换 → 落盘 0600 → **立刻自证同步**；revoke 时删除本地凭据）；
+- `ops-kb-provision.mjs code --op enroll|rotate|revoke [--device] [--ttl]`（签发一次性码）；
+- 测试 `packages/ops-extension/test/kb-enroll.test.ts`（真子进程真 HTTP + 桩 Gitea）：一次性、设备绑定、过期、吊销、TLS 拒绝启动、healthz、**秘密不落登记/审计** → 5 pass；已入 `test:ci`。
+
+**生产实测（真 Gitea，真码）**
+| 动作 | 结果 |
+|---|---|
+| `code --op enroll` → 客户端兑换 | ✓ 建号 `omo-bot-pc-sz-375` + 授权 + 自证同步 **pull ✓**（3 条目），凭据落盘 0600 |
+| 码重放 | **409**「已被使用」（审计记 `enroll.rejected(used)`） |
+| `code --op rotate` → 兑换 | ✓ 新凭据生效、**旧凭据 git 立即失败** |
+| `code --op revoke` → 兑换 | ✓ 服务改密+撤权；客户端**删除**本地凭据；同步回落本地模式 |
+| 再 `enroll` | ✓ 凭据恢复、自证同步通过 |
+| **TLS 直连** | ✓ 服务 HTTPS（`/healthz` → `tls:true`）；客户端默认拒绝自签证书；`--allow-insecure-tls` 后经 TLS 完成生产轮换 |
+
+**顺带清理**：今日用 `provision` 临时建的 `omo-bot-pcsz375` 已 `revoke --delete-user`（同一设备只留一个 bot）。
+
+**门禁**：`npm run test:ci` 全绿（L1 150、L2 含 enroll 5 例、provisioner 自检 11/11、**core+extension 双侧 typecheck**、install/bootstrap 探针）。

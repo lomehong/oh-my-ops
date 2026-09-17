@@ -113,7 +113,7 @@ describe("ops_docker_compose：缺件给诊断，不回显 usage 转储", () => 
 
 	test("★ v1 二进制不存在导致 spawn 抛错时，仍落到「两者皆无」建议分支（缺陷 8）", async () => {
 		class ThrowOnComposeRunner extends ScriptedRunner {
-			async exec(cmd: string | readonly string[], options?: ExecOptions): Promise<ExecResult> {
+			override async exec(cmd: string | readonly string[], options?: ExecOptions): Promise<ExecResult> {
 				if (Array.isArray(cmd) && cmd[0] === "docker-compose") throw new Error("[EXEC_FAILED] 命令执行失败：docker-compose");
 				return super.exec(cmd, options);
 			}

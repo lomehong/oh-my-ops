@@ -51,3 +51,7 @@ report:
     op: 'report'
     by: 'omp-architect'
     note: 'P2 生产落地（自报）：站点管理员基本认证在生产 Gitea 1.27.3 打通；全自动供给 create（建号 201 → 团队+挂仓库 204 → 加成员 204 → API 自证 200 → git 自证 ✓）→ 凭据交付 → 本机实例 omo kb sync pull ✓（3 条目）→ rotate（旧凭据 git 失效、新凭据继续 ✓）→ sync --push → instance/PC-SZ-375 ✓。本轮生产暴露并修掉 3 个真缺陷（团队未挂仓库 / 新克隆 fetch first 被拒 / 漏推），均有回归守卫（kb-sync 15 pass）。待办：其余实例铺设（每台仅需投递 0600 凭据 + 跑 omo kb sync）；P3 enroll 服务（零人工投递）。'
+  - ts: '2026-09-17T09:40:00.000Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: 'P3 落地（自报）：enroll 服务（一次性码 + TLS 强制 + 哈希链审计）+ `omo kb enroll` 客户端 + `code` 签发子命令 + 共享 lib（kb-gitea/kb-registry）；测试 5 例入 test:ci（含秘密不落登记/审计、一次性/绑定/过期/吊销/TLS 拒绝启动）。生产实测：enroll 兑换→建号+授权+自证同步 ✓；重放 409；rotate→旧凭据失效 ✓；revoke→客户端删凭据 ✓；再 enroll 恢复 ✓；TLS 直连轮换 ✓。另：test:ci 补入扩展侧 typecheck。'

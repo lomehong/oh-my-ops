@@ -146,6 +146,35 @@
 | Gitea 管理 token | 仅存于该机 0600 文件（或 systemd `LoadCredential`），**不入仓/不入 KB/不入御驿**；90 天轮换 | 与「sign_secret 只在御符 API + 本机配置」同款纪律 |
 | 备选（若不想加服务） | 仅走 **E2**：Owner 在服务机跑脚本批量签发，逐台交付 | 放弃自注册的自动化，换取零新增常驻服务 |
 
+### 5.6′ 供给服务：**已实现**（P3 as-built）
+
+| 项 | 实现 |
+|---|---|
+| 服务 | `scripts/ops-kb-enroll-server.mjs`（bun；依赖仓库内 `@ops-pi/core` 的 AuditLog 做哈希链审计） |
+| 客户端 | `omo kb enroll --server <url> --code-file <0600> [--device 名]`（`packages/ops-extension/src/kb-enroll.ts`） |
+| 接口 | `GET /healthz`；`POST /enroll {code, device, agent_id?}` → 200 `{ok, op, credential?\|revoked?}`；错误码 400/401/403/409/410/429/500 |
+| 授权模型 | 每个动作（enroll/rotate/revoke）都需**一次性兑换码**（Owner 用 `ops-kb-provision.mjs code --op … [--device …] [--ttl 分钟]` 签发；默认 TTL 30min、单次消费、可绑定设备） |
+| 秘密纪律 | 服务只存码的 sha256、bot 密码的 sha1；密码**只出现在那次响应**；审计/登记/日志均不含明文（测试断言） |
+| 传输安全 | **默认拒绝明文 HTTP**（须 `--tls-cert/--tls-key`；仅显式 `--allow-insecure-http` 才放行且打印告警） |
+| 幂等/自证 | 建号幂等（已存在则改密）；发放前用 bot 凭据 `GET /repos/...` **自证**，失败则不发凭据（500） |
+| 客户端自证 | 兑换成功即落盘 0600 + 刷新 git store，并**立刻拉一次主线**（pull-only）确证可用 |
+| 撤销语义 | `revoke` 码 → 服务改乱密码 + 撤权；客户端**删除**本地凭据与 store 文件（本地知识库保留） |
+
+**运行（位置任选：只要该机可达 Gitea，且实例可达它）**：
+```bash
+# 证书（自签示例；生产建议用受信证书或把自签 CA 装到实例信任库）
+openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 365 \
+  -subj "/CN=<服务域名或IP>" -addext "subjectAltName=IP:<服务IP>"
+chmod 600 key.pem
+
+bun scripts/ops-kb-enroll-server.mjs --api <gitea>/api/v1 --repo <owner>/<repo> \
+  --grant team --team <团队名> --permission write \
+  --admin-user <站点管理员> --admin-password-file <0600> \
+  --registry <0600>:registry.json --audit <0600>:audit.jsonl \
+  --host 0.0.0.0 --port 8787 --tls-cert cert.pem --tls-key key.pem
+```
+每台实例接入：`omo kb enroll --server https://<服务>:8787 --code-file <0600 码>`（Owner 先 `code --op enroll --device <该设备名>`）。
+
 ### 5.7 生命周期（建议）
 
 | 项 | 建议 | 说明 |
