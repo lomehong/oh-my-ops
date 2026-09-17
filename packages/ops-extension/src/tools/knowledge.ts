@@ -8,7 +8,7 @@ import { registerOpsTool } from "../approvals.ts";
 import { assertAuthorized } from "../guards.ts";
 import type { KnowledgeStore } from "../knowledge.ts";
 import { syncKb } from "../kb-sync.ts";
-import { kbGitCredentialsPath, loadKbCredential } from "../kb-credential.ts";
+import { credentialAgeDays, kbGitCredentialsPath, loadKbCredential, loadKbState, redactUrl, rotationHint } from "../kb-credential.ts";
 import type { OpsContext } from "../context.ts";
 
 export interface KbSyncConfig {
@@ -118,6 +118,41 @@ export function registerKnowledgeTools(pi: ExtensionAPI, ctx: OpsContext, approv
 				content: [{ type: "text", text: `已沉淀 '${meta.title}'（${meta.file}）` }],
 				details: { authz, file: meta.file },
 			};
+		},
+	});
+
+	registerOpsTool(pi, {
+		name: "ops_kb_status",
+		label: "KB Status",
+		loadMode: "essential",
+		approval: READ,
+		description:
+			"知识库同步状态（read 档）：远端/分支/凭据（只显示前缀与已用天数）/最后同步时间与结果/轮换建议。" +
+			"排障与巡检时调用；不发起同步、不改动任何状态。",
+		parameters: z.object({}),
+		async execute(_toolCallId, _params, _signal) {
+			const authz = assertAuthorized("ops_kb_status", {}, ctx.authzView);
+			let credential;
+			let credentialError: string | undefined;
+			try {
+				credential = await loadKbCredential(ctx.omoDir);
+			} catch (err) {
+				credentialError = String((err as Error)?.message ?? err);
+			}
+			const state = await loadKbState(ctx.omoDir);
+			const ctxLines: string[] = [`远端：${ctx.kbRepo === undefined ? "（未配置 → 本地模式）" : redactUrl(String(ctx.kbRepo))}`, `主线分支：${ctx.kbBranch}`];
+			if (credentialError !== undefined) ctxLines.push(`凭据：不可用 —— ${credentialError}`);
+			else if (credential === undefined) ctxLines.push("凭据：未配置（本地模式；可用 `omo kb enroll` 兑换）");
+			else {
+				const age = credentialAgeDays(credential.createdAt);
+				ctxLines.push(`凭据：${credential.username}（${credential.kind}，前缀 ${credential.secret.slice(0, 8)}…${age === undefined ? "" : `，已用 ${age} 天`}）`);
+				const hint = rotationHint(credential);
+				if (hint !== undefined) ctxLines.push(`⚠ ${hint}`);
+			}
+			ctxLines.push(state === undefined ? "最后同步：（无记录）" : `最后同步：${state.lastSyncAt} ${state.ok ? "✓" : `✗ ${state.error ?? ""}`}`);
+			if (state !== undefined && state.actions.length > 0) ctxLines.push(`最近动作：
+${state.actions.slice(-6).map((a) => `  · ${a}`).join("\n")}`);
+			return { content: [{ type: "text", text: ctxLines.join("\n") }], details: { authz, credentialError, lastSyncOk: state?.ok } };
 		},
 	});
 

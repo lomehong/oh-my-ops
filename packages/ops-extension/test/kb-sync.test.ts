@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { ShellExec } from "@ops-pi/core";
 import { syncKb, instanceBranchFor } from "../src/kb-sync.ts";
-import { daysUntilExpiry, kbCredentialPath, kbGitCredentialsPath, loadKbCredential, omoHomeDir, redactUrl, saveGitCredentialsFile, saveKbCredential, secretPrefix, KbCredentialError, ensureGitCredentialsFile } from "../src/kb-credential.ts";
+import { daysUntilExpiry, kbCredentialPath, kbGitCredentialsPath, loadKbCredential, omoHomeDir, redactUrl, saveGitCredentialsFile, saveKbCredential, secretPrefix, KbCredentialError, ensureGitCredentialsFile, credentialAgeDays, rotationHint } from "../src/kb-credential.ts";
 
 /**
  * OMO-KB-SYNC P1 守卫：分支纪律 + 凭据文件（真 git、file:// 裸仓，无网络）。
@@ -334,6 +334,48 @@ describe("★ 已有本地提交但本轮无新改动时，也必须推送（真
 			expect(ls.stdout).toContain("stale.md");
 		} finally {
 			fs.rmSync(root, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("凭据生命周期提示（密码形态无自带过期 ⇒ 按已用天数提醒）", () => {
+	test("★ 年龄计算与阈值提示；带 expiresAt 时按过期提醒（不重复打扰）", () => {
+		const now = Date.parse("2026-09-17T00:00:00.000Z");
+		expect(credentialAgeDays("2026-09-07T00:00:00.000Z", now)).toBe(10);
+		expect(credentialAgeDays(undefined, now)).toBeUndefined();
+		expect(credentialAgeDays("not-a-date", now)).toBeUndefined();
+
+		const base = { repo: "https://h/g/o", username: "bot", secret: "s", kind: "token" as const };
+		expect(rotationHint({ ...base, createdAt: "2026-09-01T00:00:00.000Z" }, now)).toBeUndefined();
+		expect(rotationHint({ ...base, createdAt: "2026-01-01T00:00:00.000Z" }, now)).toContain("建议轮换");
+		expect(rotationHint({ ...base, createdAt: "2026-01-01T00:00:00.000Z", expiresAt: "2026-12-01T00:00:00.000Z" }, now)).toBeUndefined();
+		expect(rotationHint({ ...base, createdAt: "2026-09-16T00:00:00.000Z", expiresAt: "2026-09-25T00:00:00.000Z" }, now)).toContain("天后过期");
+	});
+});
+
+describe("★ 回退（设计 §七 Rollback）：disable 后回落本地模式", () => {
+	test("disable 删除凭据与 store 文件；随后的 sync 不再触碰远端（保留本地知识库）", async () => {
+		const shell = new ShellExec();
+		const omo = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-rollback-"));
+		const kb = path.join(omo, "knowledge");
+		try {
+			fs.mkdirSync(kb, { recursive: true });
+			fs.writeFileSync(path.join(kb, "keep.md"), "local knowledge survives\n");
+			await saveKbCredential(omo, { repo: "https://example.com/g/x", username: "bot", secret: "pw", kind: "password" as const, createdAt: new Date().toISOString() });
+			await saveGitCredentialsFile(omo, await loadKbCredential(omo) as never);
+			expect(fs.existsSync(kbCredentialPath(omo))).toBe(true);
+
+			const { runDisable } = await import("../src/kb-cli.ts");
+			await runDisable({ omoDir: omo, kbDir: kb, branch: "main", credentialFile: kbCredentialPath(omo), gitCredentialFile: kbGitCredentialsPath(omo), stateFile: path.join(omo, "kb", "state.json") });
+			expect(fs.existsSync(kbCredentialPath(omo))).toBe(false);
+			expect(fs.existsSync(kbGitCredentialsPath(omo))).toBe(false);
+
+			const r = await syncKb({ omoDir: omo, kbDir: kb, repo: undefined, branch: "main", device: "node-x", runner: shell, push: true });
+			expect(r.ok).toBe(true);
+			expect(r.actions.join(" ")).toContain("本地模式");
+			expect(fs.readFileSync(path.join(kb, "keep.md"), "utf8")).toContain("survives");
+		} finally {
+			fs.rmSync(omo, { recursive: true, force: true });
 		}
 	});
 });

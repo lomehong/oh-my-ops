@@ -160,6 +160,9 @@ describe("P3 · 凭据自注册端到端（服务真 HTTP + 客户端真兑换�
 
 			const { code: c3 } = await issueCode(dir, ["--op", "enroll", "--device", "node-1", "--ttl", "0"]);
 			await expect(enroll({ server: svc.base, code: c3, device: "node-1", allowInsecureHttp: true }, omo)).rejects.toThrow(/已过期/);
+
+			// 契约（设计 §七）：码无效 → 401
+			await expect(enroll({ server: svc.base, code: "totally-invalid-code", device: "node-1", allowInsecureHttp: true }, omo)).rejects.toThrow(/兑换码无效/);
 		} finally {
 			svc.stop();
 			gitea.stop();

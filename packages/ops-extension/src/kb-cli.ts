@@ -13,6 +13,8 @@ import {
 	loadKbCredential,
 	loadKbState,
 	redactUrl,
+	rotationHint,
+	credentialAgeDays,
 	ensureGitCredentialsFile,
 	secretPrefix,
 	KbCredentialError,
@@ -99,15 +101,18 @@ async function runStatus(env: KbCliEnv): Promise<number> {
 	if (credential === undefined) console.log("凭据：未配置（本地模式）");
 	else {
 		const days = daysUntilExpiry(credential.expiresAt);
+		const age = credentialAgeDays(credential.createdAt);
 		console.log(
-			`凭据：${credential.username} ${credential.kind}=${secretPrefix(credential.secret)}${days === undefined ? "（无过期）" : `（${days} 天后过期${days <= 30 ? " ⚠ 建议轮换" : ""}）`}`,
+			`凭据：${credential.username} ${credential.kind}=${secretPrefix(credential.secret)}${days === undefined ? `（无过期${age === undefined ? "" : `，已用 ${age} 天`}）` : `（${days} 天后过期）`}`,
 		);
+		const hint = rotationHint(credential);
+		if (hint !== undefined) console.log(`⚠ ${hint}`);
 	}
 	console.log(state === undefined ? "最后同步：（无记录）" : `最后同步：${state.lastSyncAt} ${state.ok ? "✓" : `✗ ${state.error ?? ""}`}`);
 	return 0;
 }
 
-async function runDisable(env: KbCliEnv): Promise<number> {
+export async function runDisable(env: KbCliEnv): Promise<number> {
 	for (const f of [env.credentialFile, env.gitCredentialFile]) {
 		await rm(f, { force: true });
 	}

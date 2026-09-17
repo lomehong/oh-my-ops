@@ -79,7 +79,7 @@ HOME="$H4" bash "$PKG/scripts/install.sh" --name no-token >"$TMP/install-notoken
 
 echo "[4] KB 同步（OMO-KB-SYNC P1）：模块部署 + 启动器子命令"
 EXT2="$H2/.omo/extensions/ops-pi"
-for f in kb-cli.ts kb-sync.ts kb-credential.ts; do
+for f in kb-cli.ts kb-sync.ts kb-credential.ts kb-enroll.ts; do
 	[ -f "$EXT2/$f" ] && pass "扩展模块已部署：$f" || fail "缺少扩展模块：$f"
 done
 grep -q '^export OMO_DIR=' "$L" && pass "启动器导出 OMO_DIR" || fail "启动器未导出 OMO_DIR"

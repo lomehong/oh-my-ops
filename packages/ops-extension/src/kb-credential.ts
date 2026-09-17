@@ -136,6 +136,26 @@ export function secretPrefix(secret: string): string {
 	return secret.length <= 8 ? `${secret.slice(0, 2)}…` : `${secret.slice(0, 8)}…`;
 }
 
+/** 凭据已用天数（createdAt 解析失败 → undefined） */
+export function credentialAgeDays(createdAt?: string, nowMs: number = Date.now()): number | undefined {
+	if (createdAt === undefined) return undefined;
+	const t = Date.parse(createdAt);
+	if (Number.isNaN(t)) return undefined;
+	return Math.floor((nowMs - t) / 86_400_000);
+}
+
+/** 轮换建议：密码形态凭据没有自带过期 ⇒ 按**已用天数**提醒（默认 180 天） */
+export function rotationHint(credential: KbCredential, nowMs: number = Date.now(), thresholdDays = 180): string | undefined {
+	if (credential.expiresAt !== undefined) {
+		const days = daysUntilExpiry(credential.expiresAt, nowMs);
+		if (days !== undefined && days <= 30) return `凭据 ${days} 天后过期，建议轮换（ops-kb-provision rotate / omo kb enroll --op rotate）`;
+		return undefined;
+	}
+	const age = credentialAgeDays(credential.createdAt, nowMs);
+	if (age === undefined) return undefined;
+	return age >= thresholdDays ? `凭据已使用 ${age} 天（阈值 ${thresholdDays} 天），建议轮换：Owner 签发 rotate 码后本机执行 omo kb enroll` : undefined;
+}
+
 /** 距过期天数（无 expiresAt → undefined；已过期 → 负数） */
 export function daysUntilExpiry(expiresAt?: string, nowMs: number = Date.now()): number | undefined {
 	if (expiresAt === undefined) return undefined;
