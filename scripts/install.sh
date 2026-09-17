@@ -221,13 +221,19 @@ if [ -f "\$REAL_HOME/.yuyi/env" ]; then set -a; source "\$REAL_HOME/.yuyi/env"; 
 EXT_ARGS=()
 [ -d "\$EXT" ] && EXT_ARGS+=(--extension "\$EXT")
 [ -f "\$YUYI" ] && EXT_ARGS+=(--extension "\$YUYI")
+# serve 进程识别：argv[0] 必须是私有运行时的绝对路径，且带 --mode rpc。
+# 旧写法 grep "mode rpc" 依赖「参数被写进 bash -c 脚本串」的老启动形式；v4 把参数挪到
+# exec "\$0" … "\$@" 之后，argv 里 --mode / rpc 是两个独立元素，旧模式既漏报真进程、
+# 又误命中任何 argv 含该字面量的无关进程（2026-09-17 实测）。
 rpc_pids() {
-  local f p
+  local f a
   for f in /proc/[0-9]*/cmdline; do
     [ -r "\$f" ] || continue
-    if tr '\\0' '\\n' < "\$f" 2>/dev/null | grep -q "mode rpc"; then
-      p=\${f#/proc/}; echo "\${p%/cmdline}"
-    fi
+    a="\$(tr '\\0' '\\n' < "\$f" 2>/dev/null)" || continue
+    case "\$a" in "\$RUN"*) ;; *) continue ;; esac
+    printf '%s\\n' "\$a" | grep -qxF -- "--mode" || continue
+    printf '%s\\n' "\$a" | grep -qxF -- "rpc" || continue
+    p=\${f#/proc/}; echo "\${p%/cmdline}"
   done
   return 0
 }
@@ -245,7 +251,9 @@ case "\${1:-}" in
     else
       # 注意：本行位于**未加引号 heredoc** 内，$0/$@ 必须转义，否则在生成启动器时被展开成
       # 安装器自身路径与其参数（2026-09-16 实测：serve 后台模式写死 /tmp/.../install.sh）
-      setsid bash -c 'tail -f /dev/null | exec "\$0" --profile ops "\$@"' "\$RUN" --mode rpc "\${EXTRA_ARGS[@]}" >> /tmp/omo-serve.log 2>&1 < /dev/null &
+      # EXT_ARGS 必须随 exec 参数显式传入：v4 重构把它挪出 bash -c 字面量时丢掉过，
+      # 后台 serve 因此没有 -e → 扩展（含 yuyi）不加载、不连 Hub（2026-09-17 实测）
+      setsid bash -c 'tail -f /dev/null | exec "\$0" --profile ops "\$@"' "\$RUN" --mode rpc "\${EXT_ARGS[@]}" "\${EXTRA_ARGS[@]}" >> /tmp/omo-serve.log 2>&1 < /dev/null &
       # PID 检测 retry loop：471MB 二进制加载需数秒，单次 sleep 1 会竞态空文件（logstash-124 实测）
       P=""; for i in \$(seq 1 15); do sleep 1; P="\$(rpc_pids | tail -1 || true)"; [ -n "\$P" ] && break; done
       echo "\$P" > /tmp/omo-serve.pid 2>/dev/null || true
