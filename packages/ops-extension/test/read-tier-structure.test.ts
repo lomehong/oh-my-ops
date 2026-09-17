@@ -180,6 +180,11 @@ describe("PathGuard 机密根：真实用户 home 的 .ssh（缺陷 6：HOME 重
 		registerReadOnlyTools(pi as never, ctx);
 		const realHome = realUserHome();
 		await expect(pi.tools.get("ops_file_ls")!.execute("p1", { path: path.join(realHome, ".ssh") })).rejects.toThrow(/机密根/);
+
+		// OMO-KB-SYNC：KB 同步凭据同属机密根（bot token 不得被 Agent 读出）
+		fs.mkdirSync(path.join(omo, "kb"), { recursive: true });
+		fs.writeFileSync(path.join(omo, "kb", "credential.json"), JSON.stringify({ repo: "https://h/git/a/b", username: "bot", token: "SECRET" }));
+		await expect(pi.tools.get("ops_file_read")!.execute("p2", { path: path.join(omo, "kb", "credential.json") })).rejects.toThrow(/机密根/);
 	});
 });
 
