@@ -179,3 +179,7 @@ git ls-remote（同凭据）          → ✓（自证二；**证明生产允许
 **顺带清理**：今日用 `provision` 临时建的 `omo-bot-pcsz375` 已 `revoke --delete-user`（同一设备只留一个 bot）。
 
 **门禁**：`npm run test:ci` 全绿（L1 150、L2 含 enroll 5 例、provisioner 自检 11/11、**core+extension 双侧 typecheck**、install/bootstrap 探针）。
+
+**口径（2026-09-17 主人指令）**：手工部署的 omo 节点**由主人手工升级**，agent **不触达、不引导其安装**。
+本文档中所有"对端配合"的内容仅作**事实记录**（其网络与权限约束已固化为代码：HOME 重定向守卫、
+`--token-file` 0600、受限网络入口 codeload/jsdelivr），升级动作一律由主人执行；el7 真机退化验收待主人升级后另定。

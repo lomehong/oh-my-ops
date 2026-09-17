@@ -67,3 +67,7 @@ report:
     op: 'report'
     by: 'omp-architect'
     note: '对端网络事实驱动的安装链路加固（自报）：①对端 `git clone https://github.com/...` **不通**（git 协议/repo 页不可达，仅根路径 200）⇒ README 新增「受限网络入口」（官方 bootstrap 经 jsdelivr + codeload 源码包两法；后者复用本机既有 18.1.18 运行时，免 471MB 下载）；②对端指出 `--token` 会把凭据写进 shell history/ps ⇒ install.sh 新增 **--token-file（0600 强制，权限过宽即拒）**、`--token` 加泄密告警、提示文案统一改为 --token-file；探针新增 [6] 小节（宽权限拒绝 / 0600 生效写入 agent.json / --token 告警）。③对端 objects.githubusercontent.com 与 codeload.github.com 均可达 ⇒ 发布资产业务路径可用。'
+  - ts: '2026-09-17T10:55:00.000Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: '口径更正（主人指令）：**这批手工部署的 omo 节点由主人手工升级，agent 不触达、不引导其安装**。此前对 sec-agent-manager-172-26-5-121 的摸底已停止，不再向任何对端节点发送安装/升级/enroll 指令；el7（git 1.8.3.1）真机退化验收改由主人升级后自行触发或按主人指示执行。对端回执中仍有效的**事实**已固化进代码与文档（HOME 重定向守卫、--token-file 0600、受限网络入口 codeload/jsdelivr），这些对主人手工升级同样适用。'
