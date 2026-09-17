@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { ShellExec } from "@ops-pi/core";
 import { syncKb, instanceBranchFor } from "../src/kb-sync.ts";
-import { daysUntilExpiry, kbCredentialPath, kbGitCredentialsPath, loadKbCredential, omoHomeDir, redactUrl, saveGitCredentialsFile, saveKbCredential, secretPrefix, KbCredentialError, ensureGitCredentialsFile, credentialAgeDays, rotationHint } from "../src/kb-credential.ts";
+import { daysUntilExpiry, kbCredentialPath, kbGitCredentialsPath, loadKbCredential, omoHomeDir, redactUrl, saveGitCredentialsFile, saveKbCredential, saveKbState, secretPrefix, KbCredentialError, ensureGitCredentialsFile, credentialAgeDays, rotationHint } from "../src/kb-credential.ts";
 
 /**
  * OMO-KB-SYNC P1 守卫：分支纪律 + 凭据文件（真 git、file:// 裸仓，无网络）。
@@ -374,6 +374,46 @@ describe("★ 回退（设计 §七 Rollback）：disable 后回落本地模式"
 			expect(r.ok).toBe(true);
 			expect(r.actions.join(" ")).toContain("本地模式");
 			expect(fs.readFileSync(path.join(kb, "keep.md"), "utf8")).toContain("survives");
+		} finally {
+			fs.rmSync(omo, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("★ 静默降级防护：曾同步过但凭据缺失必须显式告警", () => {
+	test("有 state 无凭据 → 告警；有 state 有凭据 → 不告警；无 state 无凭据 → 不告警", async () => {
+		const omo = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-loud-"));
+		const run = async () => {
+			const mod = await import("../src/kb-cli.ts");
+			const logs: string[] = [];
+			const orig = console.log;
+			console.log = (...a: unknown[]) => { logs.push(a.map(String).join(" ")); };
+			try {
+				await mod.runStatus({ omoDir: omo, kbDir: path.join(omo, "knowledge"), branch: "main", credentialFile: kbCredentialPath(omo), gitCredentialFile: kbGitCredentialsPath(omo), stateFile: path.join(omo, "kb", "state.json") });
+			} finally {
+				console.log = orig;
+			}
+			return logs.join("\n");
+		};
+		try {
+			// 首装：无凭据无 state → 只说本地模式，不告警
+			let out = await run();
+			expect(out).toContain("凭据：未配置（本地模式）");
+			expect(out).not.toContain("此前同步过");
+
+			// 曾同步过（有 state）但凭据缺失 → 必须告警
+			fs.mkdirSync(path.join(omo, "kb"), { recursive: true });
+			await saveKbState(omo, { lastSyncAt: "2026-09-17T00:00:00.000Z", ok: true, mainBranch: "main", instanceBranch: "instance/node-z", actions: [] });
+			out = await run();
+			expect(out).toContain("此前同步过");
+			expect(out).toContain("远端同步处于停用状态");
+			expect(out).toContain("omo kb enroll");
+
+			// 凭据恢复 → 不再告警
+			await saveKbCredential(omo, { repo: "https://h/g/o", username: "bot", secret: "pw", kind: "password" as const, createdAt: new Date().toISOString() });
+			out = await run();
+			expect(out).not.toContain("此前同步过");
+			expect(out).toContain("凭据：bot");
 		} finally {
 			fs.rmSync(omo, { recursive: true, force: true });
 		}

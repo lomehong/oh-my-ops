@@ -91,14 +91,21 @@ async function runSync(env: KbCliEnv, opts: { push: boolean; quiet: boolean }): 
 	return report.ok ? 0 : 1;
 }
 
-async function runStatus(env: KbCliEnv): Promise<number> {
+export async function runStatus(env: KbCliEnv): Promise<number> {
 	const credential = await loadCredentialOrExit(env.omoDir);
 	const state = await loadKbState(env.omoDir);
 	const repo = credential?.repo ?? env.repo;
 	console.log(`远端：${repo === undefined ? "（未配置 → 本地模式）" : redactUrl(repo)}`);
 	console.log(`分支：主线 ${env.branch}｜实例分支 instance/<device>（device=${process.env.YUYI_DEVICE ?? os.hostname()}）`);
 	console.log(`知识库目录：${env.kbDir}`);
-	if (credential === undefined) console.log("凭据：未配置（本地模式）");
+	if (credential === undefined) {
+		console.log("凭据：未配置（本地模式）");
+		// 曾同步过却丢了凭据 ⇒ 必须显式告警（今日多次踩到「静默降级比报错危险」）
+		if (state !== undefined) {
+			console.log(`⚠ 本机此前同步过（${state.lastSyncAt}）但凭据已缺失：远端同步处于停用状态；`);
+			console.log("  · 重新接入：Owner 签发 enroll（或 rotate）码后执行 omo kb enroll --server <url> --code-file <0600>");
+		}
+	}
 	else {
 		const days = daysUntilExpiry(credential.expiresAt);
 		const age = credentialAgeDays(credential.createdAt);
