@@ -2,6 +2,11 @@
 
 > 来源需求：主人 2026-09-17 会话——内部 git 仓 `https://twin.hzins.com/git/hzins-ops/ops-kb` 已创建，用于 omo 实例间同步共享知识库；需**自动化**为每个 omo 实例分配可用账号/令牌，用于拉取与同步。
 > 状态：**待主人拍板**（本文件为设计产出，未进入编码）
+> **服务器已确认（2026-09-17 主人）**：**Gitea 1.27.3**，根路径 `https://twin.hzins.com/git/`。
+> 我方对实例的只读探测（未持凭据）：
+> · `GET /git/` → 200（Gitea Web UI 正常）；`GET /git/api/v1/version` → **403 `Only signed in user is allowed to call APIs`**（该实例 API **禁止匿名**）；
+> · 仓库页 `…/hzins-ops/ops-kb` → **303**（跳登录）；`…/info/refs?service=git-upload-pack`（匿名 clone）→ **401** ⇒ **仓库为私有，读也需凭据**（与主人需求一致）；
+> · SSH 端口探测：**22 与 2222 从本容器均不可达** ⇒ 「SSH Deploy Key 路线」可达性未证（见 §八 Unknown）。
 > 对齐主干：本文件落于他会话提交 `209a00f`（vendor/yuyi-skills + 部署）、`313ec07`/`8f20f03`（launcher/install 修复）之后；Reuse 项已按最新主干复核（`install.sh` 仍未处理 git 凭据 ✅ 假设成立）
 
 ## 一、需求覆盖
@@ -60,15 +65,29 @@
 
 ## 五、方案主体（推荐 A）
 
-### 5.1 账号/凭据模型（三选一）
+### 5.1 账号/凭据模型（Gitea 语境，三选一）
+
+> Gitea 与 GitLab 的凭据面不同：**没有「项目级 HTTPS deploy token」**；可用的是「用户级 access token（自 1.20 起带 scope，可单独吊销）」与「仓库级 deploy key（SSH）」。
 
 | 方案 | 说明 | 优点 | 代价 |
 |---|---|---|---|
-| **A. 每实例 Deploy Token（推荐）** | GitLab 项目级 deploy token，`read_repository`（贡献者再授 `write_repository`）；可设过期 | 无需用户账号/许可证；**可单独吊销**；作用面最小 | 不能自动建 MR（由中心合流）；GitLab 侧「用户」列显示为 deploy token |
-| B. 每实例 Project Access Token | 需 GitLab ≥13.9；可带 `api`（能自动建 MR） | 自动化程度高 | 权限面更大（等同项目机器人）；审计归属模糊 |
-| C. 每实例用户账号 | 真账号 + PAT | 审计最清晰 | 运维重（账号生命周期/许可证），除非合规要求「人可归属」 |
+| **A. 每实例机器人账号 + 作用域 access token（推荐）** | 管理 API 建 bot 用户（`admin/users`）+ 授予仓库/团队权限（read 或 write）+ 为该用户签发 `read:repository`（贡献者再加 `write:repository`）token | 归属最清晰；**可单独吊销**；自托管无许可证成本 | 需管理 N 个 bot 账号生命周期；token 的签发/轮换需该用户凭据 [待验证：管理员能否代签] |
+| B. 单服务账号 + N 个 token（token 名编码实例） | 一个服务用户，每实例一个 token | 运维最简（只有 1 个账号） | Gitea 侧审计只到「服务用户」；需靠 per-repo `user.name/user.email` 与提交内容做归属 |
+| C. 每实例 Deploy Key（SSH，仓库级，可授写） | 实例**本地生成密钥对**，只上送**公钥**注册 | **零秘密分发**（私钥不出实例）；`~/.ssh` 已在 PathGuard 机密根 | **SSH 可达性未证**（本容器 22/2222 均不可达）；密钥为仓库级 |
 
-**推荐 A**；若确需实例自动开 MR，仅对少数「协调者实例」用 B。
+**推荐 A**；若运维希望账号数最小化 → B；**若 SSH 可达性验证通过**，C 在安全面最优（无秘密分发），可作为贡献者实例的加分选项。
+
+### 5.2 发放（自动化）——两条路径
+
+- **E1 自注册（推荐）**：Owner 在注册表登记实例（设备名 + agentId）并生成**一次性 code**（TTL 30min）→ 实例执行
+  `omo kb enroll --server https://twin.hzins.com/git --code <code>` → 服务用 **Gitea 管理 token** 调用 API：
+  *方案 A*：建 bot 用户 → 授仓库/团队权限 → 签发作用域 token → **TLS 直连回给该实例**；
+  *方案 C*：接收实例上送的**公钥** → 注册为该仓库 deploy key（读/写按授权）；
+  → 实例落盘（0600）+ `git ls-remote` 自检。
+- **E2 Owner 批量脚本（半自动）**：服务器上跑 `ops-kb-provision --registry registry.yaml` 批量建账号/签发 token 或注册公钥，再逐台交付（安装参数 / 一次性 code 兑换）。适合实例数少的早期。
+
+> 两条路径共同纪律：注册表**只存** `instance → 账号名/token id/deploy key id/scope/permission/expiry`，**不存明文**；明文（或公钥交换）只在「服务 ↔ 目标实例」一次性出现。
+> 已知约束：该实例 **API 禁匿名**（403），故服务侧必须持管理 token；实例侧若仅做 git 操作则**无需 API 权限**（SSH 方案尤其干净）。
 
 ### 5.2 发放（自动化）——两条路径
 
@@ -123,15 +142,15 @@
 ## 八、不确定性治理
 
 **Unknown（[待验证]）**
-1. Git 服务器产品与版本（是否 GitLab？能否用 deploy token / project access token？API 路径前缀 `/git/`？）。
+1. ~~Git 服务器产品与版本~~ → **已确认：Gitea 1.27.3，路径前缀 `/git/`，API 禁匿名，仓库私有（读亦需凭据）**。剩余 Gitea 侧待验证：① 管理员能否代某个 bot 用户签发 token（否则需先设随机密码再用其基本认证签发）；② 该版本 token 的 scope 名称与是否支持过期；③ 创建 PR 需要的作用域（`write:issue`?）；④ 是否暴露 SSH 端点。
 2. 实例是否允许直连 GitLab API（若否，enroll 必须由中间服务代建）。
-3. SSH 22 端口可达性（对端此前未能验证）。
+3. **SSH 端点可达性**：本容器对 22/2222 均不可达（对端此前亦未验证）；方案 C（Deploy Key）依赖此项 → 需在至少一台目标实例上实测。
 4. git 1.8.3.1 上三处特性的实测行为（`-C` / `init -b` / `--autostash`）。
 
 **Conflict**：无（与 dsh-architect 迭代、KB 校验器均不冲突）。
 
 **Human Decision（需主人拍板）**
-1. 账号模型：**A 每实例 Deploy Token（推荐）** / B Project Access Token / C 每实例用户账号。
+1. 账号模型（Gitea）：**A 每实例 bot 账号 + 作用域 token（推荐）** / B 单服务账号 + N token（运维最简） / C 每实例 Deploy Key（零秘密分发，需 SSH 可达）。
 2. 发放路径：**E1 自注册（推荐）** / E2 Owner 批量脚本 / 两者并行（E2 先行、E1 后续）。
 3. 写入模型：**只读镜像 + 分支贡献 + 中心 MR 合流（推荐）** / 实例直推 `main`（不推荐）。
 4. 服务器侧归属：enroll 服务与注册表部署在哪台主机、由谁运维、Git 管理凭据由谁持有。
