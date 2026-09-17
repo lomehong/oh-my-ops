@@ -198,7 +198,8 @@ fi
 cat > "$BIN_DST" <<OMOEOF
 #!/usr/bin/env bash
 # OMO_LAUNCHER_V4 — omo 运维智能体 CLI（自包含：~/.omo 私有域 + HOME 重定向，与原生 omp 零接触）
-set -euo pipefail
+# 注意：不用 set -u——空数组 ${EXTRA_ARGS[@]} 在 bash <4.4 + -u 下报 unbound variable（logstash-124 实测）
+set -eo pipefail
 OMO_DIR="$OMO_DIR"
 REAL_HOME="$REAL_HOME"
 export HOME="$HOME_DIR"
