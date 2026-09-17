@@ -208,6 +208,7 @@ export OPS_PI_SANDBOX="\${OPS_PI_SANDBOX:-0}"
 export OMO_APP_NAME="omo"
 export OMO_BIN="omo"
 # 有效配置路径固定到私有域（否则随启动目录漂移；config.json 显式值仍优先）
+export OMO_DIR="\$OMO_DIR"
 export OMO_POLICY_PATH="\$OMO_DIR/policy.json"
 export OMO_TOKEN_PATH="\$OMO_DIR/approval-token.json"
 export OMO_TIPS=\$'/ops-audit [n] 回看最近 n 条审计条目（只读）\n/ops-inspect <主机> 执行标准巡检（只读）\n/ops-health 十秒健康快照；/ops-status 查看策略/沙箱/凭据状态\n/ops-policy lint 检查 policy.json；/ops-policy explain <工具> k=v 授权 dry-run\n只读 ops 工具自动放行；变更类需 Owner 预授权（policy.json）\n无人值守下生产目标变更一律拒绝——这是设计，不是故障\nomo serve 常驻后，cron/webhook 可直接触发巡检与诊断\nPress ctrl+r to search your prompt history\nCtrl+D exits but keeps your draft saved'
@@ -218,6 +219,10 @@ YUYI="\$OMO_DIR/extensions/yuyi-omp-extension.js"
 # 必须 set -a 包裹才能进入子进程环境（否则插件三处皆无 token，落单机模式——logstash-124 实测）
 if [ -f "\$REAL_HOME/.yuyi/env" ]; then set -a; source "\$REAL_HOME/.yuyi/env"; set +a; fi
 [ -x "\$RUN" ] || { echo "✗ 运行时缺失：\$RUN（重跑安装脚本）"; exit 1; }
+# kb 子命令需要 bun 运行时（安装器已保证 bun：系统 bun 或 ~/.bun/bin/bun）
+BUN_BIN="\$(command -v bun 2>/dev/null || true)"
+[ -z "\$BUN_BIN" ] && [ -x "\$HOME/.bun/bin/bun" ] && BUN_BIN="\$HOME/.bun/bin/bun"
+
 EXT_ARGS=()
 [ -d "\$EXT" ] && EXT_ARGS+=(--extension "\$EXT")
 [ -f "\$YUYI" ] && EXT_ARGS+=(--extension "\$YUYI")
@@ -249,16 +254,27 @@ case "\${1:-}" in
     if [ "\$FOREGROUND" = true ]; then
       exec "\$RUN" --profile ops "\${EXT_ARGS[@]}" --mode rpc "\${EXTRA_ARGS[@]}"
     else
-      # 注意：本行位于**未加引号 heredoc** 内，$0/$@ 必须转义，否则在生成启动器时被展开成
-      # 安装器自身路径与其参数（2026-09-16 实测：serve 后台模式写死 /tmp/.../install.sh）
+      # 注意：本行位于**未加引号 heredoc** 内，位置参数（脚本名/参数表）必须转义，否则会在生成启动器时
+      # 被展开成安装器自身路径与其参数（2026-09-16 实测：serve 后台模式写死临时安装路径）；
+      # 同理，本段注释里也不得出现裸变量语法（2026-09-17 实测：注释中的数组变量语法直接让安装器崩在 set -u）
       # EXT_ARGS 必须随 exec 参数显式传入：v4 重构把它挪出 bash -c 字面量时丢掉过，
       # 后台 serve 因此没有 -e → 扩展（含 yuyi）不加载、不连 Hub（2026-09-17 实测）
       setsid bash -c 'tail -f /dev/null | exec "\$0" --profile ops "\$@"' "\$RUN" --mode rpc "\${EXT_ARGS[@]}" "\${EXTRA_ARGS[@]}" >> /tmp/omo-serve.log 2>&1 < /dev/null &
       # PID 检测 retry loop：471MB 二进制加载需数秒，单次 sleep 1 会竞态空文件（logstash-124 实测）
       P=""; for i in \$(seq 1 15); do sleep 1; P="\$(rpc_pids | tail -1 || true)"; [ -n "\$P" ] && break; done
       echo "\$P" > /tmp/omo-serve.pid 2>/dev/null || true
+      # KB 定时同步（默认 15min，OMO_KB_INTERVAL 可调）：只拉主线，不推；日志 /tmp/omo-kb-sync.log
+      if [ -n "\$BUN_BIN" ]; then
+        setsid bash -c 'while :; do "\$0" kb sync --quiet >> /tmp/omo-kb-sync.log 2>&1; sleep "\$1"; done' "\$BUN_BIN" "\${OMO_KB_INTERVAL:-900}" >/dev/null 2>&1 &
+        echo "\$!" > /tmp/omo-kb-sync.pid 2>/dev/null || true
+      fi
       [ -n "\$P" ] && echo "[omo] ✓ 服务已启动 PID \$P" || echo "[omo] ⚠ 服务启动后 15s 未检测到 PID（大镜像首载可能较慢，可稍后 omo status 重查）"
     fi ;;
+  kb)
+    shift
+    [ -n "\$BUN_BIN" ] || { echo "✗ 需要 bun 运行 kb 子命令（重跑安装脚本以安装 bun）"; exit 1; }
+    [ -f "\$EXT/kb-cli.ts" ] || { echo "✗ 未找到扩展的 kb-cli.ts（重跑安装脚本）"; exit 1; }
+    exec "\$BUN_BIN" "\$EXT/kb-cli.ts" "\$@" ;;
   status)
     echo "═══ omo (oh-my-ops) ═══"
     echo "  私有域：\$OMO_DIR"
@@ -271,6 +287,12 @@ case "\${1:-}" in
       echo "  服务：✓ PID \$LIVE（pid 文件过期已修正）"; echo "\$LIVE" > /tmp/omo-serve.pid
     else
       echo "  服务：✗（omo serve 启动）"
+    fi
+    if [ -f "\$OMO_DIR/kb/credential.json" ]; then
+      KBPID="\$(cat /tmp/omo-kb-sync.pid 2>/dev/null || true)"
+      if [ -n "\$KBPID" ] && kill -0 "\$KBPID" 2>/dev/null; then echo "  知识库同步：✓ 定时中 PID \$KBPID（omo kb status 看详情）"; else echo "  知识库同步：凭据已配置（定时未运行）"; fi
+    else
+      echo "  知识库同步：未配置（omo kb status 查看；需 Owner 发放凭据）"
     fi
     [ -f "\$OMO_POLICY_PATH" ] && echo "  策略：✓ \$OMO_POLICY_PATH（omo policy lint 可检查）" || echo "  策略：⚠ 未配置 \$OMO_POLICY_PATH（变更全拒）"
     grep -q '"token": "[^"]' "\$REAL_HOME/.yuyi/agent.json" 2>/dev/null && echo "  Yuyi：✓ 已配置" || echo "  Yuyi：✗ 缺 token（bash scripts/install.sh --token <token> 补上）"

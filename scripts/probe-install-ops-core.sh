@@ -77,6 +77,16 @@ H4="$TMP/h4"; mkdir -p "$H4"
 HOME="$H4" bash "$PKG/scripts/install.sh" --name no-token >"$TMP/install-notoken.log" 2>&1 || fail "无 token 安装失败（见 $TMP/install-notoken.log）"
 [ -d "$H4/.omo/home/.omp/agent/skills" ] && fail "无 token 仍部署 skills（门控失效）" || pass "无 token 不部署 skills（门控生效）"
 
+echo "[4] KB 同步（OMO-KB-SYNC P1）：模块部署 + 启动器子命令"
+EXT2="$H2/.omo/extensions/ops-pi"
+for f in kb-cli.ts kb-sync.ts kb-credential.ts; do
+	[ -f "$EXT2/$f" ] && pass "扩展模块已部署：$f" || fail "缺少扩展模块：$f"
+done
+grep -q '^export OMO_DIR=' "$L" && pass "启动器导出 OMO_DIR" || fail "启动器未导出 OMO_DIR"
+grep -q '^  kb)' "$L" && pass "启动器含 kb 子命令分支" || fail "启动器缺 kb 子命令分支"
+grep -q 'kb sync --quiet' "$L" && pass "serve 带上 KB 定时同步循环" || fail "serve 未带 KB 定时同步"
+grep -q 'kb/credential.json' "$L" && pass "omo status 展示 KB 同步状态" || fail "omo status 未展示 KB 状态"
+
 echo
 if [ "$FAILED" -eq 0 ]; then echo "结果：全绿"; exit 0; fi
 echo "结果：$FAILED 项失败"; exit 1
