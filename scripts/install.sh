@@ -246,8 +246,10 @@ case "\${1:-}" in
       # 注意：本行位于**未加引号 heredoc** 内，$0/$@ 必须转义，否则在生成启动器时被展开成
       # 安装器自身路径与其参数（2026-09-16 实测：serve 后台模式写死 /tmp/.../install.sh）
       setsid bash -c 'tail -f /dev/null | exec "\$0" --profile ops "\$@"' "\$RUN" --mode rpc "\${EXTRA_ARGS[@]}" >> /tmp/omo-serve.log 2>&1 < /dev/null &
-      sleep 1; { rpc_pids | tail -1 > /tmp/omo-serve.pid; } || true
-      echo "[omo] ✓ 服务已启动 PID \$(cat /tmp/omo-serve.pid)"
+      # PID 检测 retry loop：471MB 二进制加载需数秒，单次 sleep 1 会竞态空文件（logstash-124 实测）
+      P=""; for i in \$(seq 1 15); do sleep 1; P="\$(rpc_pids | tail -1 || true)"; [ -n "\$P" ] && break; done
+      echo "\$P" > /tmp/omo-serve.pid 2>/dev/null || true
+      [ -n "\$P" ] && echo "[omo] ✓ 服务已启动 PID \$P" || echo "[omo] ⚠ 服务启动后 15s 未检测到 PID（大镜像首载可能较慢，可稍后 omo status 重查）"
     fi ;;
   status)
     echo "═══ omo (oh-my-ops) ═══"
