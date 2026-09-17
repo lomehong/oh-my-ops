@@ -33,7 +33,13 @@ export async function gitSync(
 	branch: string,
 	runner: Runner,
 ): Promise<{ actions: string[] }> {
-	const credential = await loadKbCredential(omoDir);
+	let credential;
+	try {
+		credential = await loadKbCredential(omoDir);
+	} catch (err) {
+		// 凭据文件存在但不可用：跳过远端同步并醒目上报（工具层 best-effort，不抛错）
+		return { actions: [`凭据不可用（${(err as Error).message}）：已跳过远端同步；请用 ops-kb-provision 重新签发凭据`] };
+	}
 	const report = await syncKb({
 		omoDir,
 		kbDir,

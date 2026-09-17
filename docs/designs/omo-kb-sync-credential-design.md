@@ -195,33 +195,42 @@
 
 | 项 | 结论 |
 |---|---|
-| **API 建 token 拿不到明文** | `POST /users/{u}/tokens`（基本认证，带 `scopes:[write:admin,…]`）返回 **201 但响应只有 `sha1` + `token_last_eight`**，无 `token` 字段 ⇒ **API 签发的 token 无法使用**；可用 token 只能从 **UI** 获取（一次性展示）⇒ **E1 自注册在本实例不可实现**，E2（Owner 建号 + 发凭据）为唯一路径 |
+| **API 建 token 拿不到明文**（令牌路线排除，但**不是结论**） | `POST /users/{u}/tokens` 在 **1.27.3 实测响应无 `token` 字段**（仅 `id/name/sha1/token_last_eight/scopes`；本地同版本 1.27.3 复现一致）。注：`release/v1.27` 源码分支已含 `Token: t.Token`（即后续补丁版可能回明文）⇒ 令牌路线**当前不可用**，但**密码路线全链可自动化**（见 §5.2″），故**不构成方案阻断** |
 | `write:admin` 可得性 | UI 的 scope 清单**不含 `admin` 类**（实测勾满仍缺），而 `POST /admin/users` 硬性要求 `write:admin` ⇒ **建用户必须走 UI 或服务端 CLI**（`gitea admin user create`），API 自动化不可达 |
 | 其余管理面可用 | 现有 UI token（8 个 write scope）**可**：建/管团队（`write:organization` ✅ 实测 422 校验通过）、加协作者（`write:repository` ✅ 实测通过）、PR（`write:issue` ✅） |
 | **git 凭据注入形态（关键坑）** | `-c credential.helper="store --file=<path>"` **不被采纳**（三种写法均 `remote: Failed to authenticate user`）；可用形态 = **`-c credential.helper=store` + `$HOME/.git-credentials`（0600）**，且子进程 `HOME` 必须显式设为 **omo 私有 HOME**（沿用调用方 HOME 会让 store 找错目录）。已据此改 P1 实现并加守卫 |
 | 真机端到端 | ✅ `omo kb sync` 拉取生产 `ops-kb` 成功（3 条目）；`sync --push` 推 **`instance/PC-SZ-375`** 成功（服务器侧 API 已见该分支），**main 未动**；提交内**无凭据文件**（`.git/info/exclude` 生效） |
 | Gitea 侧建议（不变） | `main` 开分支保护；bot 权限走团队 |
 
-### 5.2′ 实际形态（P2 已落地，真机逐端点验证）
+### 5.2″ 实际形态：**凭据=密码，全链路 API 自动化**（P2 已落地，同版本实机验证）
 
-受实测约束（凭据明文只能从 UI 取、`/admin/users` 需不可得的 `write:admin`），E2 的落地形态定为：
+**结论先行**：每台实例的「建号 → 发凭据 → 授权 → 交付 → 轮换 → 吊销」**全部可由 API 完成**，
+唯一的一次性人工动作是：站点管理员在 Git 服务器上签发一张 `all` 作用域令牌（或提供站点管理员密码）交给供给服务。
+依据（全部在本地 **Gitea 1.27.3**（与生产同版本）实机跑通，脚本可复现）：
 
-**Owner 手工两步（每实例一次性，各约 1 分钟）+ 脚本自动化其余全部**
+| 环节 | API | 实测结果 |
+|---|---|---|
+| 建 bot 账号（含随机密码） | `POST /admin/users` | **201** ✅（幂等：已存在则 PATCH 改密 ✅） |
+| 授权 | `PUT /repos/{o}/{r}/collaborators/{u}` 或 团队 `PUT /teams/{id}/members/{u}` | **204 / 204** ✅ |
+| 凭据自证（API） | `GET /repos/{o}/{r}` 以 bot 基本认证 | **200** ✅ |
+| **凭据自证（git）** | `git ls-remote http://<bot>:<pw>@<host>/<o>/<r>.git` | **成功** ✅（omo 同款 store 机制同样成功 ✅） |
+| 实例侧同步 | `omo kb sync`（用交付的 `credential.json`） | **pull ✓** ✅ |
+| **轮换** | `PATCH /admin/users/{u} {password}` | **200**；旧密码 **401**、新密码 **200**、git 亦随新密码通过 ✅（实例侧自动刷新 store 文件 ✅） |
+| **吊销** | `PATCH` 改乱密码（+ `DELETE` 协作者/成员，或 `DELETE /admin/users/{u}`） | **200/204**；实例同步**立即失败并醒目上报** ✅ |
+| 鉴权前提 | 站点管理员用基本认证（`tokenRequiresScopes` 对非令牌认证直接放行、`reqToken()` 仅要求已登录）或 `all` 作用域令牌 | **200/200** ✅ |
+| 令牌路线（备选，当前不可用） | `POST /users/{u}/tokens` | 1.27.3 响应无明文 ⇒ **不用**；若后续升级补丁版回明文，可平滑切换（`kind: "token"` 已在 schema 内） |
 
-| 步骤 | 谁做 | 手段 | 验证状态 |
-|---|---|---|---|
-| 建 bot 账号 | Owner | Gitea UI（或服务端 CLI `gitea admin user create`） | **必须人工**（API 无 `write:admin`） |
-| 生成 bot 令牌 | Owner | Gitea UI「令牌」页，scope 勾 `repository`(write) 即可（8 类可见 scope 之一） | **必须人工**（API 回明文不可得） |
-| 授权（建团队/加成员/加协作者） | `scripts/ops-kb-provision.mjs grant` | Gitea API + Owner 的 UI 令牌 | ✅ 真机实跑：团队 create 201 → 成员 PUT 204 → 服务器侧可见 |
-| 登记（设备↔账号↔团队↔令牌 sha1） | 同上（`--registry`，0600） | 本地 JSON，**不含令牌本体** | ✅ 自检断言 |
-| 撤权 | `… revoke [--delete-team]` | 撤团队成员（+撤组织成员/解散团队） | ✅ 真机实跑：成员 DELETE 204 → 团队 DELETE 204 → org 团队列表复原 |
-| 轮换 | Owner：UI 生成新令牌 → 重跑 `grant` 交付 → UI 删旧令牌 | — | **半自动**（API 无法代签，见实测表） |
+**为什么最终选密码**：Gitea 令牌的「签发即可读明文」在本版本不成立，而**密码可被管理员 API 任意设定/重置**，
+且 git over HTTPS 接受基本认证——于是**轮换/吊销都变成一次 `PATCH`**，比令牌模型（吊销需 `DELETE` 令牌、
+且依赖能拿到令牌明文）更简单、更可审计。
 
-要点：
-- **撤权 = 撤访问**（团队成员/组织成员/协作者），**即时生效**；令牌本体残留也无任何仓库权限，UI 里可顺手删。
-- 撤销**不依赖** `DELETE /users/{u}/tokens`（那需要 `write:admin`，我们不可得）。
-- 交付实例时只给「`credential.json` 内容 + 写入/校验命令」，令牌经一次性渠道（人工/一次性 code）传递，不进聊天记录之外的持久化位置。
-- 脚本与令牌纪律：令牌只从 `--token-file`（强制 0600）或 env 读，绝不进 argv、绝不回显、绝不入库；变更类动作默认 dry-run，须 `--apply`。
+**实例侧交付与保护（已落地）**：
+- 交付文件 `{repo, username, secret, kind:"password", createdAt}` → 实例 `$OMO_DIR/kb/credential.json`（0600，PathGuard 机密根）；
+- git store 文件 `$OMO_DIR/home/.git-credentials`（0600）**按需刷新**（轮换后自动更新，真机教训）；
+- **凭据文件存在但不可用必须大声失败**（旧格式/字段缺失/非 JSON → 明确报错；禁止静默降级为「本地模式」——真机教训）。
+
+**E1（自注册）因此恢复可行**：供给服务持有那张一次性 `all` 令牌即可按需建号+发凭据，
+通过 TLS 回给实例（一次性 code 兑换），无需任何人工逐步介入。
 
 **Unknown（[待验证]）**
 1. ~~Git 服务器产品与版本~~ → **已确认：Gitea 1.27.3，路径前缀 `/git/`，API 禁匿名，仓库私有（读亦需凭据）**。剩余 Gitea 侧待验证：① 管理员能否代某个 bot 用户签发 token（否则需先设随机密码再用其基本认证签发）；② 该版本 token 的 scope 名称与是否支持过期；③ 创建 PR 需要的作用域（`write:issue`?）；④ 是否暴露 SSH 端点。
@@ -233,7 +242,7 @@
 
 **Human Decision**
 1. ✅ **已定：A 每实例 bot 账号 + 作用域 token**（主人 2026-09-17）。
-2. ✅ **已定：E2 先行 + E1 自注册为主**（主人 2026-09-17）。
+2. ✅ **已定：E2 先行 + E1 自注册为主**（主人 2026-09-17）；3. ✅ **更新（同日，实机复核）**：E1 恢复可行——凭据走**密码**形态，全链 API 自动化（§5.2″）；唯一一次性人工 = 站点管理员签发 `all` 令牌或提供管理员密码。
 3. ✅ **已定：只读镜像 + 实例推 `instance/<device>` + 中心 PR 合流**（主人 2026-09-17）。
 4. ✅ **不在本设计范围**：供给服务的部署位置/运维归属 → **主人于部署时决策**（本设计只钉接口契约，见 §5.6）。
 5. ⏳ 建议（§5.7）：TTL 12 个月 + 零停机自动轮换（`/rotate`）+ 双处对账 —— 待主人确认或按默认采纳。

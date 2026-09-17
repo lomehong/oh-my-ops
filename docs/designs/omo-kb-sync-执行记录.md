@@ -71,3 +71,44 @@
 - 实跑 PR：`https://twin.hzins.com/git/hzins-ops/ops-kb/pulls/1`（实例分支 → main，待审阅）。
 
 **待主人决策**：凭据签发路径（见会话内提问）：E2 人工两步（现状，立即可用）／启用 Gitea SSH + 部署密钥（API 可自助签发+吊销，需改配置并放行端口）／提供 Git 服务器 shell（`gitea admin user generate-access-token` 可批量出明文）。
+
+---
+
+## 第三轮：推翻「不可行」结论 + 凭据形态改为密码（2026-09-17）
+
+**起因**：主人驳回「API 无法自动化」的结论，要求必须走通 API。复核发现前一轮的判定有据但结论下早了。
+
+**排查路径**
+
+1. 先怀疑自己的观测：上一轮「建令牌响应无明文」是否因我 `head -c 300` 截断？
+2. 读 `release/v1.27` 源码：`CreateAccessToken` 确实返回 `Token: t.Token` ⇒ 一度以为是我截断误判；
+3. **本地起同版本 Gitea 1.27.3 复现 ⇒ 响应仍无 `token` 字段**（仅 `sha1`/`token_last_eight`）
+   ⇒ 令牌路线在本版本**确实不可用**（源码分支含后续补丁，与 1.27.3 行为不同）；
+4. 于是换问法：**有没有别的凭据形态能被 API 完全掌控？** —— 答案是**密码**：
+   - 源码：`tokenRequiresScopes` 对**非令牌认证直接 return（不做 scope 检查）**；`reqToken()` 只要求「已登录」
+     ⇒ **站点管理员用基本认证即可调 `/admin/*`**；
+   - `CreateAccessToken` 需 `reqBasicOrRevProxyAuth` ⇒ 令牌路线还需基本认证，反而更绕。
+
+**同版本实机验证（本地 Gitea 1.27.3，非生产，避免污染）**
+
+| 步骤 | 结果 |
+|---|---|
+| 站点管理员基本认证 / `all` 令牌 调 `GET /admin/users` | **200 / 200** ✅ |
+| `POST /admin/users` 建 bot（随机密码） | **201** ✅ |
+| `PUT /repos/{o}/{r}/collaborators/{bot}` | **204** ✅ |
+| git over HTTPS 用「用户名+密码」`git ls-remote`（直连 + omo store 机制） | **成功** ✅ |
+| `PATCH /admin/users/{bot}` 改密 → 旧密码 401 / 新密码 200 / git 随新密码通过 | ✅ |
+| 改乱密码（吊销）→ git 立即失败 | ✅ |
+| 全链脚本化：`ops-kb-provision.mjs create/rotate/revoke` + 实例侧 `omo kb sync` | ✅（含 git 层自证 `ls-remote ✓`） |
+
+**同轮修掉的三个真缺陷（均由实机暴露）**
+
+1. 凭据 schema 迁移后实例**静默退化为「本地模式」**（有凭据却不生效）⇒ 改为**大声失败**：旧格式/字段缺失/非 JSON 一律明确报错；
+2. **轮换后 git store 文件不刷新**（原实现仅当文件缺失才写）⇒ 改为按需刷新（内容变更即写，已入回归守卫）；
+3. `spawn` 失败只报「命令失败：git」（首跑 cwd 不存在）⇒ 补 `cwd=` 上下文 + 先建目录。
+
+**新增能力**：`ops-kb-provision.mjs` 重写为 `create / rotate / revoke / grant / list`（管理员令牌或站点管理员密码二选一），
+`create` 内置 API + **git** 双层自证，交付物写独立 0600 文件（秘密不进 argv/终端/登记），自检 10/10 已入 `npm run test:ci`。
+
+**遗留待确认（唯一一项）**：生产 Gitea 的**一次性引导凭据**由主人签发（`gitea admin user generate-access-token -u <admin> --scopes all --raw`，或提供站点管理员密码）。
+拿到后即可在生产逐台全自动供给，并用「生产首台实例 `omo kb sync`」做最终把关（含生产是否允许密码基本认证的验证）。

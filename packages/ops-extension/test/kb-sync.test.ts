@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { ShellExec } from "@ops-pi/core";
 import { syncKb, instanceBranchFor } from "../src/kb-sync.ts";
-import { daysUntilExpiry, kbCredentialPath, kbGitCredentialsPath, loadKbCredential, omoHomeDir, redactUrl, saveGitCredentialsFile, saveKbCredential, tokenPrefix } from "../src/kb-credential.ts";
+import { daysUntilExpiry, kbCredentialPath, kbGitCredentialsPath, loadKbCredential, omoHomeDir, redactUrl, saveGitCredentialsFile, saveKbCredential, secretPrefix, KbCredentialError, ensureGitCredentialsFile } from "../src/kb-credential.ts";
 
 /**
  * OMO-KB-SYNC P1 守卫：分支纪律 + 凭据文件（真 git、file:// 裸仓，无网络）。
@@ -130,7 +130,7 @@ describe("kb-credential：凭据落盘与展示纪律", () => {
 	test("★ 凭据文件与 git 凭据文件均为 0600；展示只到前缀", async () => {
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-cred-"));
 		try {
-			const cred = { repo: "https://twin.hzins.com/git/hzins-ops/ops-kb", username: "omo-bot", token: "abcdef1234567890", createdAt: new Date().toISOString() };
+			const cred = { repo: "https://twin.hzins.com/git/hzins-ops/ops-kb", username: "omo-bot", secret: "abcdef1234567890", kind: "token" as const, createdAt: new Date().toISOString() };
 			await saveKbCredential(dir, cred);
 			await saveGitCredentialsFile(dir, cred);
 			const loaded = await loadKbCredential(dir);
@@ -139,7 +139,7 @@ describe("kb-credential：凭据落盘与展示纪律", () => {
 			expect(fs.statSync(kbGitCredentialsPath(dir)).mode & 0o777).toBe(0o600);
 			// git store 格式：scheme://user:token@host（供 credential.helper=store --file 读取）
 			expect(fs.readFileSync(kbGitCredentialsPath(dir), "utf8").trim()).toBe("https://omo-bot:abcdef1234567890@twin.hzins.com");
-			expect(tokenPrefix("abcdef1234567890")).toBe("abcdef12…");
+			expect(secretPrefix("abcdef1234567890")).toBe("abcdef12…");
 			expect(kbGitCredentialsPath(dir)).toContain(path.join("home", ".git-credentials")); // store canonical 路径（实测）
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
@@ -164,7 +164,7 @@ describe("凭据绝不入库（含 kbDir 与 $OMO_DIR/kb 误配的场景）", ()
 			await initBare(shell, bare);
 			const omo = path.join(base, "omo");
 			fs.mkdirSync(omo, { recursive: true });
-			await saveKbCredential(omo, { repo: bare, username: "bot", token: "SECRET-TOKEN-VALUE", createdAt: new Date().toISOString() });
+			await saveKbCredential(omo, { repo: bare, username: "bot", secret: "SECRET-TOKEN-VALUE", kind: "password" as const, createdAt: new Date().toISOString() });
 			fs.writeFileSync(path.join(omo, "real-entry.md"), "# 真条目\n");
 			// 故意把 kbDir 配成私有域根（最坏误配）
 			const r = await syncKb({ omoDir: omo, kbDir: omo, repo: bare, branch: "main", device: "node-nested", runner: shell, push: true });
@@ -186,7 +186,7 @@ describe("凭据注入机制（真机实测口径）：credential.helper=store +
 		const omo = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-cred-"));
 		try {
 			fs.mkdirSync(omoHomeDir(omo), { recursive: true });
-			const cred = { repo: "https://twin.hzins.com/git/hzins-ops/ops-kb", username: "omo-bot", token: "TOKEN-VALUE-1234", createdAt: new Date().toISOString() };
+			const cred = { repo: "https://twin.hzins.com/git/hzins-ops/ops-kb", username: "omo-bot", secret: "TOKEN-VALUE-1234", kind: "token" as const, createdAt: new Date().toISOString() };
 			const file = await saveGitCredentialsFile(omo, cred);
 			expect(file).toBe(path.join(omo, "home", ".git-credentials"));
 			expect(fs.statSync(file).mode & 0o777).toBe(0o600);
@@ -213,6 +213,55 @@ describe("凭据注入机制（真机实测口径）：credential.helper=store +
 			expect(r.actions.join(" ")).toContain("本地模式");
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("凭据文件损坏/旧格式必须大声失败（禁止静默降级为本地模式）", () => {
+	test("★ 旧格式（token 字段）→ 抛 KbCredentialError 并指向重新签发", async () => {
+		const omo = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-legacy-"));
+		try {
+			fs.mkdirSync(path.join(omo, "kb"), { recursive: true });
+			fs.writeFileSync(kbCredentialPath(omo), JSON.stringify({ repo: "https://h/g/o", username: "u", token: "old", createdAt: new Date().toISOString() }), { mode: 0o600 });
+			await expect(loadKbCredential(omo)).rejects.toThrow(KbCredentialError);
+			await expect(loadKbCredential(omo)).rejects.toThrow(/旧格式|重新签发/);
+		} finally {
+			fs.rmSync(omo, { recursive: true, force: true });
+		}
+	});
+
+	test("★ 非 JSON / 缺 kind / 空值 → 抛错；文件不存在 → undefined（合法本地模式）", async () => {
+		const omo = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-badcred-"));
+		try {
+			fs.mkdirSync(path.join(omo, "kb"), { recursive: true });
+			await expect(loadKbCredential(omo)).resolves.toBeUndefined();
+			fs.writeFileSync(kbCredentialPath(omo), "{not json", { mode: 0o600 });
+			await expect(loadKbCredential(omo)).rejects.toThrow(/不是合法 JSON/);
+			fs.writeFileSync(kbCredentialPath(omo), JSON.stringify({ repo: "https://h/g/o", username: "u", secret: "s" }), { mode: 0o600 });
+			await expect(loadKbCredential(omo)).rejects.toThrow(/字段不完整/);
+			fs.writeFileSync(kbCredentialPath(omo), JSON.stringify({ repo: "", username: "u", secret: "s", kind: "password" }), { mode: 0o600 });
+			await expect(loadKbCredential(omo)).rejects.toThrow(/空值/);
+		} finally {
+			fs.rmSync(omo, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("凭据轮换后 git store 文件必须刷新（真机教训：旧密码导致同步失败）", () => {
+	test("★ 同凭据不重复写；凭据变更（轮换）即刷新", async () => {
+		const omo = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-rotate-"));
+		try {
+			const base = { repo: "https://git.example.com/o/r", username: "bot", kind: "password" as const, createdAt: new Date().toISOString() };
+			const first = await ensureGitCredentialsFile(omo, { ...base, secret: "pw-v1" });
+			expect(first).toBe(true);
+			expect(await ensureGitCredentialsFile(omo, { ...base, secret: "pw-v1" })).toBe(false); // 幂等
+			expect(await ensureGitCredentialsFile(omo, { ...base, secret: "pw-v2" })).toBe(true); // 轮换后刷新
+			const line = fs.readFileSync(kbGitCredentialsPath(omo), "utf8");
+			expect(line).toContain("bot:pw-v2@git.example.com");
+			expect(line).not.toContain("pw-v1");
+			expect(fs.statSync(kbGitCredentialsPath(omo)).mode & 0o777).toBe(0o600);
+		} finally {
+			fs.rmSync(omo, { recursive: true, force: true });
 		}
 	});
 });

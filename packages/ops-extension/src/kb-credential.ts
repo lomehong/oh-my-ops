@@ -7,15 +7,19 @@ import * as path from "node:path";
  * 纪律：
  * - 凭据只落 `$OMO_DIR/kb/`（0600）+ git 凭据文件（0600，`store` 格式）；**不入知识库、不入日志**；
  * - 该目录已加入 PathGuard 机密根（Agent 经 ops_file_* 读不到）；
- * - 任何面向用户的输出只暴露 **token 前缀**，不打印全量 token。
+ * - 任何面向用户的输出只暴露 **秘密前缀**，不打印全量秘密。
+ * - 凭据形态两种（都已在 Gitea 1.27.3 验证可用）：`kind: "password"`（API 全自动可签发/轮换/吊销）
+ *   与 `kind: "token"`（人工/CLI 签发）。git 侧两者同构：都是 HTTP 基本认证的密码位。
  */
 export interface KbCredential {
 	/** 远端 URL（形如 https://twin.hzins.com/git/hzins-ops/ops-kb） */
 	repo: string;
 	/** Gitea bot 账号名 */
 	username: string;
-	/** 作用域 access token（明文仅存本机 0600） */
-	token: string;
+	/** 秘密本体（密码或 access token；明文仅存本机 0600） */
+	secret: string;
+	/** 凭据形态：password=可 API 自动签发/轮换/吊销；token=人工/CLI 签发 */
+	kind: "password" | "token";
 	/** 过期时间（ISO）；缺省 = 无过期 */
 	expiresAt?: string;
 	createdAt: string;
@@ -55,16 +59,39 @@ export function kbStatePath(omoDir: string): string {
 	return path.join(kbStateDir(omoDir), "state.json");
 }
 
-/** 读凭据；缺失/损坏 → undefined（调用方按「本地模式」降级） */
+/** 凭据文件存在但不可用（格式错误/字段缺失/旧格式）——必须**大声失败**，不得静默降级为「本地模式」 */
+export class KbCredentialError extends Error {}
+
+/**
+ * 读凭据。
+ * - 文件**不存在** → `undefined`（调用方按「本地模式」降级，合法）；
+ * - 文件**存在但不可用** → 抛 `KbCredentialError`（真机教训：曾因 schema 变更后静默忽略，
+ *   实例表面「本地模式」、实际有凭据却不生效 —— 静默降级比报错危险得多）。
+ */
 export async function loadKbCredential(omoDir: string): Promise<KbCredential | undefined> {
+	const file = kbCredentialPath(omoDir);
+	let text: string;
 	try {
-		const raw = JSON.parse(await fs.readFile(kbCredentialPath(omoDir), "utf8")) as Partial<KbCredential>;
-		if (typeof raw.repo !== "string" || typeof raw.username !== "string" || typeof raw.token !== "string") return undefined;
-		if (raw.repo === "" || raw.username === "" || raw.token === "") return undefined;
-		return { repo: raw.repo, username: raw.username, token: raw.token, expiresAt: raw.expiresAt, createdAt: raw.createdAt ?? new Date().toISOString() };
-	} catch {
-		return undefined;
+		text = await fs.readFile(file, "utf8");
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+		throw new KbCredentialError(`凭据文件不可读：${file}（${(err as Error).message}）`);
 	}
+	let raw: Record<string, unknown>;
+	try {
+		raw = JSON.parse(text) as Record<string, unknown>;
+	} catch {
+		throw new KbCredentialError(`凭据文件不是合法 JSON：${file}`);
+	}
+	if (typeof raw["token"] === "string") {
+		throw new KbCredentialError(`凭据文件是旧格式（字段 token）：${file} —— 请用 ops-kb-provision 重新签发（新格式 {repo,username,secret,kind}）`);
+	}
+	const { repo, username, secret, kind, expiresAt, createdAt } = raw as Partial<KbCredential>;
+	if (typeof repo !== "string" || typeof username !== "string" || typeof secret !== "string" || (kind !== "password" && kind !== "token")) {
+		throw new KbCredentialError(`凭据文件字段不完整/不合法：${file}（需要 repo/username/secret/kind）`);
+	}
+	if (repo === "" || username === "" || secret === "") throw new KbCredentialError(`凭据文件存在空值：${file}`);
+	return { repo, username, secret, kind, expiresAt, createdAt: createdAt ?? new Date().toISOString() };
 }
 
 /** 写凭据（目录 0700、文件 0600）；覆盖前不保留旧值 */
@@ -76,23 +103,37 @@ export async function saveKbCredential(omoDir: string, cred: KbCredential): Prom
 	return file;
 }
 
-/** 写 git `store` 格式凭据文件（0600）：`<scheme>://<user>:<token>@<host>` */
+/** 写 git `store` 格式凭据文件（0600）：`<scheme>://<user>:<secret>@<host>`（密码/令牌同构） */
 export async function saveGitCredentialsFile(omoDir: string, cred: KbCredential): Promise<string> {
-	const dir = kbStateDir(omoDir);
-	await fs.mkdir(dir, { recursive: true, mode: 0o700 });
 	const u = new URL(cred.repo);
 	const encodedUser = encodeURIComponent(cred.username);
-	const encodedToken = encodeURIComponent(cred.token);
-	const line = `${u.protocol}//${encodedUser}:${encodedToken}@${u.host}\n`;
+	const encodedSecret = encodeURIComponent(cred.secret);
+	const line = `${u.protocol}//${encodedUser}:${encodedSecret}@${u.host}\n`;
 	const file = kbGitCredentialsPath(omoDir);
 	await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
 	await fs.writeFile(file, line, { mode: 0o600 });
 	return file;
 }
 
-/** 供展示的 token 前缀 */
-export function tokenPrefix(token: string): string {
-	return token.length <= 8 ? `${token.slice(0, 2)}…` : `${token.slice(0, 8)}…`;
+/**
+ * 按需刷新 git store 凭据文件：内容与期望不同才写（幂等 + 修复轮换后陈旧凭据）。
+ * 真机教训：轮换后仅当文件「不存在」才写 ⇒ 实例继续用旧密码同步失败。
+ * @returns true=本次发生写入
+ */
+export async function ensureGitCredentialsFile(omoDir: string, cred: KbCredential): Promise<boolean> {
+	const u = new URL(cred.repo);
+	const line = `${u.protocol}//${encodeURIComponent(cred.username)}:${encodeURIComponent(cred.secret)}@${u.host}\n`;
+	const file = kbGitCredentialsPath(omoDir);
+	const current = await fs.readFile(file, "utf8").catch(() => undefined);
+	if (current === line) return false;
+	await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+	await fs.writeFile(file, line, { mode: 0o600 });
+	return true;
+}
+
+/** 供展示的秘密前缀（永不打印全量） */
+export function secretPrefix(secret: string): string {
+	return secret.length <= 8 ? `${secret.slice(0, 2)}…` : `${secret.slice(0, 8)}…`;
 }
 
 /** 距过期天数（无 expiresAt → undefined；已过期 → 负数） */

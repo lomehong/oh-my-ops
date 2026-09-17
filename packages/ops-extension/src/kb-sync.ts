@@ -150,7 +150,12 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 		let failed = false;
 		const pullMsg = await g.pullRebase("origin", mainBranch);
 		actions.push(pullMsg);
-		if (pullMsg.startsWith("pull 失败")) failed = true;
+		if (pullMsg.startsWith("pull 失败")) {
+			failed = true;
+			if (/authenticate|Authentication failed/i.test(pullMsg)) {
+				actions.push("提示：远端拒绝凭据——可能已轮换/吊销；请刷新 kb/credential.json（ops-kb-provision rotate 后重新投递）");
+			}
+		}
 
 		let pushed = false;
 		if (opts.push === true) {

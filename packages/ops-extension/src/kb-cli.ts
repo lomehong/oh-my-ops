@@ -12,8 +12,9 @@ import {
 	loadKbCredential,
 	loadKbState,
 	redactUrl,
-	saveGitCredentialsFile,
-	tokenPrefix,
+	ensureGitCredentialsFile,
+	secretPrefix,
+	KbCredentialError,
 } from "./kb-credential.ts";
 
 /**
@@ -32,6 +33,20 @@ export interface KbCliEnv {
 	stateFile: string;
 }
 
+/**
+ * 读凭据：文件不存在 → undefined（本地模式，合法）；文件存在但不可用 → 明确报错退出。
+ * 真机教训：schema 变更后曾被静默忽略 → 实例表面「本地模式」却实际有凭据不生效；静默降级必须禁止。
+ */
+async function loadCredentialOrExit(omoDir: string) {
+	try {
+		return await loadKbCredential(omoDir);
+	} catch (err) {
+		console.error(`✗ 凭据不可用：${(err as Error).message}`);
+		console.error("  · 重新签发：node scripts/ops-kb-provision.mjs create|rotate …（P3 enroll 部署后可用 omo kb enroll）");
+		process.exit(1);
+	}
+}
+
 /** 解析运行环境：HOME（launcher 已重定向）→ 配置路径 → 私有域根 */
 export function resolveKbEnv(home: string = process.env.HOME ?? os.homedir()): KbCliEnv {
 	const cfg = loadConfig(home);
@@ -47,16 +62,11 @@ export function resolveKbEnv(home: string = process.env.HOME ?? os.homedir()): K
 	};
 }
 
-async function fileExists(p: string): Promise<boolean> {
-	return await stat(p).then(() => true).catch(() => false);
-}
-
 async function runSync(env: KbCliEnv, opts: { push: boolean; quiet: boolean }): Promise<number> {
-	const credential = await loadKbCredential(env.omoDir);
-	// 凭据存在但 git 凭据文件缺失（如手工删过）→ 重新生成，保证 git 能取到
-	if (credential !== undefined && !(await fileExists(env.gitCredentialFile))) {
-		await saveGitCredentialsFile(env.omoDir, credential);
-		if (!opts.quiet) console.log(`↻ 已重建 git 凭据文件：${env.gitCredentialFile}`);
+	const credential = await loadCredentialOrExit(env.omoDir);
+	// git store 凭据文件按需刷新（缺失 **或** 与当前凭据不一致——轮换后必须刷新，否则实例继续拿旧密码同步失败）
+	if (credential !== undefined && (await ensureGitCredentialsFile(env.omoDir, credential)) && !opts.quiet) {
+		console.log(`↻ 已刷新 git 凭据文件：${env.gitCredentialFile}`);
 	}
 	const report = await syncKb({
 		omoDir: env.omoDir,
@@ -79,17 +89,17 @@ async function runSync(env: KbCliEnv, opts: { push: boolean; quiet: boolean }): 
 }
 
 async function runStatus(env: KbCliEnv): Promise<number> {
-	const credential = await loadKbCredential(env.omoDir);
+	const credential = await loadCredentialOrExit(env.omoDir);
 	const state = await loadKbState(env.omoDir);
 	const repo = credential?.repo ?? env.repo;
 	console.log(`远端：${repo === undefined ? "（未配置 → 本地模式）" : redactUrl(repo)}`);
 	console.log(`分支：主线 ${env.branch}｜实例分支 instance/<device>（device=${process.env.YUYI_DEVICE ?? os.hostname()}）`);
 	console.log(`知识库目录：${env.kbDir}`);
-	if (credential === undefined) console.log("凭据：未配置（本地模式；`omo kb enroll` 属 P3）");
+	if (credential === undefined) console.log("凭据：未配置（本地模式）");
 	else {
 		const days = daysUntilExpiry(credential.expiresAt);
 		console.log(
-			`凭据：${credential.username} token=${tokenPrefix(credential.token)}${days === undefined ? "（无过期）" : `（${days} 天后过期${days <= 30 ? " ⚠ 建议轮换" : ""}）`}`,
+			`凭据：${credential.username} ${credential.kind}=${secretPrefix(credential.secret)}${days === undefined ? "（无过期）" : `（${days} 天后过期${days <= 30 ? " ⚠ 建议轮换" : ""}）`}`,
 		);
 	}
 	console.log(state === undefined ? "最后同步：（无记录）" : `最后同步：${state.lastSyncAt} ${state.ok ? "✓" : `✗ ${state.error ?? ""}`}`);
