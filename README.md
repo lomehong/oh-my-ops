@@ -126,6 +126,30 @@ omo policy explain ops_shell_exec host=web-01 command="systemctl status nginx"
 omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 ```
 
+### 知识库同步（KB）
+
+实例把 Runbook / 处置案例沉淀到本地 `~/.omo/knowledge/`，并通过 git 与中心知识库（Gitea/GitLab 任一 HTTPS 远端）同步；
+**只推 `instance/<设备名>` 分支，主线由中心 PR 合流**——实例永不直推主线。
+
+```bash
+omo kb status      # 远端/主线/凭据（前缀+已用天数）/最后同步结果/轮换建议
+omo kb sync        # 拉主线；--push 时提交并推本实例分支
+omo kb enroll --server <服务地址> --code-file <0600 码>   # 向自注册服务兑换凭据（一次性码，服务侧建号+授权+自证）
+omo kb disable     # 停用远端同步（删除凭据；本地知识库保留）
+```
+
+- **凭据模型**：每实例一个 bot 账号 + 随机密码。凭据落 `$OMO_DIR/kb/credential.json`（0600），git 凭据落
+  `$OMO_DIR/home/.git-credentials`（0600，`store` 格式）；两者均在 **PathGuard 机密根**内（Agent 经 `ops_file_*` 读不到），
+  并写入 `.git/info/exclude` **永不入库**。凭据文件存在但不可用时**大声失败**（不静默降级为本地模式）。
+- **生命周期**：签发 / 轮换 / 吊销全部走 API。Owner 侧用 `scripts/ops-kb-provision.mjs`
+  （`create | rotate | revoke | grant | list | code`），或常驻 `scripts/ops-kb-enroll-server.mjs`
+  （一次性码授权、**TLS 默认强制**、哈希链审计、发放前自证）；实例侧只认 `omo kb enroll`。
+  轮换后旧凭据**即时失效**，实例下次 `sync` 自动换用新凭据。
+- **智能体侧工具**：`ops_kb_list` / `ops_kb_search` / `ops_kb_status`（read 档）、`ops_kb_save` / `ops_kb_sync`
+  （write 档，需 policy 规则 `actions` 显式含 `kb-write` / `kb-sync`）。
+- 设计（含 v1.27.3 实测事实与 as-built）见 [知识库同步与凭据分发设计](docs/designs/omo-kb-sync-credential-design.md)，
+  落地过程见 [执行记录](docs/designs/omo-kb-sync-执行记录.md)。
+
 ## Owner 配置
 
 ### 目标策略（policy.json）
@@ -275,6 +299,8 @@ bash packages/ops-extension/test/runtime/06-docker-k8s-acceptance.sh
 | [评审报告](docs/reports/ops-pi-review-v4-2026-09-12.md) | architect-review + 勘误 |
 | [独立复审①](docs/reports/independent-recheck-2026-09-12.md) | 三项绕过路径 + 审计覆盖 |
 | [独立复审②](docs/reports/independent-recheck-2-2026-09-12.md) | N-1 升级 / N-4 有解 |
+| [知识库同步与凭据分发设计](docs/designs/omo-kb-sync-credential-design.md) | P1/P2/P3 方案 + Gitea 1.27.3 实测事实 + as-built（§5.2″/§5.6′） |
+| [知识库同步执行记录](docs/designs/omo-kb-sync-执行记录.md) | 五轮落地与真机验收证据（含 8 个真机暴露缺陷的修复） |
 
 ## 许可
 
