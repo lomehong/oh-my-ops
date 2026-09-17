@@ -2,6 +2,7 @@
 
 > 来源需求：主人 2026-09-17 会话——内部 git 仓 `https://twin.hzins.com/git/hzins-ops/ops-kb` 已创建，用于 omo 实例间同步共享知识库；需**自动化**为每个 omo 实例分配可用账号/令牌，用于拉取与同步。
 > 状态：**待主人拍板**（本文件为设计产出，未进入编码）
+> 对齐主干：本文件落于他会话提交 `209a00f`（vendor/yuyi-skills + 部署）、`313ec07`/`8f20f03`（launcher/install 修复）之后；Reuse 项已按最新主干复核（`install.sh` 仍未处理 git 凭据 ✅ 假设成立）
 
 ## 一、需求覆盖
 
@@ -55,6 +56,7 @@
 | 自动发放/注册表/轮换 | **Build** | 仓库内无任何发放、注册表、enrollment 能力 |
 | 调度 | **Extend** | `omo serve` 常驻 + 安装器 cron 机制已具备 |
 | 审计 | **Extend** | 现有哈希链审计可记 `kb_sync`；GitLab 侧记录 token 使用 |
+| **制品部署模式** | **Reuse** | 主干新增 `vendor/yuyi-skills/` + `install.sh` 部署到 `$HOME_DIR/.omp/agent/skills/`（**门控＝凭据非空**，避免装出「有技能没通道」的半成品）→ KB 凭据/工具若需随包分发，沿用同一「vendor → install.sh → 门控落盘」模式 |
 
 ## 五、方案主体（推荐 A）
 
