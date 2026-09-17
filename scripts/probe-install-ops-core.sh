@@ -77,7 +77,7 @@ H4="$TMP/h4"; mkdir -p "$H4"
 HOME="$H4" bash "$PKG/scripts/install.sh" --name no-token >"$TMP/install-notoken.log" 2>&1 || fail "无 token 安装失败（见 $TMP/install-notoken.log）"
 [ -d "$H4/.omo/home/.omp/agent/skills" ] && fail "无 token 仍部署 skills（门控失效）" || pass "无 token 不部署 skills（门控生效）"
 
-echo "[4] KB 同步（OMO-KB-SYNC P1）：模块部署 + 启动器子命令"
+echo "[5] KB 同步（OMO-KB-SYNC P1）：模块部署 + 启动器子命令"
 EXT2="$H2/.omo/extensions/ops-pi"
 for f in kb-cli.ts kb-sync.ts kb-credential.ts kb-enroll.ts; do
 	[ -f "$EXT2/$f" ] && pass "扩展模块已部署：$f" || fail "缺少扩展模块：$f"
@@ -88,5 +88,14 @@ grep -q 'kb sync --quiet' "$L" && pass "serve 带上 KB 定时同步循环" || f
 grep -q 'kb/credential.json' "$L" && pass "omo status 展示 KB 同步状态" || fail "omo status 未展示 KB 状态"
 
 echo
+echo "[6] 安装器守卫：HOME 被启动器重定向时必须快速失败"
+TMPL="$(mktemp -d)"; mkdir -p "$TMPL/.omo/home"
+if HOME="$TMPL/.omo/home" bash "$PKG/scripts/install.sh" >"$TMP/judge-home.log" 2>&1; then
+  fail "HOME 重定向时安装器竟未拒绝（会把一切装进 <私有home>/.omo）"
+else
+  if grep -q "HOME 已被启动器重定向" "$TMP/judge-home.log"; then pass "HOME 重定向时快速失败并给出指引"; else fail "拒绝原因不明确：$(head -2 "$TMP/judge-home.log" | tr '\n' ' ')"; fi
+fi
+rm -rf "$TMPL"
+
 if [ "$FAILED" -eq 0 ]; then echo "结果：全绿"; exit 0; fi
 echo "结果：$FAILED 项失败"; exit 1

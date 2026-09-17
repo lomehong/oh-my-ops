@@ -59,3 +59,7 @@ report:
     op: 'report'
     by: 'omp-architect'
     note: '对端摸底（omo-172-26-5-121，只读回执）事实入档：①`omo kb` 子命令不存在（版本 18.1.18，runtime omp-single），扩展目录为 $OMO_DIR/extensions/（仅 ops-pi/ + yuyi-omp-extension.js），**四个 kb-*.ts 均缺**；②**git 1.8.3.1（el7）** —— 退化分支的真机复验场景就此确定；③该节点已有**9 条本地知识条目**（经 ops_kb_save 写入，未入 git）；④HOME 被改写为 /home/hzinsops/.omo/home、OMO_DIR 未导出（拼 $HOME/.omo 会错，需绝对路径/启动器）；⑤非交互环境直接调 `omo kb status` 会挂（旧版进入交互界面）——新版 kb 子命令为纯命令式，无 TUI。接入前提：该机需重跑 install.sh 拿到含 kb 模块的构建（需能写 $OMO_DIR + 可拉仓库），并由 Owner 授权（空策略全拒）。'
+  - ts: '2026-09-17T10:40:00.000Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: '对端接入前置修正（自报）：①安装器新增 **HOME 重定向守卫**（对端会话 HOME=/home/hzinsops/.omo/home，而 install.sh 以 $HOME/.omo 推导安装根 ⇒ 直接跑会错位装进 <私有home>/.omo；现检测到即快速失败并给指引），探针补 [6] 断言；②入口下载链路澄清：README 入口本就 jsdelivr→fastly→raw 三级，对端 raw 不通不影响（github.com/api.github.com/npm registry 均通）；③对端接入路径确定为 **git clone + 复用既有 18.1.18 运行时（cp 到包根）+ HOME=<真实家目录> bash scripts/install.sh**，无需下载 471MB 发布资产；④其余待验：objects.githubusercontent.com / codeload.github.com 可达性（只读，已请对端补测）。'

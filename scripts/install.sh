@@ -17,6 +17,17 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REAL_HOME="$HOME"
+# ── 守卫：启动器会把 HOME 重定向到 $OMO_DIR/home；在那个环境里跑安装器会把一切装进
+#    <私有home>/.omo（错位，且难以察觉）——真机实测（2026-09-17，对端会话 HOME 即被改写）后加此快速失败。
+case "${HOME:-}" in
+  */".omo/home")
+    echo "✗ 检测到 HOME 已被启动器重定向：HOME=$HOME"
+    echo "  安装器必须在**真实家目录**下运行，例如："
+    echo "    HOME=/home/<你的用户> bash scripts/install.sh"
+    exit 1
+    ;;
+esac
+
 OMO_DIR="$HOME/.omo"
 HOME_DIR="$OMO_DIR/home"
 RUNTIME="$OMO_DIR/runtime/omp-single"
