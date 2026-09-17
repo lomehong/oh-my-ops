@@ -55,3 +55,7 @@ report:
     op: 'report'
     by: 'omp-architect'
     note: 'P3 落地（自报）：enroll 服务（一次性码 + TLS 强制 + 哈希链审计）+ `omo kb enroll` 客户端 + `code` 签发子命令 + 共享 lib（kb-gitea/kb-registry）；测试 5 例入 test:ci（含秘密不落登记/审计、一次性/绑定/过期/吊销/TLS 拒绝启动）。生产实测：enroll 兑换→建号+授权+自证同步 ✓；重放 409；rotate→旧凭据失效 ✓；revoke→客户端删凭据 ✓；再 enroll 恢复 ✓；TLS 直连轮换 ✓。另：test:ci 补入扩展侧 typecheck。'
+  - ts: '2026-09-17T10:25:00.000Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: '对端摸底（omo-172-26-5-121，只读回执）事实入档：①`omo kb` 子命令不存在（版本 18.1.18，runtime omp-single），扩展目录为 $OMO_DIR/extensions/（仅 ops-pi/ + yuyi-omp-extension.js），**四个 kb-*.ts 均缺**；②**git 1.8.3.1（el7）** —— 退化分支的真机复验场景就此确定；③该节点已有**9 条本地知识条目**（经 ops_kb_save 写入，未入 git）；④HOME 被改写为 /home/hzinsops/.omo/home、OMO_DIR 未导出（拼 $HOME/.omo 会错，需绝对路径/启动器）；⑤非交互环境直接调 `omo kb status` 会挂（旧版进入交互界面）——新版 kb 子命令为纯命令式，无 TUI。接入前提：该机需重跑 install.sh 拿到含 kb 模块的构建（需能写 $OMO_DIR + 可拉仓库），并由 Owner 授权（空策略全拒）。'
