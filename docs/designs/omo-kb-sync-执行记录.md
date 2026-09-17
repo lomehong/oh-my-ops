@@ -112,3 +112,13 @@
 
 **遗留待确认（唯一一项）**：生产 Gitea 的**一次性引导凭据**由主人签发（`gitea admin user generate-access-token -u <admin> --scopes all --raw`，或提供站点管理员密码）。
 拿到后即可在生产逐台全自动供给，并用「生产首台实例 `omo kb sync`」做最终把关（含生产是否允许密码基本认证的验证）。
+
+**第三轮补记（引导凭据的三条路，均已实测）**
+
+| 路径 | 做法 | 实测 |
+|---|---|---|
+| ① **UI 令牌（推荐）** | 站点管理员登录后 → 用户设置 → 应用 → 生成令牌 → 勾 `read:admin`+`write:admin`+`write:organization`+`write:repository`+`write:user` | 同版本 1.27.3 UI 令牌页**确有 admin 类**（9 类 × 读写）；该 5-scope 组合在真机上跑通 create/rotate/revoke ✅ |
+| ② 站点管理员密码 | `--admin-user <admin> --admin-password-file <0600>` | 真机全链：建号 201 → 授权 204 → API+git 自证 ✓ → 实例 `omo kb sync` pull ✓ → 轮换 200 → 吊销 200/204 ✅ |
+| ③ 服务端 CLI | `gitea admin user generate-access-token --scopes read:admin,write:admin,…` | 本地实测 CLI 签名令牌同样可驱动全链 ✅ |
+
+注：`omo-admin` 是站点管理员，但**其令牌缺 `admin` scope ⇒ 仍被 403**（`required=[read:admin]`）——scope 属令牌，不属账号。

@@ -217,7 +217,8 @@
 | 实例侧同步 | `omo kb sync`（用交付的 `credential.json`） | **pull ✓** ✅ |
 | **轮换** | `PATCH /admin/users/{u} {password}` | **200**；旧密码 **401**、新密码 **200**、git 亦随新密码通过 ✅（实例侧自动刷新 store 文件 ✅） |
 | **吊销** | `PATCH` 改乱密码（+ `DELETE` 协作者/成员，或 `DELETE /admin/users/{u}`） | **200/204**；实例同步**立即失败并醒目上报** ✅ |
-| 鉴权前提 | 站点管理员用基本认证（`tokenRequiresScopes` 对非令牌认证直接放行、`reqToken()` 仅要求已登录）或 `all` 作用域令牌 | **200/200** ✅ |
+| 鉴权前提（两条等价，均已实测） | ① **站点管理员的 UI 令牌**：同版本 1.27.3 的 UI 令牌页**确实提供 `read:admin`/`write:admin`**（站点管理员登录后可见，共 9 类 × 读写）——实测勾选 `read:admin,write:admin,write:organization,write:repository,write:user` 即可驱动建号/授权/轮换/吊销全链 ✅；② **站点管理员基本认证**（源码：`tokenRequiresScopes` 对非令牌认证直接放行、`reqToken()` 仅要求已登录）——实测同样全链通过 ✅ | **200 / 200** ✅ |
+| 引导最小权限 | 上述 5 个 scope 足够（无需 `all`） | ✅ 实测 |
 | 令牌路线（备选，当前不可用） | `POST /users/{u}/tokens` | 1.27.3 响应无明文 ⇒ **不用**；若后续升级补丁版回明文，可平滑切换（`kind: "token"` 已在 schema 内） |
 
 **为什么最终选密码**：Gitea 令牌的「签发即可读明文」在本版本不成立，而**密码可被管理员 API 任意设定/重置**，
