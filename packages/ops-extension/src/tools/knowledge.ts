@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { READ, WRITE, normalizeTargetHost } from "@ops-pi/core";
 import type { ExecResult, Runner } from "@ops-pi/core";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
@@ -6,6 +7,8 @@ import type { ApprovalFn } from "../approvals.ts";
 import { registerOpsTool } from "../approvals.ts";
 import { assertAuthorized } from "../guards.ts";
 import type { KnowledgeStore } from "../knowledge.ts";
+import { syncKb } from "../kb-sync.ts";
+import { kbGitCredentialsPath, loadKbCredential } from "../kb-credential.ts";
 import type { OpsContext } from "../context.ts";
 
 export interface KbSyncConfig {
@@ -15,56 +18,34 @@ export interface KbSyncConfig {
 }
 
 /**
- * git 同步（P15）：knowledge 目录 ↔ git 真源。
- * 全程 best-effort：任一步失败不抛错，收集进报告——本地知识库永远可用（离线优先）。
- * 冲突策略：pull --rebase autostash；rebase 失败 → 保留本地、报告提示人工处理。
+ * git 同步（P15；OMO-KB-SYNC P1 起改为复用 `kb-sync.ts` 的共享实现）。
+ *
+ * 行为升级点：
+ *  - **git 兼容层**：按 `git --version` 退化（cwd 替代 `-C`、symbolic-ref 替代 `init -b`、stash/pop 替代 `--autostash`）→ el7（git 1.8.3.1）可用；
+ *  - **分支纪律**：只 pull 主线；提交只推 `instance/<device>`，永不推 main（中心 PR 合流）；
+ *  - 凭据：存在 `$OMO_DIR/kb/credential.json` 时自动注入 git 凭据（argv 只含路径），缺省无凭据仍按本地模式降级。
+ * 全程 best-effort：失败不抛错，收集进 actions（本地知识库永远可用）。
  */
-export async function gitSync(kbDir: string, repo: string | undefined, branch: string, runner: Runner): Promise<{ actions: string[] }> {
-	const actions: string[] = [];
-	const g = async (args: string[], allowFail = false): Promise<ExecResult> => {
-		const r = await runner.exec(["git", "-C", kbDir, ...args], { timeoutMs: 60_000 });
-		if (r.exitCode !== 0 && !allowFail) throw new Error(r.stderr.slice(0, 300) || `git ${args[0]} 失败`);
-		return r;
-	};
-
-	await fs.mkdir(kbDir, { recursive: true });
-	const gitDir = await fs.stat(`${kbDir}/.git`).then(() => true).catch(() => false);
-	if (!gitDir) {
-		await g(["init", "-b", branch]);
-		actions.push(`git init（${branch}）`);
-	}
-	if (repo !== undefined && repo !== "") {
-		const remotes = await g(["remote"], true);
-		if (!remotes.stdout.includes("origin")) {
-			await g(["remote", "add", "origin", repo]);
-			actions.push(`remote add origin ${repo}`);
-		}
-		const fetch = await g(["fetch", "origin"], true);
-		if (fetch.exitCode === 0) {
-			const pull = await g(["pull", "--rebase", "--autostash", "origin", branch], true);
-			if (pull.exitCode === 0) actions.push("pull --rebase ✓");
-			else if (pull.stderr.includes("couldn't find remote ref")) actions.push("远端为空（首次推送前），跳过 pull");
-			else actions.push(`pull 失败（保留本地）：${pull.stderr.slice(0, 120)}`);
-		}
-	}
-	// commit 身份兜底（新仓无 global user.* 时 commit 必败）
-	const who = await g(["config", "user.email"], true);
-	if (who.exitCode !== 0 || who.stdout.trim() === "") {
-		await g(["config", "user.email", "omo-agent@local"]);
-		await g(["config", "user.name", "omo-agent"]);
-		actions.push("git identity 兜底（omo-agent@local）");
-	}
-	await g(["add", "-A"]);
-	const status = await g(["status", "--porcelain"]);
-	if (status.stdout.trim() !== "") {
-		const commit = await g(["commit", "-m", `kb: sync ${new Date().toISOString()}`], true);
-		if (commit.exitCode === 0) actions.push("commit ✓");
-	}
-	if (repo !== undefined && repo !== "") {
-		const push = await g(["push", "-u", "origin", branch], true);
-		if (push.exitCode === 0) actions.push("push ✓");
-		else actions.push(`push 失败（保留本地，稍后重试）：${push.stderr.slice(0, 120)}`);
-	}
+export async function gitSync(
+	omoDir: string,
+	kbDir: string,
+	repo: string | undefined,
+	branch: string,
+	runner: Runner,
+): Promise<{ actions: string[] }> {
+	const credential = await loadKbCredential(omoDir);
+	const report = await syncKb({
+		omoDir,
+		kbDir,
+		repo,
+		branch,
+		credential,
+		gitCredentialFile: credential === undefined ? undefined : kbGitCredentialsPath(omoDir),
+		runner,
+		push: true,
+	});
+	const actions = [...report.actions];
+	if (report.error !== undefined) actions.push(`同步未完成（保留本地）：${report.error}`);
 	return { actions };
 }
 
@@ -149,7 +130,7 @@ export function registerKnowledgeTools(pi: ExtensionAPI, ctx: OpsContext, approv
 			const p = params as Record<string, unknown>;
 			normalizeTargetHost(typeof p.host === "string" ? p.host : undefined);
 			const authz = assertAuthorized("ops_kb_sync", { sync: true }, ctx.authzView);
-			const { actions } = await gitSync(ctx.kb.kbDir, ctx.kbRepo, ctx.kbBranch, ctx.shell);
+			const { actions } = await gitSync(ctx.omoDir, ctx.kb.kbDir, ctx.kbRepo, ctx.kbBranch, ctx.shell);
 			return {
 				content: [{ type: "text", text: actions.length > 0 ? actions.join("\n") : "已是最新，无同步动作" }],
 				details: { authz, actions },

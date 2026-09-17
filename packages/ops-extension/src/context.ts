@@ -58,6 +58,8 @@ export class OpsContext {
 	readonly #pool: SshPool;
 	readonly vault: CredentialVault | undefined;
 	readonly kb: KnowledgeStore;
+	/** 私有域根（= dirname(policyPath)，omo 部署下即 ~/.omo）——KB 凭据/状态目录的基准 */
+	readonly omoDir: string;
 	readonly kbRepo: string | undefined;
 	readonly kbBranch: string;
 	/** 独立审计存储（与会话解耦；--no-session 下仍落盘） */
@@ -81,6 +83,7 @@ export class OpsContext {
 		this.log = l1.log;
 		this.shell = l1.shell;
 		this.#config = config;
+		this.omoDir = path.dirname(paths.policyPath);
 		this.targetPolicy = new ReloadableTargetPolicy(paths.policyPath);
 		this.tokens = loadTokenStore(paths.tokenPath);
 		this.#pool = new SshPool(config.ssh);
@@ -98,6 +101,8 @@ export class OpsContext {
 		// 真实用户家目录的 `.ssh` 反而落在 secret/trust 之外（对端 2026-09-16 实测：ops_file_ls 可列它）。
 		// 改用 getpwuid 口径（os.userInfo().homedir）取真实 home，不随 $HOME 漂移。
 		const realHome = realUserHome();
+		// KB 同步凭据（OMO-KB-SYNC）：bot token 与 git 凭据文件均属机密根——Agent 读不到，防被 LLM 外泄
+		const kbSecretFiles = [path.join(privateDir, "kb", "credential.json"), path.join(privateDir, "kb", "git-credentials")];
 		this.pathGuard = new PathGuard({
 			// 机密根：读写皆拒——模型凭据/会话（$HOME/.omp）、SSH 私钥（真实 home 与私有 home 两处）、
 			// vault 密文、批准令牌、omo 私有 HOME
@@ -108,6 +113,7 @@ export class OpsContext {
 				path.join(home, ".ssh"),
 				path.join(realHome, ".ssh"),
 				path.join(privateDir, "home"),
+				...kbSecretFiles,
 			],
 			// 信任根：写拒——策略/令牌/配置/审计/运行时与扩展安装域（omo 部署下 privateDir = ~/.omo）
 			trust: [

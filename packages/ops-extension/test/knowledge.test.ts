@@ -44,40 +44,42 @@ describe("KnowledgeStore", () => {
 	});
 });
 
-describe("gitSync（两节点共享真源）", () => {
-	test("save → sync push → 第二节点 sync pull 可见（file:// 远端，无网络）", async () => {
+describe("gitSync（工具层包装：本地模式 + 分支纪律）", () => {
+	// 完整的两节点/中心合流端到端见 kb-sync.test.ts（分支纪律由 syncKb 承载，此处只验工具层包装）
+	test("save → sync(push) → 推的是 instance/<device>，main 不被触碰", async () => {
 		const base = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-git-"));
 		const remote = path.join(base, "remote.git");
-		// 建裸远端（模拟 GitHub 真源）
-		fs.mkdirSync(remote);
-		new ShellExec().exec(["git", "init", "--bare", "-b", "main", remote], { timeoutMs: 15_000 });
+		fs.mkdirSync(remote, { recursive: true });
+		await new ShellExec().exec(["git", "init", "--bare", "--initial-branch=main", remote], { timeoutMs: 15_000 });
+		const node = path.join(base, "node-a");
+		const kbDir = path.join(node, "knowledge");
+		fs.mkdirSync(kbDir, { recursive: true });
+		const store = new KnowledgeStore(kbDir);
+		await store.save("runbook-502", "Nginx 502 Runbook", "现象/根因/处置。", ["nginx"]);
 
-		const nodeA = path.join(base, "node-a");
-		const storeA = new KnowledgeStore(nodeA);
-		await storeA.save("runbook-502", "Nginx 502 Runbook", "现象/根因/处置。", ["nginx"]);
-		const runnerA = new ShellExec();
-		const r1 = await gitSync(nodeA, remote, "main", runnerA);
-		expect(r1.actions.join(" ")).toContain("push ✓");
-
-		// 节点 B：空目录 → sync 拉取真源
-		const nodeB = path.join(base, "node-b");
-		fs.mkdirSync(nodeB);
-		const storeB = new KnowledgeStore(nodeB);
-		const runnerB = new ShellExec();
-		const r2 = await gitSync(nodeB, remote, "main", runnerB);
-		expect(r2.actions.join(" ")).toContain("pull");
-
-		const seen = await storeB.read("runbook-502");
-		expect(seen?.title).toBe("Nginx 502 Runbook");
-		expect(seen?.content).toContain("现象");
+		const saved = process.env.YUYI_DEVICE;
+		process.env.YUYI_DEVICE = "node-a";
+		try {
+			const r = await gitSync(node, kbDir, remote, "main", new ShellExec());
+			expect(r.actions.join(" ")).toContain("push instance/node-a ✓");
+			expect(r.actions.join(" ")).not.toContain("push main");
+			const branches = await new ShellExec().exec(["git", "--git-dir", remote, "branch", "--list", "--format=%(refname:short)"], { timeoutMs: 15_000 });
+			expect(branches.stdout).toContain("instance/node-a");
+			expect(branches.stdout).not.toContain("main");
+		} finally {
+			if (saved === undefined) delete process.env.YUYI_DEVICE;
+			else process.env.YUYI_DEVICE = saved;
+			fs.rmSync(base, { recursive: true, force: true });
+		}
 	});
 
 	test("无远端 = 本地模式：sync 不报错、本地条目保留", async () => {
 		const dir = tmpDir();
-		const store = new KnowledgeStore(dir);
+		const kbDir = path.join(dir, "knowledge");
+		fs.mkdirSync(kbDir, { recursive: true });
+		const store = new KnowledgeStore(kbDir);
 		await store.save("local-only", "仅本地", "内容");
-		const runner = new ShellExec();
-		const r = await gitSync(dir, undefined, "main", runner);
+		const r = await gitSync(dir, kbDir, undefined, "main", new ShellExec());
 		expect(r.actions.length).toBeGreaterThan(0);
 		expect((await store.read("local-only"))?.content).toBe("内容");
 	});
