@@ -1,6 +1,6 @@
 id: 'OMO-KB-SYNC'
 title: 'omo 知识库同步 P1：git 兼容层 + 分支纪律 + 凭据存储/保护 + omo kb 子命令 + serve 定时'
-state: '执行中'
+state: '待确认'
 level: 'L1'
 created: '2026-09-17T06:47:26.425Z'
 accept:
@@ -19,4 +19,23 @@ events:
     op: 'claim'
     by: 'omp-architect'
     note: 'branch=feature/OMO-KB-SYNC'
+  - ts: '2026-09-17T07:01:07.879Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: 'OMO-KB-SYNC P1 落地（自报）：git 兼容层（探测+退化，修掉 el7 三处不兼容）+ KB 同步共享实现（只 pull main、只推 instance/<device>）+ 凭据存储/保护（0600、PathGuard 机密根、永不入库）+ omo kb sync|status|disable|loop 子命令 + serve 定时同步 + 守卫入 test:ci。已合并 main（e2917cb）。'
 branch: 'feature/OMO-KB-SYNC'
+report:
+  summary: 'OMO-KB-SYNC P1 落地（自报）：git 兼容层（探测+退化，修掉 el7 三处不兼容）+ KB 同步共享实现（只 pull main、只推 instance/<device>）+ 凭据存储/保护（0600、PathGuard 机密根、永不入库）+ omo kb sync|status|disable|loop 子命令 + serve 定时同步 + 守卫入 test:ci。已合并 main（e2917cb）。'
+  evidence:
+    - 'K1/K2：node --test git-compat → 12 pass；真 git 端到端强制 el7 能力（本地裸仓）跑通 init→symbolic-ref→commit→push 实例分支，现代能力路径亦真跑'
+    - 'K3-K5：bun test kb-sync → 8 pass（分支纪律端到端：A 推实例分支/main 未触碰/中心合流后 B 才可见；重复同步不提交；无远端=本地模式；实例分支≠主线；误配嵌套时凭据不入库）'
+    - 'K6/K7：knowledge.test 5 pass（工具层包装）；read-tier-structure 14 pass（含 PathGuard 拒读 KB 凭据）'
+    - 'K8：scripts/probe-install-ops-core.sh 全绿（第 4 组 7 项 KB 断言；含他会话 skills 组恢复通过——此前失败系我引入的安装器崩溃连带）'
+    - 'K9：npm run test:ci 全绿（L1 150、L2 73 ×6 文件、typecheck、install/bootstrap 守卫）'
+    - 'K10：沙箱 HOME 内真实跑 omo kb status / sync --push → 推 instance/PC-SZ-375 ✓，再 sync「无本地改动，无需提交」'
+  pending:
+    - 'P2 供给 CLI（ops-kb-provision / ops-kb-rotate，E2）：代码+桩测试可先行，真机跑需 Owner 给 Gitea 管理 token'
+    - 'P3 自注册（omo kb enroll + /enroll//rotate//revoke 服务）：需部署决策（主人）+ Gitea 4 条待验证事实（代签 token / scope+expires_at / PR scope / SSH 端点）'
+    - '真机复验：对端 el7 装下一版后跑 omo kb status，应显示 git 1.8.3.1 的退化说明'
+  at: '2026-09-17T07:01:07.878Z'
+  by: 'omp-architect'
