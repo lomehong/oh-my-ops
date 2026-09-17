@@ -39,3 +39,7 @@ report:
     - '真机复验：对端 el7 装下一版后跑 omo kb status，应显示 git 1.8.3.1 的退化说明'
   at: '2026-09-17T07:01:07.878Z'
   by: 'omp-architect'
+  - ts: '2026-09-17T07:52:00.000Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: 'P2 供给 CLI 落地（自报）：scripts/ops-kb-provision.mjs（grant/revoke/list + selftest 9/9 + dry-run/apply），已入 test:ci；真机逐端点验证（团队/成员/协作者/PR 全可逆跑通）。**实测约束**：API 签发的令牌不回明文、UI 无 admin scope ⇒ bot 建号与令牌生成必须人工（UI 或服务端 CLI），E1 自注册在本实例不可实现；SSH 部署密钥不可行（ssh_url=git.localhost、无 ssh 客户端）。P1 亦真机修正三处（凭据注入 canonical 形态、首跑建目录、失败如实上报）。'

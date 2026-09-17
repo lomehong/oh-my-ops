@@ -202,6 +202,27 @@
 | 真机端到端 | ✅ `omo kb sync` 拉取生产 `ops-kb` 成功（3 条目）；`sync --push` 推 **`instance/PC-SZ-375`** 成功（服务器侧 API 已见该分支），**main 未动**；提交内**无凭据文件**（`.git/info/exclude` 生效） |
 | Gitea 侧建议（不变） | `main` 开分支保护；bot 权限走团队 |
 
+### 5.2′ 实际形态（P2 已落地，真机逐端点验证）
+
+受实测约束（凭据明文只能从 UI 取、`/admin/users` 需不可得的 `write:admin`），E2 的落地形态定为：
+
+**Owner 手工两步（每实例一次性，各约 1 分钟）+ 脚本自动化其余全部**
+
+| 步骤 | 谁做 | 手段 | 验证状态 |
+|---|---|---|---|
+| 建 bot 账号 | Owner | Gitea UI（或服务端 CLI `gitea admin user create`） | **必须人工**（API 无 `write:admin`） |
+| 生成 bot 令牌 | Owner | Gitea UI「令牌」页，scope 勾 `repository`(write) 即可（8 类可见 scope 之一） | **必须人工**（API 回明文不可得） |
+| 授权（建团队/加成员/加协作者） | `scripts/ops-kb-provision.mjs grant` | Gitea API + Owner 的 UI 令牌 | ✅ 真机实跑：团队 create 201 → 成员 PUT 204 → 服务器侧可见 |
+| 登记（设备↔账号↔团队↔令牌 sha1） | 同上（`--registry`，0600） | 本地 JSON，**不含令牌本体** | ✅ 自检断言 |
+| 撤权 | `… revoke [--delete-team]` | 撤团队成员（+撤组织成员/解散团队） | ✅ 真机实跑：成员 DELETE 204 → 团队 DELETE 204 → org 团队列表复原 |
+| 轮换 | Owner：UI 生成新令牌 → 重跑 `grant` 交付 → UI 删旧令牌 | — | **半自动**（API 无法代签，见实测表） |
+
+要点：
+- **撤权 = 撤访问**（团队成员/组织成员/协作者），**即时生效**；令牌本体残留也无任何仓库权限，UI 里可顺手删。
+- 撤销**不依赖** `DELETE /users/{u}/tokens`（那需要 `write:admin`，我们不可得）。
+- 交付实例时只给「`credential.json` 内容 + 写入/校验命令」，令牌经一次性渠道（人工/一次性 code）传递，不进聊天记录之外的持久化位置。
+- 脚本与令牌纪律：令牌只从 `--token-file`（强制 0600）或 env 读，绝不进 argv、绝不回显、绝不入库；变更类动作默认 dry-run，须 `--apply`。
+
 **Unknown（[待验证]）**
 1. ~~Git 服务器产品与版本~~ → **已确认：Gitea 1.27.3，路径前缀 `/git/`，API 禁匿名，仓库私有（读亦需凭据）**。剩余 Gitea 侧待验证：① 管理员能否代某个 bot 用户签发 token（否则需先设随机密码再用其基本认证签发）；② 该版本 token 的 scope 名称与是否支持过期；③ 创建 PR 需要的作用域（`write:issue`?）；④ 是否暴露 SSH 端点。
 2. 实例是否允许直连 GitLab API（若否，enroll 必须由中间服务代建）。

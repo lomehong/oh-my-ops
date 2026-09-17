@@ -46,3 +46,28 @@
 - **Gitea 侧 4 条待验证**：管理员能否代签 token / scope 名称与 `expires_at` / 创建 PR 所需 scope / 是否暴露 SSH 端点。
 - **真机复验**：对端 el7 上跑 `omo kb status`（应显示 `git 1.8.3.1（cwd 模式；stash/pop 替代 --autostash；symbolic-ref 替代 init -b）`）——需其装下一版后执行。
 - **未做（有意）**：`omo serve --foreground` 不含 KB 定时（前台用于调试）；SSH/Deploy Key 路线（可达性未证）；KB 条目 lint（供 P2/P3 的服务侧或 CI 承担）。
+
+---
+
+## 第二轮：真机验证（2026-09-17）——凭据注入形态 + 供给 CLI + 实测约束
+
+**触发**：主人给出生产 Gitea 的 Owner 令牌（`omo-admin`，UI 签发，8 个 write scope），要求「连接真机验证 P1/P2」。
+
+**真机测到什么（全部对生产 `twin.hzins.com/git/hzins-ops/ops-kb`）**
+
+1. **P1 凭据路径端到端可用**：`omo kb sync` 拉取 3 条目；`sync --push` 推 `instance/PC-SZ-375` ✓（服务器侧 API 可见），main 未动，提交内无凭据文件。
+2. **踩到并修掉三处（已入代码 + 守卫）**：
+   - `-c credential.helper="store --file=<path>"` **不被本版 git 采纳**（三写法均 `Failed to authenticate user`；同令牌 `curl -u` 200、`git https://<token>@…` 可用）→ 改 **canonical store 路径 `$HOME/.git-credentials` + 私有 HOME**；
+   - 首跑 `kbDir` 不存在 → spawn ENOENT 且报错无信息 → 先 `mkdir -p` + 补 `cwd=` 上下文；
+   - pull/push 失败曾仍报 `ok:true` → 失败如实上报（仍不抛错）。
+3. **签发约束（改变方案前提）**：`POST /users/{u}/tokens`（基本认证）**只回 `sha1`+`token_last_eight`，不回明文** ⇒ API 签发的令牌不可用；UI 的 scope 清单**不含 admin 类** ⇒ `POST /admin/users` 不可达 ⇒ **E1 自注册在本实例不可实现**，且 **bot 建号亦须人工**。
+4. **替代凭据形态评估**：密码基本认证（git 端点 401，但密码已被主人轮换 ⇒ 结论未定）；**SSH 部署密钥不可行**（`ssh_url=git@localhost:…`、容器内无 ssh/ssh-keygen、TCP 不可达）⇒ **HTTPS + 令牌是当前唯一通路**。
+5. **可自动化的部分（逐个真机验证）**：团队 create 201 / 成员 PUT 204 / 团队 DELETE 204 / 协作者 PUT 204 / DELETE 204 / 临时仓 create+delete 204 / PR create 201（PR #1 已建，待主人审阅）。
+
+**交付**
+
+- `scripts/ops-kb-provision.mjs`（P2 供给 CLI）：`grant`/`revoke`/`list` + `--selftest`(9/9) + `--dry-run`/`--apply`；已挂入 `npm run test:ci`。
+- 真机实跑（可逆）：dry-run → apply（建团队 id=3 + 加成员 204）→ 服务器侧核验 → revoke（成员 204 + 解散团队 204）→ org 团队列表复原；登记文件 0600 且不含令牌本体。
+- 实跑 PR：`https://twin.hzins.com/git/hzins-ops/ops-kb/pulls/1`（实例分支 → main，待审阅）。
+
+**待主人决策**：凭据签发路径（见会话内提问）：E2 人工两步（现状，立即可用）／启用 Gitea SSH + 部署密钥（API 可自助签发+吊销，需改配置并放行端口）／提供 Git 服务器 shell（`gitea admin user generate-access-token` 可批量出明文）。

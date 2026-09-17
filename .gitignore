@@ -26,3 +26,6 @@ tmp/
 # 探针观测输出（本机路径，不入库）
 out*.json
 omp-single
+
+# Owner 侧知识库供给登记（含设备名/账号，不入库）
+ops-kb-registry.json
