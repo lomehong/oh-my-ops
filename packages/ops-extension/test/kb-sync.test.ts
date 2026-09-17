@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { ShellExec } from "@ops-pi/core";
 import { syncKb, instanceBranchFor } from "../src/kb-sync.ts";
-import { daysUntilExpiry, kbCredentialPath, kbGitCredentialsPath, loadKbCredential, redactUrl, saveGitCredentialsFile, saveKbCredential, tokenPrefix } from "../src/kb-credential.ts";
+import { daysUntilExpiry, kbCredentialPath, kbGitCredentialsPath, loadKbCredential, omoHomeDir, redactUrl, saveGitCredentialsFile, saveKbCredential, tokenPrefix } from "../src/kb-credential.ts";
 
 /**
  * OMO-KB-SYNC P1 守卫：分支纪律 + 凭据文件（真 git、file:// 裸仓，无网络）。
@@ -140,7 +140,7 @@ describe("kb-credential：凭据落盘与展示纪律", () => {
 			// git store 格式：scheme://user:token@host（供 credential.helper=store --file 读取）
 			expect(fs.readFileSync(kbGitCredentialsPath(dir), "utf8").trim()).toBe("https://omo-bot:abcdef1234567890@twin.hzins.com");
 			expect(tokenPrefix("abcdef1234567890")).toBe("abcdef12…");
-			expect(kbGitCredentialsPath(dir)).toContain(path.join("kb", "git-credentials"));
+			expect(kbGitCredentialsPath(dir)).toContain(path.join("home", ".git-credentials")); // store canonical 路径（实测）
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
@@ -176,6 +176,43 @@ describe("凭据绝不入库（含 kbDir 与 $OMO_DIR/kb 误配的场景）", ()
 			expect(tracked.stdout).not.toContain("git-credentials");
 		} finally {
 			fs.rmSync(base, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("凭据注入机制（真机实测口径）：credential.helper=store + 私有 HOME", () => {
+	test("★ 凭据文件落在 omo 私有 HOME 下；git credential fill 能从该文件取到（离线可判）", async () => {
+		const shell = new ShellExec();
+		const omo = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-cred-"));
+		try {
+			fs.mkdirSync(omoHomeDir(omo), { recursive: true });
+			const cred = { repo: "https://twin.hzins.com/git/hzins-ops/ops-kb", username: "omo-bot", token: "TOKEN-VALUE-1234", createdAt: new Date().toISOString() };
+			const file = await saveGitCredentialsFile(omo, cred);
+			expect(file).toBe(path.join(omo, "home", ".git-credentials"));
+			expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+			// 与 syncKb 完全同款：-c credential.helper=store + HOME=私有 HOME
+			const r = await shell.exec(["git", "-c", "credential.helper=store", "credential", "fill"], {
+				cwd: omo,
+				env: { HOME: omoHomeDir(omo), GIT_TERMINAL_PROMPT: "0" },
+				stdin: "protocol=https\nhost=twin.hzins.com\n\n",
+				timeoutMs: 20_000,
+			});
+			expect(r.stdout).toContain("username=omo-bot");
+			expect(r.stdout).toContain("password=TOKEN-VALUE-1234");
+		} finally {
+			fs.rmSync(omo, { recursive: true, force: true });
+		}
+	});
+
+	test("未配置凭据时不注入 helper、不改 HOME（本地模式不受影响）", async () => {
+		const shell = new ShellExec();
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-nocred-"));
+		try {
+			const r = await syncKb({ omoDir: dir, kbDir: path.join(dir, "knowledge"), repo: undefined, branch: "main", device: "node-n", runner: shell });
+			expect(r.ok).toBe(true);
+			expect(r.actions.join(" ")).toContain("本地模式");
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
 		}
 	});
 });

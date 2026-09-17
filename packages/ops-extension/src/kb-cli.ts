@@ -6,6 +6,7 @@ import { loadConfig } from "./setup.ts";
 import { syncKb } from "./kb-sync.ts";
 import {
 	daysUntilExpiry,
+	omoHomeDir,
 	kbCredentialPath,
 	kbGitCredentialsPath,
 	loadKbCredential,
@@ -64,6 +65,8 @@ async function runSync(env: KbCliEnv, opts: { push: boolean; quiet: boolean }): 
 		branch: env.branch,
 		credential,
 		gitCredentialFile: credential === undefined ? undefined : env.gitCredentialFile,
+		// 私有 HOME 一律由 omoDir 推导：调用方 HOME 可能是别的（真机实测：传 process.env.HOME 会让 store 找错目录）
+		omoHome: omoHomeDir(env.omoDir),
 		runner: new ShellExec(),
 		push: opts.push,
 	});
@@ -78,7 +81,8 @@ async function runSync(env: KbCliEnv, opts: { push: boolean; quiet: boolean }): 
 async function runStatus(env: KbCliEnv): Promise<number> {
 	const credential = await loadKbCredential(env.omoDir);
 	const state = await loadKbState(env.omoDir);
-	console.log(`远端：${env.repo === undefined ? "（未配置 → 本地模式）" : redactUrl(credential?.repo ?? env.repo)}`);
+	const repo = credential?.repo ?? env.repo;
+	console.log(`远端：${repo === undefined ? "（未配置 → 本地模式）" : redactUrl(repo)}`);
 	console.log(`分支：主线 ${env.branch}｜实例分支 instance/<device>（device=${process.env.YUYI_DEVICE ?? os.hostname()}）`);
 	console.log(`知识库目录：${env.kbDir}`);
 	if (credential === undefined) console.log("凭据：未配置（本地模式；`omo kb enroll` 属 P3）");

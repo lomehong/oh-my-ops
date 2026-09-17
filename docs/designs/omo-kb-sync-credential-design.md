@@ -191,6 +191,17 @@
 | 仓库治理现状（部署建议） | `main` **无分支保护**（`branch_protections=[]`）→ 建议开启 PR-only；repo **无协作者**，组织仅 `Owners` 团队（成员 `hz0704027`）→ bot 权限建议走**新建团队**（如 `kb-readers`/`kb-writers`）或 per-repo collaborator |
 | KB 现状 | 仓库**已在用**：`main` 上已有 `omo-agent` 身份提交的运维条目（如「Gitea 子路径部署与 git 凭据挂死排查」） |
 
+**追加实测（2026-09-17 第二轮，真机 Gitea 1.27.3 + 生产仓 `hzins-ops/ops-kb`）**
+
+| 项 | 结论 |
+|---|---|
+| **API 建 token 拿不到明文** | `POST /users/{u}/tokens`（基本认证，带 `scopes:[write:admin,…]`）返回 **201 但响应只有 `sha1` + `token_last_eight`**，无 `token` 字段 ⇒ **API 签发的 token 无法使用**；可用 token 只能从 **UI** 获取（一次性展示）⇒ **E1 自注册在本实例不可实现**，E2（Owner 建号 + 发凭据）为唯一路径 |
+| `write:admin` 可得性 | UI 的 scope 清单**不含 `admin` 类**（实测勾满仍缺），而 `POST /admin/users` 硬性要求 `write:admin` ⇒ **建用户必须走 UI 或服务端 CLI**（`gitea admin user create`），API 自动化不可达 |
+| 其余管理面可用 | 现有 UI token（8 个 write scope）**可**：建/管团队（`write:organization` ✅ 实测 422 校验通过）、加协作者（`write:repository` ✅ 实测通过）、PR（`write:issue` ✅） |
+| **git 凭据注入形态（关键坑）** | `-c credential.helper="store --file=<path>"` **不被采纳**（三种写法均 `remote: Failed to authenticate user`）；可用形态 = **`-c credential.helper=store` + `$HOME/.git-credentials`（0600）**，且子进程 `HOME` 必须显式设为 **omo 私有 HOME**（沿用调用方 HOME 会让 store 找错目录）。已据此改 P1 实现并加守卫 |
+| 真机端到端 | ✅ `omo kb sync` 拉取生产 `ops-kb` 成功（3 条目）；`sync --push` 推 **`instance/PC-SZ-375`** 成功（服务器侧 API 已见该分支），**main 未动**；提交内**无凭据文件**（`.git/info/exclude` 生效） |
+| Gitea 侧建议（不变） | `main` 开分支保护；bot 权限走团队 |
+
 **Unknown（[待验证]）**
 1. ~~Git 服务器产品与版本~~ → **已确认：Gitea 1.27.3，路径前缀 `/git/`，API 禁匿名，仓库私有（读亦需凭据）**。剩余 Gitea 侧待验证：① 管理员能否代某个 bot 用户签发 token（否则需先设随机密码再用其基本认证签发）；② 该版本 token 的 scope 名称与是否支持过期；③ 创建 PR 需要的作用域（`write:issue`?）；④ 是否暴露 SSH 端点。
 2. 实例是否允许直连 GitLab API（若否，enroll 必须由中间服务代建）。

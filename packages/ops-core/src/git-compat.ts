@@ -96,11 +96,17 @@ export class GitCompat {
 		opts: { allowFail?: boolean; env?: Record<string, string>; timeoutMs?: number } = {},
 	): Promise<GitStep> {
 		const argv = ["git", ...this.argsPrefix, ...args];
-		const res: ExecResult = await this.runner.exec(argv, {
-			cwd: this.dir,
-			env: { ...this.baseEnv, ...(opts.env ?? {}) },
-			timeoutMs: opts.timeoutMs ?? 60_000,
-		});
+		let res: ExecResult;
+		try {
+			res = await this.runner.exec(argv, {
+				cwd: this.dir,
+				env: { ...this.baseEnv, ...(opts.env ?? {}) },
+				timeoutMs: opts.timeoutMs ?? 60_000,
+			});
+		} catch (err) {
+			// spawn 层失败（多为 cwd 不存在或 git 不在 PATH）——补上下文后上抛，避免「命令失败：git」这种无信息报错
+			throw new Error(`无法执行 git ${args.join(" ")}（cwd=${this.dir}）：${String((err as Error)?.message ?? err)}`);
+		}
 		const step: GitStep = { argv, ok: res.exitCode === 0, stdout: res.stdout, stderr: res.stderr, exitCode: res.exitCode };
 		this.steps.push(step);
 		if (!step.ok && opts.allowFail !== true) {

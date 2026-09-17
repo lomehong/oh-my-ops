@@ -36,8 +36,20 @@ export function kbStateDir(omoDir: string): string {
 export function kbCredentialPath(omoDir: string): string {
 	return path.join(kbStateDir(omoDir), "credential.json");
 }
+/**
+ * git `store` 凭据文件路径。
+ *
+ * 实测（2026-09-17，真机 Gitea + git 2.39）：`-c credential.helper="store --file=<p>"` **不被 git 采纳**
+ * （三种写法均 "Failed to authenticate user"），而 store 的 **canonical 路径** `$HOME/.git-credentials`
+ * + `-c credential.helper=store` 可用。故此处直接落在 omo 私有 HOME 下（该目录整体已在 PathGuard 机密根内）。
+ */
 export function kbGitCredentialsPath(omoDir: string): string {
-	return path.join(kbStateDir(omoDir), "git-credentials");
+	return path.join(omoHomeDir(omoDir), ".git-credentials");
+}
+
+/** omo 私有 HOME（launcher 重定向目标；git store 与凭据文件都落这里，受机密根保护） */
+export function omoHomeDir(omoDir: string): string {
+	return path.join(omoDir, "home");
 }
 export function kbStatePath(omoDir: string): string {
 	return path.join(kbStateDir(omoDir), "state.json");
@@ -73,13 +85,9 @@ export async function saveGitCredentialsFile(omoDir: string, cred: KbCredential)
 	const encodedToken = encodeURIComponent(cred.token);
 	const line = `${u.protocol}//${encodedUser}:${encodedToken}@${u.host}\n`;
 	const file = kbGitCredentialsPath(omoDir);
+	await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
 	await fs.writeFile(file, line, { mode: 0o600 });
 	return file;
-}
-
-/** `-c credential.helper=` 的取值（只含**文件路径**，不含秘密） */
-export function gitCredentialHelperArg(credFile: string): string {
-	return `store --file=${credFile}`;
 }
 
 /** 供展示的 token 前缀 */

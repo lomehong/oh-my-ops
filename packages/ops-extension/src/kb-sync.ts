@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { detectGitCaps, GitCompat } from "@ops-pi/core";
 import type { Runner } from "@ops-pi/core";
-import { gitCredentialHelperArg, redactUrl, saveKbState } from "./kb-credential.ts";
+import { redactUrl, saveKbState } from "./kb-credential.ts";
 import type { KbCredential } from "./kb-credential.ts";
 
 /**
@@ -28,8 +28,10 @@ export interface KbSyncOptions {
 	/** 设备名（缺省 YUYI_DEVICE / hostname） */
 	device?: string;
 	credential?: KbCredential;
-	/** 凭据文件路径（用于 `-c credential.helper`，仅传路径不传秘密） */
+	/** 仅用于「凭据已配置」判定：true 时注入 `credential.helper=store` 与私有 HOME（秘密仍在 0600 文件里，不进 argv） */
 	gitCredentialFile?: string;
+	/** omo 私有 HOME（store 读 $HOME/.git-credentials 的基准；缺省 <omoDir>/home） */
+	omoHome?: string;
 	runner: Runner;
 	/** true = 提交并推实例分支；false = 仅拉取 */
 	push?: boolean;
@@ -117,6 +119,8 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 	}
 	actions.push(`远端：${redactUrl(repo)}｜主线 ${mainBranch}｜实例分支 ${instanceBranch}`);
 
+	// 首跑时 kbDir 可能不存在：spawn 的 cwd 不存在会直接 ENOENT（真机首验踩到）
+	await fs.mkdir(opts.kbDir, { recursive: true }).catch(() => undefined);
 	const caps = await detectGitCaps(opts.runner);
 	if (caps === undefined) {
 		return await finish(report(false, "git 不可用（未找到可执行的 git）"));
@@ -124,9 +128,13 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 	actions.push(`git ${caps.version}（cwd 模式${caps.supportsAutostash ? "" : "；stash/pop 替代 --autostash"}${caps.supportsInitB ? "" : "；symbolic-ref 替代 init -b"}）`);
 
 	const env: Record<string, string> = { GIT_TERMINAL_PROMPT: "0" };
-	// 凭据经 `-c credential.helper=store --file=<path>` 注入：argv 里只有**路径**，秘密不出现在命令行/ps
+	// 凭据注入：`-c credential.helper=store` + **私有 HOME**（store 读 $HOME/.git-credentials，0600）。
+	// 实测反例：`store --file=<path>` 形态不被本版 git 采纳；且秘密绝不进 argv/远端 URL（远端 URL 存在 .git/config，Agent 可读）。
 	const prefix: string[] = [];
-	if (opts.gitCredentialFile !== undefined) prefix.push("-c", `credential.helper=${gitCredentialHelperArg(opts.gitCredentialFile)}`);
+	if (opts.gitCredentialFile !== undefined) {
+		prefix.push("-c", "credential.helper=store");
+		env.HOME = opts.omoHome ?? path.join(opts.omoDir, "home");
+	}
 	const g = new GitCompat(opts.runner, opts.kbDir, caps, env, prefix);
 
 	try {
@@ -139,7 +147,10 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 		await ensureLocalExcludes(opts.kbDir, ["credential.json", "git-credentials", "state.json", "kb/"]);
 
 		// 拉取始终作用于主线（只读共享主线）
-		actions.push(await g.pullRebase("origin", mainBranch));
+		let failed = false;
+		const pullMsg = await g.pullRebase("origin", mainBranch);
+		actions.push(pullMsg);
+		if (pullMsg.startsWith("pull 失败")) failed = true;
 
 		let pushed = false;
 		if (opts.push === true) {
@@ -150,9 +161,10 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 				const pushMsg = await g.push("origin", instanceBranch);
 				actions.push(pushMsg);
 				pushed = pushMsg.includes("✓");
+				if (pushMsg.startsWith("push 失败")) failed = true;
 			}
 		}
-		return await finish(report(true, undefined, pushed));
+		return await finish(report(!failed, failed ? "同步未完成（详见 actions；本地知识库保持可用）" : undefined, pushed));
 	} catch (err) {
 		return await finish(report(false, String((err as Error)?.message ?? err)));
 	}
