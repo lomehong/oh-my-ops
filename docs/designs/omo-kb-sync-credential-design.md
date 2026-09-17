@@ -87,7 +87,8 @@
 - **E2 Owner 批量脚本（半自动）**：服务器上跑 `ops-kb-provision --registry registry.yaml` 批量建账号/签发 token 或注册公钥，再逐台交付（安装参数 / 一次性 code 兑换）。适合实例数少的早期。
 
 > 两条路径共同纪律：注册表**只存** `instance → 账号名/token id/deploy key id/scope/permission/expiry`，**不存明文**；明文（或公钥交换）只在「服务 ↔ 目标实例」一次性出现。
-> 已知约束：该实例 **API 禁匿名**（403），故服务侧必须持管理 token；实例侧若仅做 git 操作则**无需 API 权限**（SSH 方案尤其干净）。
+> 已知约束：该实例 **API 禁匿名**（403），故服务侧必须持管理 token（且**必须含 `write:admin`** 才能建用户）；实例侧若仅做 git 操作则**无需 API 权限**。
+> 实测补充：`POST /users/{username}/tokens` **不接受 token 鉴权**（401），须基本认证 ⇒ 服务流程固定为「建 bot（随机密码）→ 以该 bot 基本认证签发 → 轮换密码」，全程零人工。
 
 ### 5.2 发放（自动化）——两条路径
 
@@ -149,7 +150,7 @@
 
 | 项 | 建议 | 说明 |
 |---|---|---|
-| Token TTL | **12 个月**（若 Gitea 1.27.3 支持 `expires_at` 则落到服务端；否则由注册表强制） | 到期前 **30 天** `ops_kb_status` 与注册表同时告警 |
+| Token TTL | **12 个月**（实测 Gitea 1.27.3 的 `CreateAccessTokenOption` 无 `expires_at` ⇒ **由注册表强制**：服务记录 `expires_at`，到期前提醒 Owner 轮换） | 到期前 **30 天** `ops_kb_status` 与注册表同时告警 |
 | 自动轮换（推荐形态） | 实例用**现有 token 作凭证**调用 `POST /rotate`：服务校验该 token 在 Gitea 仍有效 → 为同一 bot 用户签发新 token → 实例落盘并 `git ls-remote` 自检成功回调 → 服务**在确认后**吊销旧 token | 零停机、无需人工；旧 token 在确认前保留（注册表记 `previous_token_id`，保留 7 天） |
 | 事件驱动轮换 | 实例重装/迁移、疑似泄漏、Owner 主动 | 重装走 `omo kb enroll` 重新兑换（一次性 code） |
 | 吊销 | 服务调 Gitea `DELETE …/tokens/{id}`；实例下次同步失败即回落**本地模式**（只读巡检不受影响） | 秒级生效 |
@@ -176,6 +177,19 @@
 - **Rollback**：撤 token + 关定时任务；验证实例回落本地模式且只读工具正常。
 
 ## 八、不确定性治理
+
+**已由实测转成事实（2026-09-17，持 `omo-admin` 服务 token 探测 Gitea 1.27.3）**
+
+| 原 Unknown | 结论 |
+|---|---|
+| 服务器产品/版本 | **Gitea 1.27.3**；根路径 `/git/`；API 禁匿名；仓库 `hzins-ops/ops-kb` **private**、default `main`、`clone_url=https://twin.hzins.com/git/hzins-ops/ops-kb.git`、**`ssh_url=git@localhost:…`（服务端内部，实例不可用）** |
+| ① 管理员能否代签 token | **不能（用 token 鉴权时）**：`POST /users/{u}/tokens` 对 token 鉴权返回 **401 auth required** → 必须**基本认证**。故自动化固定走：服务用 admin 建 bot（随机密码）→ 以 **bot 基本认证**签发作用域 token → 轮换密码 |
+| ② scope 名称与 `expires_at` | 作用域词汇含 `write:admin/user/repository/issue/organization/package/notification/misc/activitypub`（实测 token 具备除 `write:admin` 外全部）；**`CreateAccessTokenOption` 仅 `{name, scopes}` → 本版不支持 `expires_at`** ⇒ TTL **由注册表强制**（§5.7 按此执行） |
+| ③ 创建 PR 所需 scope | PR 端点存在（`POST /repos/{owner}/{repo}/pulls`）；本 token 已具备 `write:issue`（Gitea 将 PR 计入 issue 作用域）[待写入路径实测] |
+| ④ 是否暴露 SSH 端点 | `ssh_url` 指向 **localhost** ⇒ 实例侧不可用（22/2222 亦不可达）⇒ **HTTPS 唯一**，方案 C 关闭 |
+| 管理面权限门槛 | `POST /admin/users` 要求 **`write:admin`**（实测 403：`required=[write:admin]`）⇒ **服务 token 必须加该 scope** |
+| 仓库治理现状（部署建议） | `main` **无分支保护**（`branch_protections=[]`）→ 建议开启 PR-only；repo **无协作者**，组织仅 `Owners` 团队（成员 `hz0704027`）→ bot 权限建议走**新建团队**（如 `kb-readers`/`kb-writers`）或 per-repo collaborator |
+| KB 现状 | 仓库**已在用**：`main` 上已有 `omo-agent` 身份提交的运维条目（如「Gitea 子路径部署与 git 凭据挂死排查」） |
 
 **Unknown（[待验证]）**
 1. ~~Git 服务器产品与版本~~ → **已确认：Gitea 1.27.3，路径前缀 `/git/`，API 禁匿名，仓库私有（读亦需凭据）**。剩余 Gitea 侧待验证：① 管理员能否代某个 bot 用户签发 token（否则需先设随机密码再用其基本认证签发）；② 该版本 token 的 scope 名称与是否支持过期；③ 创建 PR 需要的作用域（`write:issue`?）；④ 是否暴露 SSH 端点。
