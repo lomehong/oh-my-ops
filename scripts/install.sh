@@ -313,6 +313,36 @@ elif [ ! -f "$YUYI_DIR/agent.json" ]; then
 else
   echo "  ↺ 保留已有 $YUYI_DIR/agent.json"
 fi
+
+# yuyi 配套 skills 部署：vendor/yuyi-skills/<skill>/ → $HOME_DIR/.omp/agent/skills/<skill>/
+# 门控＝凭据非空（与上面 agent.json 同源）：未配置 token 时不落 skills，避免装出「有技能没通道」的半配形态。
+# 整目录替换（先 rm -rf 再拷内容）：dest 已存在时 `cp -r <src> <dest>` 会生成 dest/<skill>/ 嵌套并保留旧文件，重装即坏
+# （同类语义不对称已在步骤 2 ops-core 段实测踩过，见该段注释）。
+SKILLS_SRC="$REPO_ROOT/vendor/yuyi-skills"
+SKILLS_DST="$HOME_DIR/.omp/agent/skills"
+if [ -n "$TOKEN" ] && [ -d "$SKILLS_SRC" ]; then
+  mkdir -p "$SKILLS_DST"
+  SKILLS_N=0
+  for d in "$SKILLS_SRC"/*/; do
+    [ -d "$d" ] || continue
+    skill="$(basename "$d")"
+    rm -rf "$SKILLS_DST/$skill"
+    mkdir -p "$SKILLS_DST/$skill"
+    cp -r "$d." "$SKILLS_DST/$skill/"
+    SKILLS_N=$((SKILLS_N + 1))
+  done
+  chown -R pi:pi "$SKILLS_DST" 2>/dev/null || true   # 目标机以 pi 运行时为同主无操作；无此用户/非 root 时静默跳过（不阻断安装）
+  if [ "$SKILLS_N" -eq 0 ]; then
+    echo "  ⚠ vendor/yuyi-skills 为空——yuyi 配套 skills 未部署"
+  else
+    echo "  ✓ Yuyi skills 已部署：$SKILLS_N 个 → $SKILLS_DST"
+  fi
+elif [ -z "$TOKEN" ]; then
+  echo "  ⚠ 未提供 token——yuyi 配套 skills 未部署（--token 补配后重跑）"
+else
+  echo "  ⚠ vendor/yuyi-skills 不存在——yuyi 配套 skills 未部署"
+fi
+
 ENV_FILE="$YUYI_DIR/env"
 ENV_TMP="$ENV_FILE.tmp.$$"
 : > "$ENV_TMP"

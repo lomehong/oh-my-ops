@@ -63,6 +63,20 @@ else
 	fail "启动器缺失"
 fi
 
+echo "[4] yuyi 配套 skills 部署（vendor/yuyi-skills → \$HOME/.omp/agent/skills）"
+SK1="$H1/.omo/home/.omp/agent/skills"
+count_dirs() { local n=0 d; for d in "$1"/*/; do [ -d "$d" ] && n=$((n + 1)); done; echo "$n"; }
+NS="$(count_dirs "$REPO_ROOT/vendor/yuyi-skills")"
+N1="$(count_dirs "$SK1")"
+[ "$NS" -gt 0 ] && [ "$N1" -eq "$NS" ] && pass "skills 落点数量与 vendor 一致（$N1）" || fail "skills 落点数异常：$N1（vendor 为 $NS）"
+[ -f "$SK1/yuyi-org-architect/references/contracts.md" ] && pass "技能内子目录随技能整棵落位" || fail "技能内子目录未落位（references/ 缺失）"
+install_into "$H1" reinstall || fail "重装失败（见 $TMP/install-reinstall.log）"
+[ ! -d "$SK1/yuyi-core/yuyi-core" ] && pass "重装未产生嵌套目录（整目录替换）" || fail "重装产生嵌套目录（cp -r 语义不对称回归）"
+[ "$(count_dirs "$SK1")" -eq "$NS" ] && pass "重装后落点数不变（$NS）" || fail "重装后落点数异常"
+H4="$TMP/h4"; mkdir -p "$H4"
+HOME="$H4" bash "$PKG/scripts/install.sh" --name no-token >"$TMP/install-notoken.log" 2>&1 || fail "无 token 安装失败（见 $TMP/install-notoken.log）"
+[ -d "$H4/.omo/home/.omp/agent/skills" ] && fail "无 token 仍部署 skills（门控失效）" || pass "无 token 不部署 skills（门控生效）"
+
 echo
 if [ "$FAILED" -eq 0 ]; then echo "结果：全绿"; exit 0; fi
 echo "结果：$FAILED 项失败"; exit 1
