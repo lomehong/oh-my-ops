@@ -13,6 +13,10 @@
 # 与原生 omp 的关系：不读、不写、不升级、不接管；原生 omp 升级不影响 omo（版本契约随 omo 发布）。
 # 升级：重跑本脚本（runtime/extensions/启动器替换；home/ 内策略/凭据/会话保留）。
 # 卸载：bash scripts/install.sh --uninstall（⚠ 删除 ~/.omo，含策略/凭据**含模型凭据**/会话数据）。
+#
+# Yuyi 凭据：**优先沿用** ~/.yuyi/agent.json（重装无需再传）；需显式提供时用
+#   --token-file <0600 文件>   ← 推荐（凭据不进 shell history / 进程表）
+#   --token <token>            ← 兼容旧用法，会写进 history/ps，脚本会告警
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -68,7 +72,22 @@ DEFAULT_YUFU_URL="https://yufu.qianji.io"
 TOKEN="" AGENT_NAME="" HUB_URL="" YUFU_URL="" UNINSTALL=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --token)     TOKEN="$2"; shift 2 ;;
+    --token)
+      TOKEN="$2"
+      echo "  ⚠ --token 会把凭据写进 shell history / 进程表（ps）；建议改用 --token-file <0600>，或直接沿用 ~/.yuyi/agent.json（重装默认沿用）"
+      shift 2 ;;
+    --token-file)
+      TF="$2"
+      [ -f "$TF" ] || { echo "✗ --token-file 不存在：$TF"; exit 1; }
+      TF_PERM="$(stat -c %a "$TF" 2>/dev/null || stat -f %Lp "$TF" 2>/dev/null || echo unknown)"
+      case "$TF_PERM" in
+        600|400) ;;
+        *) echo "✗ 令牌文件权限过宽（应 0600）：$TF 当前 $TF_PERM"; exit 1 ;;
+      esac
+      TOKEN="$(tr -d '\n' < "$TF")"
+      [ -n "$TOKEN" ] || { echo "✗ 令牌文件为空：$TF"; exit 1; }
+      echo "  ✓ 已从 0600 文件读取 Yuyi token（$TF）"
+      shift 2 ;;
     --name)      AGENT_NAME="$2"; shift 2 ;;
     --hub)       HUB_URL="$2"; shift 2 ;;
     --yufu-url)  YUFU_URL="$2"; shift 2 ;;
@@ -306,7 +325,7 @@ case "\${1:-}" in
       echo "  知识库同步：未配置（omo kb status 查看；需 Owner 发放凭据）"
     fi
     [ -f "\$OMO_POLICY_PATH" ] && echo "  策略：✓ \$OMO_POLICY_PATH（omo policy lint 可检查）" || echo "  策略：⚠ 未配置 \$OMO_POLICY_PATH（变更全拒）"
-    grep -q '"token": "[^"]' "\$REAL_HOME/.yuyi/agent.json" 2>/dev/null && echo "  Yuyi：✓ 已配置" || echo "  Yuyi：✗ 缺 token（bash scripts/install.sh --token <token> 补上）"
+    grep -q '"token": "[^"]' "\$REAL_HOME/.yuyi/agent.json" 2>/dev/null && echo "  Yuyi：✓ 已配置" || echo "  Yuyi：✗ 缺 token（bash scripts/install.sh --token-file <0600 文件> 补上）"
     [ "\${OPS_PI_SANDBOX:-0}" = "1" ] && echo "  沙箱：✓" || echo "  沙箱：⚠" ;;
   update|upgrade)
     # 安全通道：版本经 pin 锁定（18.1.18），升级=重跑 oh-my-ops 安装器（拉最新 Release），
@@ -353,7 +372,7 @@ if [ -n "$TOKEN" ]; then
 elif [ ! -f "$YUYI_DIR/agent.json" ]; then
   echo "{\"token\": \"\", \"name\": \"$AGENT_NAME\"}" > "$YUYI_DIR/agent.json"
   chmod 600 "$YUYI_DIR/agent.json"
-  echo "  ⚠ 未提供 token——跨 Agent 通讯暂不可用（--token 补配）"
+  echo "  ⚠ 未提供 token——跨 Agent 通讯暂不可用（--token-file 补配）"
 else
   echo "  ↺ 保留已有 $YUYI_DIR/agent.json"
 fi
@@ -382,7 +401,7 @@ if [ -n "$TOKEN" ] && [ -d "$SKILLS_SRC" ]; then
     echo "  ✓ Yuyi skills 已部署：$SKILLS_N 个 → $SKILLS_DST"
   fi
 elif [ -z "$TOKEN" ]; then
-  echo "  ⚠ 未提供 token——yuyi 配套 skills 未部署（--token 补配后重跑）"
+  echo "  ⚠ 未提供 token——yuyi 配套 skills 未部署（--token-file 补配后重跑）"
 else
   echo "  ⚠ vendor/yuyi-skills 不存在——yuyi 配套 skills 未部署"
 fi

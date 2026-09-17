@@ -63,3 +63,7 @@ report:
     op: 'report'
     by: 'omp-architect'
     note: '对端接入前置修正（自报）：①安装器新增 **HOME 重定向守卫**（对端会话 HOME=/home/hzinsops/.omo/home，而 install.sh 以 $HOME/.omo 推导安装根 ⇒ 直接跑会错位装进 <私有home>/.omo；现检测到即快速失败并给指引），探针补 [6] 断言；②入口下载链路澄清：README 入口本就 jsdelivr→fastly→raw 三级，对端 raw 不通不影响（github.com/api.github.com/npm registry 均通）；③对端接入路径确定为 **git clone + 复用既有 18.1.18 运行时（cp 到包根）+ HOME=<真实家目录> bash scripts/install.sh**，无需下载 471MB 发布资产；④其余待验：objects.githubusercontent.com / codeload.github.com 可达性（只读，已请对端补测）。'
+  - ts: '2026-09-17T10:45:00.000Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: '对端网络事实驱动的安装链路加固（自报）：①对端 `git clone https://github.com/...` **不通**（git 协议/repo 页不可达，仅根路径 200）⇒ README 新增「受限网络入口」（官方 bootstrap 经 jsdelivr + codeload 源码包两法；后者复用本机既有 18.1.18 运行时，免 471MB 下载）；②对端指出 `--token` 会把凭据写进 shell history/ps ⇒ install.sh 新增 **--token-file（0600 强制，权限过宽即拒）**、`--token` 加泄密告警、提示文案统一改为 --token-file；探针新增 [6] 小节（宽权限拒绝 / 0600 生效写入 agent.json / --token 告警）。③对端 objects.githubusercontent.com 与 codeload.github.com 均可达 ⇒ 发布资产业务路径可用。'

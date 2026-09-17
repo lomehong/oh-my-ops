@@ -25,6 +25,20 @@ GitHub 访问稳定时也可用短版：
 curl -fsSL https://github.com/lomehong/oh-my-ops/releases/latest/download/install.sh | bash
 ```
 
+受限网络（`github.com` 的 **git 协议/repo 页不可达**、但 jsdelivr/codeload/发布资产可达时）：
+
+```bash
+# 方式一（推荐）：官方入口经 jsdelivr 取 bootstrap（内部再取 release 资产；资产走 objects.githubusercontent.com）
+for u in "https://cdn.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" \
+         "https://fastly.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh"; do curl -fsSL --retry 3 --connect-timeout 8 "$u" -o /tmp/omo-install.sh && break; done; bash /tmp/omo-install.sh
+
+# 方式二：codeload 取源码包（无需 git），复用本机已有运行时（无 471MB 下载）
+curl -fsSL -o /tmp/omo.tar.gz "https://codeload.github.com/lomehong/oh-my-ops/tar.gz/refs/heads/main"
+mkdir -p /tmp/omo-src && tar xzf /tmp/omo.tar.gz -C /tmp/omo-src --strip-components=1
+cp "$HOME/.omo/runtime/omp-single" /tmp/omo-src/omp-single   # 仅当本机已装过 omo（同版本 18.1.18）
+HOME="$HOME" bash /tmp/omo-src/scripts/install.sh --token-file ~/.yuyi/token   # 令牌走 0600 文件，勿用 --token
+```
+
 指定版本 / 传参：
 
 ```bash

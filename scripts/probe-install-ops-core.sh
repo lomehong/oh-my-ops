@@ -88,7 +88,24 @@ grep -q 'kb sync --quiet' "$L" && pass "serve 带上 KB 定时同步循环" || f
 grep -q 'kb/credential.json' "$L" && pass "omo status 展示 KB 同步状态" || fail "omo status 未展示 KB 状态"
 
 echo
-echo "[6] 安装器守卫：HOME 被启动器重定向时必须快速失败"
+echo "[6] 安装器：Yuyi 凭据传递（--token-file 0600 强制；--token 告警）"
+TF="$TMP/token-600"; printf 'probe-token-from-file\n' > "$TF"; chmod 600 "$TF"
+TFW="$TMP/token-644"; printf 'x\n' > "$TFW"; chmod 644 "$TFW"
+H6="$TMP/h6"; mkdir -p "$H6"
+if HOME="$H6" bash "$PKG/scripts/install.sh" --token-file "$TFW" >"$TMP/tf-wide.log" 2>&1; then
+  fail "--token-file 权限过宽（644）竟被接受"
+else
+  grep -q "权限过宽" "$TMP/tf-wide.log" && pass "--token-file 权限过宽即拒" || fail "拒绝原因不明确：$(head -2 "$TMP/tf-wide.log" | tr '\n' ' ')"
+fi
+if HOME="$H6" bash "$PKG/scripts/install.sh" --token-file "$TF" --name probe-tf >"$TMP/tf-ok.log" 2>&1; then
+  if grep -q '"token": "probe-token-from-file"' "$H6/.yuyi/agent.json"; then pass "0600 令牌文件生效（写入 agent.json）"; else fail "令牌未落盘：$(cat "$H6/.yuyi/agent.json" 2>/dev/null | head -c 120)"; fi
+else
+  fail "0600 令牌文件安装失败：$(tail -3 "$TMP/tf-ok.log" | tr '\n' ' ')"
+fi
+HOME="$H6" bash "$PKG/scripts/install.sh" --token plain-inline-token --name probe-tf2 >"$TMP/tf-warn.log" 2>&1 || true
+grep -q "shell history" "$TMP/tf-warn.log" && pass "--token 用法有泄密告警" || fail "--token 未告警（history/ps 泄密风险）"
+
+echo "[7] 安装器守卫：HOME 被启动器重定向时必须快速失败"
 TMPL="$(mktemp -d)"; mkdir -p "$TMPL/.omo/home"
 if HOME="$TMPL/.omo/home" bash "$PKG/scripts/install.sh" >"$TMP/judge-home.log" 2>&1; then
   fail "HOME 重定向时安装器竟未拒绝（会把一切装进 <私有home>/.omo）"
