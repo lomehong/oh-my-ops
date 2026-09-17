@@ -159,14 +159,21 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 
 		let pushed = false;
 		if (opts.push === true) {
+			// 推之前并入远端同名实例分支（否则新克隆会被 fetch first 拒绝；真机教训）
+			const integrated = await g.integrateRemoteBranch("origin", instanceBranch);
+			actions.push(integrated);
+			if (integrated.includes("冲突已中止")) failed = true;
 			const commit = await g.commitAll(`kb: sync ${now().toISOString()}@${opts.device ?? deviceName()}`);
 			if (commit === undefined) actions.push("无本地改动，无需提交");
-			else {
-				actions.push(commit);
+			else actions.push(commit);
+			// 只要本地相对远端实例分支有未推送提交就推（本轮无新改动 ≠ 无待推送内容；真机教训）
+			if (commit !== undefined || (await g.hasCommitsToPush("origin", instanceBranch))) {
 				const pushMsg = await g.push("origin", instanceBranch);
 				actions.push(pushMsg);
 				pushed = pushMsg.includes("✓");
 				if (pushMsg.startsWith("push 失败")) failed = true;
+			} else {
+				actions.push("本地与远端实例分支一致，无需推送");
 			}
 		}
 		return await finish(report(!failed, failed ? "同步未完成（详见 actions；本地知识库保持可用）" : undefined, pushed));

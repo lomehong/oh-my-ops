@@ -47,3 +47,7 @@ report:
     op: 'report'
     by: 'omp-architect'
     note: 'P2 结论更正（自报）：上一轮「API 无法自动化 ⇒ E1 不可行」**作废**。令牌路线确实不可用（1.27.3 实测 + 本地同版本复现：POST /users/{u}/tokens 响应无明文），但凭据改为**密码**形态后全链 API 自动化已走通：本地 Gitea 1.27.3 上 create/授权/API+git 双层自证/实例 omo kb sync/改密轮换/改乱密码吊销 全部通过；供给器 create|rotate|revoke|grant|list + 自检 10/10 入 test:ci。同轮修掉三处真缺陷（凭据 schema 迁移后静默降级、轮换后 store 不刷新、spawn 失败无信息）。唯一一次性人工：站点管理员在 Git 服务器签发 all 作用域令牌（或提供管理员密码）作为供给服务引导凭据。'
+  - ts: '2026-09-17T09:25:00.000Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: 'P2 生产落地（自报）：站点管理员基本认证在生产 Gitea 1.27.3 打通；全自动供给 create（建号 201 → 团队+挂仓库 204 → 加成员 204 → API 自证 200 → git 自证 ✓）→ 凭据交付 → 本机实例 omo kb sync pull ✓（3 条目）→ rotate（旧凭据 git 失效、新凭据继续 ✓）→ sync --push → instance/PC-SZ-375 ✓。本轮生产暴露并修掉 3 个真缺陷（团队未挂仓库 / 新克隆 fetch first 被拒 / 漏推），均有回归守卫（kb-sync 15 pass）。待办：其余实例铺设（每台仅需投递 0600 凭据 + 跑 omo kb sync）；P3 enroll 服务（零人工投递）。'

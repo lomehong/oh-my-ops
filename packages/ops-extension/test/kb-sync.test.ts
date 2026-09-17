@@ -265,3 +265,75 @@ describe("凭据轮换后 git store 文件必须刷新（真机教训：旧密�
 		}
 	});
 });
+
+describe("★ 同设备名的新克隆：远端已有实例分支时必须能推送（真机 fetch first 被拒的回归）", () => {
+	test("新克隆 push 前并入远端实例分支 → 快进成功，两个条目都在", async () => {
+		const shell = new ShellExec();
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-rejoin-"));
+		const remote = path.join(root, "remote.git");
+		const seed = path.join(root, "seed");
+		const cloneA = path.join(root, "cloneA");
+		const cloneB = path.join(root, "cloneB");
+		try {
+			await shell.exec(["git", "init", "--bare", "-b", "main", remote]);
+			await shell.exec(["git", "clone", remote, seed]);
+			await shell.exec(["git", "-C", seed, "config", "user.email", "t@t"]); await shell.exec(["git", "-C", seed, "config", "user.name", "t"]);
+			fs.writeFileSync(path.join(seed, "README.md"), "kb\n");
+			await shell.exec(["git", "-C", seed, "add", "-A"]); await shell.exec(["git", "-C", seed, "commit", "-m", "init"]);
+			await shell.exec(["git", "-C", seed, "push", "origin", "main"]);
+
+			// cloneA：设备 node-1 先推一个条目
+			await shell.exec(["git", "clone", remote, cloneA]);
+			fs.writeFileSync(path.join(cloneA, "a.md"), "from A\n");
+			const rA = await syncKb({ omoDir: root, kbDir: cloneA, repo: remote, branch: "main", device: "node-1", runner: shell, push: true });
+			expect(rA.actions.join(" ")).toContain("push instance/node-1 ✓");
+
+			// cloneB：**同名设备**、全新克隆、不同条目 → 以前会被 fetch first 拒绝
+			await shell.exec(["git", "clone", remote, cloneB]);
+			fs.writeFileSync(path.join(cloneB, "b.md"), "from B\n");
+			const rB = await syncKb({ omoDir: root, kbDir: cloneB, repo: remote, branch: "main", device: "node-1", runner: shell, push: true });
+			expect(rB.actions.join(" ")).toContain("已并入远端实例分支");
+			expect(rB.actions.join(" ")).toContain("push instance/node-1 ✓");
+			expect(rB.ok).toBe(true);
+
+			// 远端实例分支应同时含两个条目
+			const ls = await shell.exec(["git", "--git-dir", remote, "ls-tree", "-r", "--name-only", "instance/node-1"]);
+			expect(ls.stdout).toContain("a.md");
+			expect(ls.stdout).toContain("b.md");
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("★ 已有本地提交但本轮无新改动时，也必须推送（真机漏推回归）", () => {
+	test("手工 commit 后 sync（无新文件改动）→ 仍推送到实例分支", async () => {
+		const shell = new ShellExec();
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-ahead-"));
+		const remote = path.join(root, "remote.git");
+		const seed = path.join(root, "seed");
+		const clone = path.join(root, "clone");
+		try {
+			await shell.exec(["git", "init", "--bare", "-b", "main", remote]);
+			await shell.exec(["git", "clone", remote, seed]);
+			await shell.exec(["git", "-C", seed, "config", "user.email", "t@t"]); await shell.exec(["git", "-C", seed, "config", "user.name", "t"]);
+			fs.writeFileSync(path.join(seed, "README.md"), "kb\n");
+			await shell.exec(["git", "-C", seed, "add", "-A"]); await shell.exec(["git", "-C", seed, "commit", "-m", "init"]);
+			await shell.exec(["git", "-C", seed, "push", "origin", "main"]);
+			await shell.exec(["git", "clone", remote, clone]);
+			await shell.exec(["git", "-C", clone, "config", "user.email", "t@t"]); await shell.exec(["git", "-C", clone, "config", "user.name", "t"]);
+			// 模拟「上次 push 失败的残留」：本地已提交但未推送
+			fs.writeFileSync(path.join(clone, "stale.md"), "stranded\n");
+			await shell.exec(["git", "-C", clone, "add", "-A"]);
+			await shell.exec(["git", "-C", clone, "commit", "-m", "stale（上次推送失败留下）"]);
+			// 本轮没有任何新改动
+			const r = await syncKb({ omoDir: root, kbDir: clone, repo: remote, branch: "main", device: "node-9", runner: shell, push: true });
+			expect(r.actions.join(" ")).toContain("无本地改动，无需提交");
+			expect(r.actions.join(" ")).toContain("push instance/node-9 ✓");
+			const ls = await shell.exec(["git", "--git-dir", remote, "ls-tree", "-r", "--name-only", "instance/node-9"]);
+			expect(ls.stdout).toContain("stale.md");
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	});
+});

@@ -188,7 +188,11 @@ async function grantAccess(api, repo, login, grant, team, permission, apply, log
 	log(`团队 ${team}：${t.created ? (apply ? "已创建" : "将创建") : `已存在(id=${t.id})`}`);
 	const id = t.id ?? (await teamId(api, org, team));
 	if (id === undefined) return log(`加入团队：将 PUT /teams/<新建>/members/${login}`);
-	if (!apply) return log(`加入团队：将 PUT /teams/${id}/members/${login}`);
+	// 团队必须**挂上仓库**才有 repo 权限（仅 units_map 不赋予任何仓库访问 —— 真机实测踩到的坑）
+	const [o, rname] = repo.split("/");
+	if (!apply) return log(`加入团队：将 PUT /teams/${id}/repos/${repo} + PUT /teams/${id}/members/${login}`);
+	const attach = await api.put(`/teams/${id}/repos/${encodeURIComponent(o)}/${encodeURIComponent(rname)}`);
+	log(`团队挂仓库：${attach.ok ? `✓ ${attach.status}` : `✗ HTTP ${attach.status} ${attach.text.slice(0, 120)}`}`);
 	const r = await api.put(`/teams/${id}/members/${encodeURIComponent(login)}`);
 	return log(`加入团队：${r.ok ? `✓ ${r.status}` : `✗ HTTP ${r.status} ${r.text.slice(0, 120)}`}`);
 }
@@ -381,6 +385,7 @@ async function selftest() {
 				teamCreated = true;
 				return json({ id: 7, name: "omo-kb-kb" });
 			}
+			if (u.pathname === "/api/v1/teams/7/repos/acme/kb" && req.method === "PUT") return new Response(null, { status: 204 });
 			if (u.pathname === "/api/v1/teams/7/members/omo-bot") return new Response(null, { status: 204 });
 			if (u.pathname === "/api/v1/repos/acme/kb" && req.method === "GET") return json({ full_name: "acme/kb" });
 			if (u.pathname === "/api/v1/teams/7/members/omo-bot" && req.method === "DELETE") return new Response(null, { status: 204 });
@@ -403,7 +408,7 @@ async function selftest() {
 	try {
 		const c = await run(["create", ...common, "--login", "omo-bot", "--deliver", deliver, "--apply"]);
 		checks.push(["create 成功", c.code === 0, c.out + c.err]);
-		checks.push(["调用序：建号 → 查团队(search) → 建团队 → 加成员 → 自证", seen.join("|").includes("POST /api/v1/admin/users|GET /api/v1/orgs/acme/teams/search|POST /api/v1/orgs/acme/teams|PUT /api/v1/teams/7/members/omo-bot|GET /api/v1/repos/acme/kb"), seen.join("|")]);
+		checks.push(["调用序：建号 → 查团队(search) → 建团队 → 挂仓库 → 加成员 → 自证", seen.join("|").includes("POST /api/v1/admin/users|GET /api/v1/orgs/acme/teams/search|POST /api/v1/orgs/acme/teams|PUT /api/v1/teams/7/repos/acme/kb|PUT /api/v1/teams/7/members/omo-bot|GET /api/v1/repos/acme/kb"), seen.join("|")]);
 		const cred = JSON.parse(fs.readFileSync(deliver, "utf8"));
 		checks.push(["交付文件：kind=password + 仓库地址由 API 前缀推导", cred.kind === "password" && cred.repo === `http://127.0.0.1:${server.port}/acme/kb` && typeof cred.secret === "string" && cred.secret.length > 20, JSON.stringify({ ...cred, secret: "***" })]);
 		checks.push(["交付文件 0600", (fs.statSync(deliver).mode & 0o777) === 0o600, (fs.statSync(deliver).mode & 0o777).toString(8)]);

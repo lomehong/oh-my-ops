@@ -185,6 +185,42 @@ export class GitCompat {
 		return `push 失败（保留本地，稍后重试）：${r.stderr.slice(0, 160)}`;
 	}
 
+	/** 本地是否存在相对远端同名分支的未推送提交（真机教训：仅按「本轮是否有新改动」决定推送会漏推） */
+	async hasCommitsToPush(remote: string, branch: string): Promise<boolean> {
+		const ls = await this.run(["ls-remote", "--heads", remote, branch], { allowFail: true });
+		const line = (ls.stdout ?? "").trim().split("\n")[0]?.trim() ?? "";
+		if (line === "") {
+			const head = await this.run(["rev-parse", "--verify", "HEAD"], { allowFail: true });
+			return head.ok && head.stdout.trim() !== "";
+		}
+		const sha = line.split(/\s+/)[0] ?? "";
+		if (sha === "") return false;
+		const count = await this.run(["rev-list", "--count", `${sha}..HEAD`], { allowFail: true });
+		return count.ok && Number.parseInt(count.stdout.trim(), 10) > 0;
+	}
+
+	/** 远端是否存在该分支 */
+	async remoteBranchExists(remote: string, branch: string): Promise<boolean> {
+		const r = await this.run(["ls-remote", "--exit-code", "--heads", remote, branch], { allowFail: true });
+		return r.ok;
+	}
+
+	/**
+	 * 推之前并入远端同名实例分支（真机教训）：新克隆只拉过 main，直接 push 会因
+	 * `! [rejected] ... (fetch first)` 被拒（本地提交不是远端实例分支的后代）。
+	 * 用 merge（而非 rebase）保守并入：内容只增不减，冲突即中止并保留本地，**绝不 force**。
+	 */
+	async integrateRemoteBranch(remote: string, branch: string): Promise<string> {
+		if (!(await this.remoteBranchExists(remote, branch))) return "远端无同名实例分支（本次将创建）";
+		const fetched = await this.run(["fetch", "--quiet", remote, branch], { allowFail: true });
+		if (!fetched.ok) return `并入远端实例分支失败（fetch 失败，保留本地）：${fetched.stderr.slice(0, 120)}`;
+		await this.ensureIdentity();
+		const merged = await this.run(["merge", "--no-edit", "FETCH_HEAD"], { allowFail: true });
+		if (merged.ok) return "已并入远端实例分支（避免非快进被拒）";
+		await this.run(["merge", "--abort"], { allowFail: true });
+		return `并入远端实例分支失败（冲突已中止，保留本地）：${merged.stderr.slice(0, 140)}`;
+	}
+
 	/** 远端分支头短哈希（status 展示用） */
 	async remoteHead(remote: string, branch: string): Promise<string | undefined> {
 		const r = await this.run(["rev-parse", "--short", `${remote}/${branch}`], { allowFail: true });

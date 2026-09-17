@@ -122,3 +122,35 @@
 | ③ 服务端 CLI | `gitea admin user generate-access-token --scopes read:admin,write:admin,…` | 本地实测 CLI 签名令牌同样可驱动全链 ✅ |
 
 注：`omo-admin` 是站点管理员，但**其令牌缺 `admin` scope ⇒ 仍被 403**（`required=[read:admin]`）——scope 属令牌，不属账号。
+
+---
+
+## 第四轮：**生产环境**全链落地（2026-09-17，主人给出站点管理员密码后）
+
+**生产凭据**：`omo-admin`（`is_admin=true`）+ 密码 → 基本认证 `GET /admin/users` **200** ✅（无需 admin 作用域令牌、无需服务器 shell）。
+
+**生产供给实跑（首次即成功）**
+
+```
+POST /admin/users                → 201（omo-bot-pcsz375, id=4）
+POST /orgs/hzins-ops/teams       → 建团队 omo-kb-ops-kb
+PUT  /teams/{id}/repos/hzins-ops/ops-kb → 204（**挂仓库**）
+PUT  /teams/{id}/members/omo-bot-pcsz375 → 204
+GET  /repos/hzins-ops/ops-kb（bot 凭据） → 200（自证一）
+git ls-remote（同凭据）          → ✓（自证二；**证明生产允许密码基本认证**）
+```
+⇒ 交付 `{repo,username,secret,kind:"password"}`（0600）→ 装到本机实例 → `omo kb status` 显示凭据 → `omo kb sync` **pull ✓**（3 条目）。
+
+**生产轮换**：`PATCH /admin/users/omo-bot-pcsz375 {password}` → **200**；旧凭据 git **失败**；实例侧 store 文件自动刷新后 **pull ✓**。
+**生产写入**：`omo kb sync --push` → `push instance/PC-SZ-375 ✓`（服务器侧树已含 2 条新条目）。
+
+**本轮由生产暴露并修掉的 3 个真缺陷**
+
+1. **团队不挂仓库 = 无任何权限**：`--grant team` 原先只 `units_map` + 加成员，未 `PUT /teams/{id}/repos/{org}/{repo}`
+   ⇒ 成员拿不到仓库访问。已补，并在 `create` 里用 bot 凭据自证兜底。
+2. **新克隆推送被 `fetch first` 拒绝**：同步只拉 `main`，从不拉自己的实例分支 ⇒ 远端已有同名实例分支时非快进被拒。
+   已加 `integrateRemoteBranch`（推前 fetch + merge，冲突即 abort 并保留本地，**绝不 force**）。
+3. **漏推**：只在「本轮有新改动」时才 push ⇒ 上次推送失败留下的本地提交会被静默搁置。
+   已改为按 `hasCommitsToPush`（`rev-list --count <远端 tip>..HEAD`）判定。
+
+三项均有回归守卫（`kb-sync.test.ts` 15 pass）。至此 **P1 的凭据/同步/分支纪律在真实生产上全部闭环**。
