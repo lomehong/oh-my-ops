@@ -79,6 +79,7 @@ jobs:
           for f in "scripts/install.sh" "scripts/bootstrap.sh" "omp-single" "README.md" "packages/ops-extension/src/index.ts" \
                    "scripts/ops-kb-provision.mjs" "scripts/ops-kb-enroll-server.mjs" \
                    "scripts/install-enroll-service.sh" "scripts/probe-install-enroll-service.sh" "scripts/omo-kb-doctor.sh" \
+                   "scripts/omo-kb-fleet.sh" \
                    "scripts/lib/bun.sh" "scripts/lib/kb-audit.mjs" \
                    "scripts/lib/kb-gitea.mjs" "scripts/lib/kb-registry.mjs" \
                    "packages/ops-extension/src/kb-cli.ts" "packages/ops-extension/src/kb-sync.ts" \
@@ -105,9 +106,10 @@ jobs:
           mkdir -p "/tmp/${PKG}/lib"
           cp scripts/install-enroll-service.sh "/tmp/${PKG}/install.sh"
           cp scripts/ops-kb-enroll-server.mjs scripts/ops-kb-provision.mjs "/tmp/${PKG}/"
+          cp scripts/omo-kb-fleet.sh "/tmp/${PKG}/"
           cp scripts/lib/kb-gitea.mjs scripts/lib/kb-registry.mjs scripts/lib/kb-audit.mjs scripts/lib/bun.sh "/tmp/${PKG}/lib/"
           # 清单断言：服务包缺任一关键文件即红（服务零外部依赖，lib/ 必须齐全）
-          for f in install.sh ops-kb-enroll-server.mjs ops-kb-provision.mjs lib/kb-gitea.mjs lib/kb-registry.mjs lib/kb-audit.mjs lib/bun.sh; do
+          for f in install.sh ops-kb-enroll-server.mjs ops-kb-provision.mjs omo-kb-fleet.sh lib/kb-gitea.mjs lib/kb-registry.mjs lib/kb-audit.mjs lib/bun.sh; do
             [ -e "/tmp/${PKG}/${f}" ] || { echo "✗ 服务包缺文件：${f}"; exit 1; }
           done
           # 零依赖自检：服务在无 monorepo 的目录下也必须能加载（真机曾 Cannot find module）

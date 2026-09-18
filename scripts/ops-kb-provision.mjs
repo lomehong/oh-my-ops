@@ -20,7 +20,7 @@
  *   rotate --api <base> --login <bot> [--repo <owner/repo>] [--deliver <路径>] [--apply]
  *   revoke --api <base> --login <bot> [--repo <owner/repo>] [--grant team|collab] [--delete-user] [--apply]
  *   grant  --api <base> --repo <owner/repo> --device <名> --login <bot> [--team <名>] [--permission read|write] [--apply]
- *   code   --op enroll|rotate|revoke [--device <名>] [--ttl <分钟>] [--registry <f>]      # 签发一次性兑换码（P3）
+ *   code   --op enroll|rotate|revoke [--device <名>] [--ttl <分钟>] [--registry <f>]      # 签发一次性兑换码（P3）；--raw 只打印码 / --json 输出结构化
  *   list   [--registry <f>]
  *   --selftest        本地桩服务器自检（无需网络/Gitea）
  *
@@ -52,7 +52,7 @@ function parseArgs(argv) {
 			continue;
 		}
 		const key = a.slice(2);
-		if (["apply", "dry-run", "delete-user", "verify-git", "selftest", "help"].includes(key)) {
+		if (["apply", "dry-run", "delete-user", "verify-git", "selftest", "help", "raw", "json"].includes(key)) {
 			out[key] = true;
 			continue;
 		}
@@ -230,6 +230,15 @@ function cmdCode(args) {
 	if (!Number.isFinite(ttlMin) || ttlMin < 0) throw new Error("--ttl 需为非负整数（分钟）");
 	const file = args.registry ?? "ops-kb-registry.json";
 	const { code, expiresAt } = issueCode(file, { op, device: args.device, ttlMin, by: args.by ?? "owner" });
+	// 脚本友好输出：--raw 只打印码本身（供舰队脚本逐设备签发时直接取用）
+	if (args.raw === true || args.raw === "") {
+		console.log(code);
+		return 0;
+	}
+	if (args.json === true || args.json === "") {
+		console.log(JSON.stringify({ op, device: args.device ?? null, code, expiresAt, registry: file }));
+		return 0;
+	}
 	console.log(`✓ 已签发一次性兑换码（op=${op}${args.device === undefined ? "" : `，绑定设备 ${args.device}`}，有效期至 ${expiresAt}）`);
 	console.log(`  · 码（**只显示这一次**）：${code}`);
 	console.log(`  · 在实例上执行：omo kb enroll --server <服务地址> --code-file <把码写进 0600 文件>`);

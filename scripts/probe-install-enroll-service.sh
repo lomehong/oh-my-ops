@@ -128,6 +128,19 @@ out="$(HOME="$H" "$H/.local/bin/omo-kb" code --op enroll --device probe-node --t
 echo "$out" | grep -q "只显示这一次" && pass "omo-kb code 签码" || fail "omo-kb code 异常：$(echo "$out" | head -2 | tr '\n' ' ')"
 echo "$out" | grep -qi "omo-kb code" && pass "签码输出含签发提示" || true
 
+echo "[7] 舰队脚本（service 签码 → instance 接入）"
+FLEET="$REPO_ROOT/scripts/omo-kb-fleet.sh"
+mkdir -p "$TMP/bin"; printf '#!/bin/sh\necho "[stub omo] $*"\n' > "$TMP/bin/omo"; chmod +x "$TMP/bin/omo"
+if HOME="$H" bash "$FLEET" service node-a node-b >"$TMP/fleet.log" 2>&1; then pass "service 模式执行成功"; else fail "service 模式失败：$(tail -5 "$TMP/fleet.log" | tr '\n' ' ')"; fi
+grep -q "read:admin（HTTP 200）" "$TMP/fleet.log" && pass "服务侧自检真判（read:admin=200）" || fail "自检未真判：$(grep -E 'read:admin' "$TMP/fleet.log" | head -2 | tr '\n' ' ')"
+[ "$(grep -c 'instance --server' "$TMP/fleet.log")" = "2" ] && pass "逐设备打印实例命令（2 条）" || fail "实例命令条数异常"
+[ "$(stat -c %a "$H/omo-kb-enroll/node-a.code" 2>/dev/null || echo)" = "600" ] && pass "码文件 0600（$H/omo-kb-enroll/）" || fail "码文件权限异常"
+[ "$(tr -d '\n' < "$H/omo-kb-enroll/node-a.code" 2>/dev/null | wc -c)" = "32" ] && pass "码长度 32（--raw 只输出码）" || fail "--raw 输出异常：$(cat "$H/omo-kb-enroll/node-a.code" 2>/dev/null | head -c 80)"
+CODE_A="$(cat "$H/omo-kb-enroll/node-a.code" 2>/dev/null)"
+if PATH="$TMP/bin:$PATH" bash "$FLEET" instance --server "https://127.0.0.1:$PORT" --code "$CODE_A" >"$TMP/fleet-inst.log" 2>&1; then pass "instance 模式执行成功"; else fail "instance 模式失败：$(tail -3 "$TMP/fleet-inst.log" | tr '\n' ' ')"; fi
+grep -q "kb enroll --server https://127.0.0.1:$PORT --code-file .* --allow-insecure-tls" "$TMP/fleet-inst.log" && pass "instance 组装出正确 enroll 命令（含自签容忍）" || fail "enroll 命令异常：$(head -2 "$TMP/fleet-inst.log" | tr '\n' ' ')"
+PATH="$TMP/bin:$PATH" bash "$FLEET" instance --server "https://127.0.0.1:$PORT" --code "$CODE_A" --dry-run >"$TMP/fleet-dry.log" 2>&1 && grep -q "dry-run：将执行 omo kb enroll" "$TMP/fleet-dry.log" && pass "instance --dry-run 只打印不执行" || fail "--dry-run 异常：$(head -2 "$TMP/fleet-dry.log" | tr '\n' ' ')"
+
 echo "[6] 停止与卸载（--purge）"
 HOME="$H" "$H/.local/bin/omo-kb" stop >"$TMP/stop.log" 2>&1 || true
 down=false
