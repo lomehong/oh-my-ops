@@ -21,6 +21,26 @@ for f in .github/workflows/*.yml .github/workflows/*.yaml; do
   # 冒烟：顶层必须含 triggers 与 jobs
   grep -qE '^on:' "$f" || { echo "  ✗ $f：缺顶层 on:"; fail=$((fail+1)); }
   grep -qE '^jobs:' "$f" || { echo "  ✗ $f：缺顶层 jobs:"; fail=$((fail+1)); }
+  # ★ 每个 run: 块必须能通过 bash -n
+  #   真机踩到：发布清单断言被追加到 `; do` 之后 ⇒ shell 语法破裂 ⇒ 发布 job 失败而 test job 仍绿。
+  rm -f /tmp/omo-wf-runs.*
+  awk -v out="/tmp/omo-wf-runs" '
+    /^[ ]*run:[ ]*\|/ { ind = index($0, "run:"); n++; file = out "." n; next }
+    file != "" {
+      if ($0 ~ /^[ ]*$/) { print "" >> file; next }
+      match($0, /^[ ]*/)
+      if (RLENGTH <= ind && $0 !~ /^[ ]*$/) { file = ""; next }
+      print $0 >> file
+    }
+  ' "$f"
+  for r in /tmp/omo-wf-runs.*; do
+    [ -e "$r" ] || continue
+    if ! bash -n "$r" 2>/tmp/omo-wf-err.txt; then
+      echo "  ✗ $f：run 块 bash 语法错误 —— $(head -1 /tmp/omo-wf-err.txt | sed 's/^[^:]*: //')"
+      fail=$((fail+1))
+    fi
+  done
+
   [ "$fail" -eq 0 ] && echo "  ✓ $f 结构检查通过"
 done
 [ "$fail" -eq 0 ] && echo "结果：全绿" || { echo "结果：$fail 项失败"; exit 1; }

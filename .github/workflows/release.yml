@@ -78,11 +78,13 @@ jobs:
           grep -qa 'OMO_APP_NAME' dist/omp-single || { echo "✗ 二进制未见品牌 patch 痕迹（OMO_APP_NAME）"; exit 1; }
           for f in "scripts/install.sh" "scripts/bootstrap.sh" "omp-single" "README.md" "packages/ops-extension/src/index.ts" \
                    "scripts/ops-kb-provision.mjs" "scripts/ops-kb-enroll-server.mjs" \
-                   "scripts/install-enroll-service.sh" "scripts/probe-install-enroll-service.sh"  "scripts/omo-kb-doctor.sh" \
+                   "scripts/install-enroll-service.sh" "scripts/probe-install-enroll-service.sh" "scripts/omo-kb-doctor.sh" \
                    "scripts/lib/bun.sh" "scripts/lib/kb-audit.mjs" \
                    "scripts/lib/kb-gitea.mjs" "scripts/lib/kb-registry.mjs" \
                    "packages/ops-extension/src/kb-cli.ts" "packages/ops-extension/src/kb-sync.ts" \
-                   "packages/ops-extension/src/kb-credential.ts" "packages/ops-extension/src/kb-enroll.ts"; do "packages/ops-extension/src/redact.ts" "packages/ops-core/src/redact.ts"
+                   "packages/ops-extension/src/kb-credential.ts" "packages/ops-extension/src/kb-enroll.ts" \
+                   "packages/ops-extension/src/redact.ts" "packages/ops-core/src/redact.ts" \
+                   "examples/redact-config.json.example"; do "packages/ops-extension/src/redact.ts" "packages/ops-core/src/redact.ts"
             [ -e "/tmp/${PKG}/${f}" ] || { echo "✗ 打包缺关键文件：${f}"; exit 1; }
           done
 
