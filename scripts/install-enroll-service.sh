@@ -233,36 +233,45 @@ else CRED_ARGS=(--user "$ADMIN_USER:$(cat "$DIR/admin.pw")"); fi
 ORG="${REPO%%/*}"; REPO_NAME="${REPO##*/}"
 probe() { # $1=描述 $2=期望的「有权限」判定（re） $3=curl 参数…
   local desc="$1" expect="$2"; shift 2
-  local out code
-  out="$(curl -sS -o /tmp/omo-kb-probe.json -w '%{http_code}' --max-time 20 "${CRED_ARGS[@]}" "$@" || echo 000)"
-  code="$out"
+  local code
+  curl -sS -o /tmp/omo-kb-probe.json -w '%{http_code}' --max-time 20 "${CRED_ARGS[@]}" "$@" >/tmp/omo-kb-probe.code 2>/tmp/omo-kb-probe.err || true
+  code="$(cat /tmp/omo-kb-probe.code 2>/dev/null || echo 000)"; [ -n "$code" ] || code=000
+  # ① 缺权：403 且响应里带 scope 提示 ⇒ 硬失败（计入 FAIL）
   if [ "$code" = "403" ] && grep -q "scope" /tmp/omo-kb-probe.json 2>/dev/null; then
-    printf '  ✗ %s：HTTP 403 —— %s\n' "$desc" "$(head -c 200 /tmp/omo-kb-probe.json | tr -d '\n')"
-    return 1
+    printf '  ✗ %s：缺权 —— %s\n' "$desc" "$(head -c 160 /tmp/omo-kb-probe.json | tr -d '\n')"
+    FAIL_N=$((FAIL_N + 1)); return 0
   fi
-  code="$out"
-  if printf '%s' "$code" | grep -qE "$expect"; then printf '  ✓ %s（HTTP %s）\n' "$desc" "$code"; return 0; fi
-  printf '  ⚠ %s：HTTP %s（既非缺权也非预期校验失败，仅提示——可人工确认）\n' "$desc" "$code"; return 0
+  # ② API 不可达（000）：服务必然无法工作 ⇒ 硬失败并提示连通性排查
+  if [ "$code" = "000" ]; then
+    printf '  ✗ %s：**API 不可达**（%s）——%s\n' "$desc" "$API" "$(head -1 /tmp/omo-kb-probe.err 2>/dev/null | tr -d '\n')"
+    FAIL_N=$((FAIL_N + 1)); return 0
+  fi
+  # ③ 有权限：命中预期校验失败码 ⇒ 通过
+  if printf '%s' "$code" | grep -qE "$expect"; then printf '  ✓ %s（HTTP %s）\n' "$desc" "$code"; OK_N=$((OK_N + 1)); return 0; fi
+  # ④ 其它码：未能判定（仅提示，不阻断）
+  printf '  ⚠ %s：HTTP %s（未能判定，请人工确认）\n' "$desc" "$code"; WARN_N=$((WARN_N + 1)); return 0
 }
 
 echo "  作用域自检（令牌需：read:admin / write:admin / write:repository / write:organization）"
-FAILED_SCOPE=0
-probe "read:admin（列用户）"       "200"      "$API/admin/users?limit=1" || FAILED_SCOPE=1
-probe "write:admin（建用户）"      "422|400"  -X POST -H 'Content-Type: application/json' -d '{}' "$API/admin/users" || FAILED_SCOPE=1
-probe "write:repository（协作者）" "404|422|400" -X PUT -H 'Content-Type: application/json' -d '{"permission":"read"}' "$API/repos/$REPO/collaborators/__omo_scope_probe__" || FAILED_SCOPE=1
-probe "write:organization（团队）" "422|400"  -X POST -H 'Content-Type: application/json' -d '{}' "$API/orgs/$ORG/teams" || FAILED_SCOPE=1
-rm -f /tmp/omo-kb-probe.json
-if [ "$FAILED_SCOPE" != 0 ]; then
+FAIL_N=0; OK_N=0; WARN_N=0
+probe "read:admin（列用户）"       "200"      "$API/admin/users?limit=1"
+probe "write:admin（建用户）"      "422|400"  -X POST -H 'Content-Type: application/json' -d '{}' "$API/admin/users"
+probe "write:repository（协作者）" "404|422|400" -X PUT -H 'Content-Type: application/json' -d '{"permission":"read"}' "$API/repos/$REPO/collaborators/__omo_scope_probe__"
+probe "write:organization（团队）" "422|400"  -X POST -H 'Content-Type: application/json' -d '{}' "$API/orgs/$ORG/teams"
+rm -f /tmp/omo-kb-probe.json /tmp/omo-kb-probe.code /tmp/omo-kb-probe.err
+if [ "$FAIL_N" -gt 0 ]; then
   echo
-  echo "  ✗ 令牌作用域不足 —— 请用下列方式重签（任选其一）："
-  echo "      # ① 站点管理员在 Git 服务器上（推荐，无需交密码）"
-  echo "      gitea admin user generate-access-token --username <站点管理员> --name omo-kb-enroll \\"
-  echo "            --scopes read:admin,write:admin,write:repository,write:organization --raw > /root/omo-kb.token && chmod 600 /root/omo-kb.token"
-  echo "      # ② 站点管理员登录 Gitea → 用户设置 → 应用 → 生成令牌，勾选上述 4 个作用域"
-  echo "    然后重跑：bash $0 --api $API --repo $REPO --admin-token-file /root/omo-kb.token …"
+  echo "  ✗ 自检未通过（通过 $OK_N · 失败 $FAIL_N · 未判定 $WARN_N）——按上面每项的提示处理："
+  echo "      · 缺权 ⇒ 重签令牌（作用域需含 read:admin,write:admin,write:repository,write:organization）"
+  echo "        gitea admin user generate-access-token --username <站点管理员> --name omo-kb-enroll \\"
+  echo "              --scopes read:admin,write:admin,write:repository,write:organization --raw > /root/omo-kb.token"
+  echo "        （或 UI：站点管理员 → 用户设置 → 应用 → 生成令牌 → 勾上述 4 个作用域）"
+  echo "      · API 不可达 ⇒ 在本机排查到 Gitea 的连通性："
+  echo "        curl -sS -o /dev/null -w '%{http_code}\\n' $API/version   # 期望 200/401；Connection refused/超时说明网络或代理问题"
   exit 1
 fi
-ok "凭据与作用域自证：4/4 通过"
+if [ "$WARN_N" -gt 0 ]; then ok "作用域自检：通过 $OK_N 项，未判定 $WARN_N 项（见上，建议人工确认）";
+else ok "作用域自检：4/4 通过"; fi
 
 # ── 6) 启动器（唯一对外痕迹）
 # 原子替换（同 install.sh：避免覆写正在执行的脚本）

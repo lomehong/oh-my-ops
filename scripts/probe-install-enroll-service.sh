@@ -70,7 +70,7 @@ if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo
      --admin-token-file "$TMP/scoped.token" --self-signed 127.0.0.1 --port "$PORT" --no-start >"$TMP/neg.log" 2>&1; then
   fail "缺权令牌竟被接受"
 else
-  grep -q "作用域不足" "$TMP/neg.log" && pass "缺权令牌被拦并提示作用域" || fail "拦截原因不明确：$(head -3 "$TMP/neg.log" | tr '\n' ' ')"
+  { grep -q "自检未通过" "$TMP/neg.log" || grep -q "缺权" "$TMP/neg.log"; } && pass "缺权令牌被拦并提示作用域" || fail "拦截原因不明确：$(head -3 "$TMP/neg.log" | tr '\n' ' ')"
   grep -q "generate-access-token" "$TMP/neg.log" && pass "给出重签命令（令牌优先）" || fail "未给重签指引"
 fi
 
@@ -81,6 +81,16 @@ if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo
   fail "非法 SAN 竟被接受"
 else
   grep -q "证书 SAN 非法" "$TMP/badsan.log" && pass "非法 SAN 被拦并给出正确写法" || fail "拦截原因不明确：$(tail -3 "$TMP/badsan.log" | tr '\n' ' ')"
+fi
+
+echo "[2d] API 不可达必须硬失败（真机：探测全 000 却仍打印 4/4 通过）"
+printf 'token good-token\n' > "$TMP/good.token"; chmod 600 "$TMP/good.token"
+if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:1/api/v1" --repo acme/kb \
+     --admin-token-file "$TMP/good.token" --self-signed auto --port "$PORT" --no-start >"$TMP/unreach.log" 2>&1; then
+  fail "API 不可达竟通过自检"
+else
+  grep -q "API 不可达" "$TMP/unreach.log" && pass "API 不可达 ⇒ 硬失败并提示连通性排查" || fail "未提示不可达：$(tail -3 "$TMP/unreach.log" | tr '\n' ' ')"
+  grep -q "自检未通过" "$TMP/unreach.log" && pass "不再假称 4/4 通过" || fail "归纳仍有误"
 fi
 
 echo "[3] 一键安装（--no-start）：布局/权限/证书/启动器"
@@ -99,7 +109,7 @@ done
 [ "$(stat -c %a "$H/.omo-kb/tls/key.pem")" = "600" ] && pass "TLS 私钥 0600" || fail "TLS 私钥权限异常"
 [ -x "$H/.local/bin/omo-kb" ] && pass "启动器可执行：~/.local/bin/omo-kb" || fail "启动器缺失/不可执行"
 grep -q '"ok":true' "$TMP/install.log" || grep -q "完成" "$TMP/install.log" && pass "安装输出含完成段" || fail "安装输出异常"
-grep -q "凭据与作用域自证：4/4 通过" "$TMP/install.log" && pass "令牌路径 + 4 项作用域自检通过" || fail "作用域自检未通过：$(grep -E '作用域|✗' "$TMP/install.log" | head -3 | tr '\n' ' ')"
+grep -q "作用域自检：4/4 通过" "$TMP/install.log" && pass "令牌路径 + 4 项作用域自检通过" || fail "作用域自检未通过：$(grep -E '作用域|✗' "$TMP/install.log" | head -3 | tr '\n' ' ')"
 
 echo "[4] 起服务并自证健康（启动器路径）"
 HOME="$H" "$H/.local/bin/omo-kb" start >"$TMP/start.log" 2>&1 || true
