@@ -83,3 +83,7 @@ report:
     op: 'report'
     by: 'omp-architect'
     note: 'enroll 服务「一键部署」落地（自报）：新增 scripts/install-enroll-service.sh（与 omo 同形态：私有域 ~/.omo-kb + 启动器 ~/.local/bin/omo-kb + 可选 systemd 单元 + 自签/自带证书 + 管理员凭据安装前自证 + 卸载/--purge）、共用自举库 scripts/lib/bun.sh（install.sh 改为引用，行为不变）、零依赖审计 scripts/lib/kb-audit.mjs（与宿主 AuditLog 同算法，加对拍守卫）；CI 随发布产出独立包 omo-kb-service-<ver>.tar.gz（含清单断言）+ 上传资产与说明；探针 probe-install-enroll-service.sh（HOME 守卫/权限/布局/证书/启动器/健康自证/签码/端口级 stop/卸载）已入 test:ci。真机（生产 Gitea）一键部署 + 签码 + 实例兑换 + pull ✓ 自证 + 审计链校验 ✓ 全通。期间修掉三个真问题：服务装到私有域后 Cannot find module（改零依赖）、launcher 继承调用方 stdout 导致管道挂住（三流脱离）、依赖 pkill/pgrep 在精简容器失效（改 PID 文件 + 端口级判定）。'
+  - ts: '2026-09-18T01:45:00.000Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: '服务模式验证（主人要求「4 台实例都是服务模式启动，先验证」）发现并修复**上线级缺陷**：①启动器的 KB 定时循环把 `$BUN_BIN` 当入口，实际执行成 `bun kb sync` ⇒ 日志恒为 `Script not found "kb"`（我 P1 引入）⇒ **服务模式的 KB 定时同步从未真正跑过**，而 `omo status` 只看 pid 就报「定时中」（假绿）；②`omo status` 的 KB 行在生成物里调用仅存在于安装脚本的 `json_str` ⇒ `command not found`、显示成 `最后同步  ✗`；③修循环时误引生成物中不存在的 `$BIN_DST` ⇒ `: command not found`；④修 json_str 时在未加引号 heredoc 的注释里留了 `$1` 被安装器展开（v0.9.9 同类老坑）。全部修复：循环改为与启动器 kb 分支同款（bun + kb-cli.ts，可选 OMO_POLICY_PATH），每轮记时间戳与 exit；status 的 KB 行改读 kb/state.json 显示**真实最后同步时间与结果**；json_str 随产物生成（注释内 $ 全转义）；探针新增 [5b]/[5c]——**实跑生成的循环**并断言日志无 Script not found / command not found / exit=127。服务模式行为实测（沙箱）：无凭据→如实报本地模式；**热加凭据不重启服务即自动拉取（48s 内拉到 5 条目）**；篡改凭据→循环 exit=1 如实报失败。'

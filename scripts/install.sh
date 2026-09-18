@@ -1,3 +1,9 @@
+cat > "$BIN_DST" <<OMOEOF
+#!/usr/bin/env bash
+# OMO_LAUNCHER_V4
+# json_str：极简 JSON 取值（第 1 参=键名，第 2 参=文件）——status 面板读 kb/state.json 用；
+# 与安装脚本同名同实现（唯一来源是安装脚本，此处随产物生成，避免两套实现漂移）
+# 注意：本 heredoc 未加引号 ⇒ 注释里的 $ 也必须转义（v0.9.9 曾因同类问题崩溃）
 #!/usr/bin/env bash
 # oh-my-ops 安装脚本 v4：自包含——零前置、~/.omo 私有域、与原生 omp 零接触。
 #
@@ -185,6 +191,13 @@ if [ -f "$BIN_DST" ] && ! grep -q "OMO_LAUNCHER_V4" "$BIN_DST" 2>/dev/null; then
 fi
 cat > "$BIN_DST" <<OMOEOF
 #!/usr/bin/env bash
+# OMO_LAUNCHER_V4
+# json_str：极简 JSON 取值（$1=键名 $2=文件）——status 面板读 kb/state.json 用；
+# 与安装脚本同名同实现（唯一来源是安装脚本，此处随产物生成，避免两套实现漂移）
+json_str() {
+  [ -f "\$2" ] || return 0
+  sed -n "s/.*\"\$1\"[[:space:]]*:[[:space:]]*\"\([^\" ]*\)\".*/\1/p" "\$2" | head -1
+}
 # OMO_LAUNCHER_V4 — omo 运维智能体 CLI（自包含：~/.omo 私有域 + HOME 重定向，与原生 omp 零接触）
 # 注意：launcher 不用 set -u——bash <4.4 下空数组配合 -u 会报 unbound variable（logstash-124 实测）
 set -eo pipefail
@@ -252,8 +265,10 @@ case "\${1:-}" in
       P=""; for i in \$(seq 1 15); do sleep 1; P="\$(rpc_pids | tail -1 || true)"; [ -n "\$P" ] && break; done
       echo "\$P" > /tmp/omo-serve.pid 2>/dev/null || true
       # KB 定时同步（默认 15min，OMO_KB_INTERVAL 可调）：只拉主线，不推；日志 /tmp/omo-kb-sync.log
+      # ★ 必须走**启动器**的 kb 子命令（曾误传 bun 路径 ⇒ 执行成 `bun kb sync` ⇒ Script not found，循环从未真正同步）
       if [ -n "\$BUN_BIN" ]; then
-        setsid bash -c 'while :; do "\$0" kb sync --quiet >> /tmp/omo-kb-sync.log 2>&1; sleep "\$1"; done' "\$BUN_BIN" "\${OMO_KB_INTERVAL:-900}" >/dev/null 2>&1 &
+        # 与启动器 kb 分支同款调用：\$0=bun，\$1=kb-cli 路径，\$2=policy 路径（可空），\$3=间隔秒
+        setsid bash -c 'while :; do printf "[kb] %s " "\$(date -Is)" >> /tmp/omo-kb-sync.log; [ -n "\$2" ] && export OMO_POLICY_PATH="\$2"; "\$0" "\$1" sync --quiet >> /tmp/omo-kb-sync.log 2>&1; echo "exit=\$?" >> /tmp/omo-kb-sync.log; sleep "\$3"; done' "\$BUN_BIN" "\$EXT/kb-cli.ts" "\$OMO_POLICY_PATH" "\${OMO_KB_INTERVAL:-900}" >/dev/null 2>&1 &
         echo "\$!" > /tmp/omo-kb-sync.pid 2>/dev/null || true
       fi
       [ -n "\$P" ] && echo "[omo] ✓ 服务已启动 PID \$P" || echo "[omo] ⚠ 服务启动后 15s 未检测到 PID（大镜像首载可能较慢，可稍后 omo status 重查）"
@@ -278,7 +293,10 @@ case "\${1:-}" in
     fi
     if [ -f "\$OMO_DIR/kb/credential.json" ]; then
       KBPID="\$(cat /tmp/omo-kb-sync.pid 2>/dev/null || true)"
-      if [ -n "\$KBPID" ] && kill -0 "\$KBPID" 2>/dev/null; then echo "  知识库同步：✓ 定时中 PID \$KBPID（omo kb status 看详情）"; else echo "  知识库同步：凭据已配置（定时未运行）"; fi
+      KBS=""; if [ -f "\$OMO_DIR/kb/state.json" ]; then
+        KBS="最后同步 \$(json_str lastSyncAt "\$OMO_DIR/kb/state.json") \$( [ "\$(json_str ok "\$OMO_DIR/kb/state.json")" = "true" ] && echo ✓ || echo ✗ )"
+      else KBS="尚无同步记录"; fi
+      if [ -n "\$KBPID" ] && kill -0 "\$KBPID" 2>/dev/null; then echo "  知识库同步：✓ 定时中 PID \$KBPID（\$KBS；omo kb status 看详情）"; else echo "  知识库同步：凭据已配置但定时未运行（\$KBS）"; fi
     else
       echo "  知识库同步：未配置（omo kb status 查看；需 Owner 发放凭据）"
     fi
