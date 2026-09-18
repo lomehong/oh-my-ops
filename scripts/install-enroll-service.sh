@@ -162,15 +162,30 @@ if [ -n "$TLS_CERT" ] && [ -n "$TLS_KEY" ]; then
   install -m 644 "$TLS_CERT" "$DIR/tls/cert.pem"; install -m 600 "$TLS_KEY" "$DIR/tls/key.pem"
   ok "使用已有证书：$TLS_CERT"
 else
-  [ -n "$SELF_SIGNED" ] || die "缺少 TLS：给 --self-signed <IP或域名>，或用 --tls-cert/--tls-key 提供证书"
-  command -v openssl >/dev/null 2>&1 || die "无 openssl，无法自签：请提供 --tls-cert/--tls-key"
-  san="IP:$SELF_SIGNED"
-  case "$SELF_SIGNED" in *[a-zA-Z]*) san="DNS:$SELF_SIGNED" ;; esac
-  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
-    -keyout "$DIR/tls/key.pem" -out "$DIR/tls/cert.pem" \
-    -subj "/CN=$SELF_SIGNED" -addext "subjectAltName=$san" >/dev/null 2>&1
-  chmod 600 "$DIR/tls/key.pem"; chmod 644 "$DIR/tls/cert.pem"
-  ok "已生成自签证书（SAN=$san，有效期 10 年）"
+    [ -n "$SELF_SIGNED" ] || die "缺少 TLS：给 --self-signed <IP或域名|auto>，或用 --tls-cert/--tls-key 提供证书"
+    command -v openssl >/dev/null 2>&1 || die "无 openssl，无法自签：请提供 --tls-cert/--tls-key"
+    # --self-signed auto：取本机首个 IP（真机踩到：把模板里的 <本机IP> 原样粘进来）
+    if [ "$SELF_SIGNED" = "auto" ]; then
+      SELF_SIGNED="$(hostname -I 2>/dev/null | awk '{print $1}')"
+      [ -n "$SELF_SIGNED" ] || die "--self-signed auto 取不到本机 IP：请显式给 IP 或域名"
+      ok "自动选定本机 IP 作为证书 SAN：$SELF_SIGNED"
+    fi
+    # SAN 形态校验：必须是 IP 或域名；尖括号/空格/斜杠等模板残留直接拦下
+    case "$SELF_SIGNED" in
+      *"<"*|*">"*|*" "*|*/*|"") die "证书 SAN 非法：'$SELF_SIGNED' —— 这里要填**实例可访问的 IP 或域名**（或直接写 --self-signed auto）" ;;
+    esac
+    san="IP:$SELF_SIGNED"
+    case "$SELF_SIGNED" in *[a-zA-Z]*) san="DNS:$SELF_SIGNED" ;; esac
+    if ! openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+        -keyout "$DIR/tls/key.pem" -out "$DIR/tls/cert.pem" \
+        -subj "/CN=$SELF_SIGNED" -addext "subjectAltName=$san" >"$DIR/logs/openssl.log" 2>&1; then
+      echo "  ✗ 生成自签证书失败（openssl 输出如下）："
+      sed 's/^/      /' "$DIR/logs/openssl.log" | tail -5
+      die "请改用 --self-signed auto 或 --tls-cert/--tls-key 提供证书"
+    fi
+    rm -f "$DIR/logs/openssl.log"
+    chmod 600 "$DIR/tls/key.pem"; chmod 644 "$DIR/tls/cert.pem"
+    ok "已生成自签证书（SAN=$san，有效期 10 年）"
 fi
 FP="$(openssl x509 -in "$DIR/tls/cert.pem" -noout -fingerprint -sha256 2>/dev/null | sed 's/^.*=//' || echo '')"
 

@@ -74,10 +74,19 @@ else
   grep -q "generate-access-token" "$TMP/neg.log" && pass "给出重签命令（令牌优先）" || fail "未给重签指引"
 fi
 
+echo "[2c] 非法 SAN 必须被拦（真机：把模板里的 <本机IP> 原样粘进来 ⇒ openssl 失败而脚本静默退出）"
+printf 'token good-token\n' > "$TMP/good.token"; chmod 600 "$TMP/good.token"
+if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo acme/kb \
+     --admin-token-file "$TMP/good.token" --self-signed "<本机IP>" --port "$PORT" --no-start >"$TMP/badsan.log" 2>&1; then
+  fail "非法 SAN 竟被接受"
+else
+  grep -q "证书 SAN 非法" "$TMP/badsan.log" && pass "非法 SAN 被拦并给出正确写法" || fail "拦截原因不明确：$(tail -3 "$TMP/badsan.log" | tr '\n' ' ')"
+fi
+
 echo "[3] 一键安装（--no-start）：布局/权限/证书/启动器"
 printf 'token good-token\n' > "$TMP/good.token"; chmod 600 "$TMP/good.token"
 if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo acme/kb \
-     --admin-token-file "$TMP/good.token" --self-signed 127.0.0.1 --port "$PORT" --no-start >"$TMP/install.log" 2>&1; then
+     --admin-token-file "$TMP/good.token" --self-signed auto --port "$PORT" --no-start >"$TMP/install.log" 2>&1; then
   pass "安装器执行成功"
 else
   fail "安装器执行失败：$(tail -5 "$TMP/install.log" | tr '\n' ' ')"
