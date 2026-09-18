@@ -26,6 +26,8 @@ fail() { echo "  ✗ $1"; FAILED=$((FAILED + 1)); }
 PKG="$TMP/pkg"; mkdir -p "$PKG"
 cp -r "$REPO_ROOT/packages" "$REPO_ROOT/vendor" "$PKG/"
 mkdir -p "$PKG/scripts"; cp "$INSTALLER" "$PKG/scripts/install.sh"
+# 共用自举库随包（install.sh 会 source scripts/lib/bun.sh；CI 打包 `cp -r scripts` 已覆盖）
+mkdir -p "$PKG/scripts/lib"; cp "$REPO_ROOT/scripts/lib/"*.sh "$PKG/scripts/lib/"
 printf '#!/usr/bin/env bash\necho "omp/18.1.18 (probe-stub)"\n' > "$PKG/omp-single"; chmod +x "$PKG/omp-single"
 
 install_into() { HOME="$1" bash "$PKG/scripts/install.sh" --token probe-token --name probe-dev >"$TMP/install-$2.log" 2>&1; }

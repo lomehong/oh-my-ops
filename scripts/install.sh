@@ -19,6 +19,9 @@
 #   --token <token>            ← 兼容旧用法，会写进 history/ps，脚本会告警
 set -euo pipefail
 
+# 共用自举库（与 kb-enroll 服务安装器同一份实现）
+. "$(cd "$(dirname "$0")" && pwd)/lib/bun.sh"
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REAL_HOME="$HOME"
 # ── 守卫：启动器会把 HOME 重定向到 $OMO_DIR/home；在那个环境里跑安装器会把一切装进
@@ -52,18 +55,6 @@ json_str() { # $1=键名  $2=json文件 → 打印值（无则空）
 OLD_OPS_DIR="$REAL_HOME/.ops-pi"
 
 # bun 版本锁定（T3 拍板：官方脚本 + CN 镜像回退，锁 1.4.x）
-OMO_BUN_VERSION="1.4.2"
-BUN_OFFICIAL="https://bun.sh/install"
-BUN_MIRROR_ZIP="https://registry.npmmirror.com/-/binary/bun/bun-v$OMO_BUN_VERSION/bun-linux-x64.zip"
-
-# zip 解包多后端（目标机未必有 unzip；python3/bsdtar/7z 任一即可）
-zip_extract() { # $1=zip  $2=目标目录
-  if command -v unzip >/dev/null 2>&1; then unzip -oq "$1" -d "$2"
-  elif command -v python3 >/dev/null 2>&1; then python3 -m zipfile -e "$1" "$2"
-  elif command -v bsdtar >/dev/null 2>&1; then bsdtar -xf "$1" -C "$2"
-  elif command -v 7z >/dev/null 2>&1; then 7z x -y -o"$2" "$1" >/dev/null
-  else echo "✗ 无可用解压工具（unzip/python3/bsdtar/7z 任一）"; return 1; fi
-}
 
 DEFAULT_HUB="wss://hub.qianji.io"
 DEFAULT_YUFU_URL="https://yufu.qianji.io"
@@ -153,42 +144,9 @@ echo "  设备名：$AGENT_NAME"
 echo "  私有域：$OMO_DIR"
 echo
 
-# ── 1) bun：机器上已有 → 直接用（不改动）；没有 → 自动做标准用户级安装（~/.bun，随 profile 进 PATH）。
+# ── 1) bun（共用自举：机器已有则不动；没有则标准用户级安装 ~/.bun）
 #    bun 是共享基础工具，不属于 omo 私有域；omo 自身运行不依赖它（omp-single 为自包含单文件）。
-BUN_KNOWN="$HOME/.bun/bin/bun"
-if command -v bun >/dev/null 2>&1; then
-  echo "  ✓ 检测到系统 bun $(bun --version 2>/dev/null || echo '?')——直接使用，不改动"
-elif [ -x "$BUN_KNOWN" ]; then
-  # 上一轮装好的 bun（标准位 ~/.bun/bin）：长驻旧 shell 的 PATH 不会自动刷新 → 显式识别，避免重复下载
-  export PATH="$HOME/.bun/bin:$PATH"
-  echo "  ✓ 检测到已有 bun $("$BUN_KNOWN" --version 2>/dev/null || echo '?')（~/.bun/bin；已为本次会话加入 PATH，新终端自动可用）"
-else
-  echo "  未检测到 bun → 自动安装（标准用户级 ~/.bun；官方脚本 → npmmirror 回退）…"
-  installed=false
-  # 官方脚本成功后 bun 落在 ~/.bun/bin（PATH 不一定已刷新）→ 以标准位存在与否判定成功，避免误判后重复下载
-  if curl -fsSL --max-time 90 "$BUN_OFFICIAL" | bash -s -- "bun-v$OMO_BUN_VERSION" >/dev/null 2>&1 && [ -x "$HOME/.bun/bin/bun" ]; then
-    export PATH="$HOME/.bun/bin:$PATH"
-    installed=true; echo "  ✓ bun $("$HOME/.bun/bin/bun" --version)（官方脚本 → ~/.bun/bin）"
-  fi
-  if [ "$installed" = false ]; then
-    echo "  ↺ 官方通道失败，回退 npmmirror zip…"
-    TMPZ="$(mktemp -d)"
-    if curl -fsSL --max-time 300 "$BUN_MIRROR_ZIP" -o "$TMPZ/bun.zip" \
-       && zip_extract "$TMPZ/bun.zip" "$TMPZ" \
-       && [ -f "$TMPZ/bun-linux-x64/bun" ]; then
-      mkdir -p "$HOME/.bun/bin"
-      mv "$TMPZ/bun-linux-x64/bun" "$HOME/.bun/bin/bun"; chmod +x "$HOME/.bun/bin/bun"
-      export PATH="$HOME/.bun/bin:$PATH"
-      if ! grep -qs '.bun/bin' "$HOME/.bashrc" "$HOME/.profile" 2>/dev/null; then
-        printf '\nexport PATH="$HOME/.bun/bin:$PATH"\n' >> "$HOME/.bashrc"
-      fi
-      installed=true; echo "  ✓ bun $(bun --version)（npmmirror → ~/.bun/bin）"
-    fi
-    rm -rf "$TMPZ"
-  fi
-  command -v bun >/dev/null 2>&1 || { echo "✗ bun 自动安装失败（官方与镜像通道均不可达）。可手动：curl -fsSL https://bun.sh/install | bash"; exit 1; }
-  echo "  ✓ bun 就绪"
-fi
+ensure_bun || exit 1
 
 # ── 2) 布局 runtime + 扩展
 echo "[2/5] 布局 ~/.omo …"

@@ -126,6 +126,27 @@ omo policy explain ops_shell_exec host=web-01 command="systemctl status nginx"
 omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 ```
 
+### 知识库自注册服务（enroll）一键部署
+
+实例侧要「零人工」拿到凭据，需要一台常驻的自注册服务（形态与 omo 一致：私有域 + 一个启动器/单元，可整体删除）。
+
+```bash
+# 1) 取服务包（发布页附件，或一行下载；<版本> 如 v0.11.0）
+curl -L "https://github.com/lomehong/oh-my-ops/releases/latest/download/omo-kb-service-<版本>.tar.gz" | tar xz && cd omo-kb-service-*
+# 2) 一条命令安装（管理员凭据放 0600 文件；自签证书给 SAN=本机IP或域名）
+bash install.sh --api https://<你的Gitea>/git/api/v1 --repo <owner>/<repo> \
+     --admin-user <站点管理员> --admin-password-file <0600 文件> \
+     --self-signed "<本机IP>" --host 0.0.0.0 --port 8787
+omo-kb status && omo-kb enroll-hint        # 健康自证 + 实例侧接入命令
+```
+
+- **落点**：`~/.omo-kb/`（服务、配置、证书、登记表、审计链，均 0600/证书 0644）+ 唯一对外痕迹 `~/.local/bin/omo-kb`（可选 systemd 单元）。
+- **启动器子命令**：`status | health | start | stop | restart | logs | cert | enroll-hint | code | list | create | rotate | revoke`。
+- **实例接入**：`omo-kb code --op enroll --device <设备名>` 出码（一次性、默认 30 分钟、可绑定设备）→ 实例上
+  `omo kb enroll --server https://<地址>:8787 --code-file <0600 码文件>`（自动建号+授权+落盘 0600+自证同步）。
+- **自签证书**：实例侧加 `--allow-insecure-tls`，或把 `omo-kb cert` 的指纹加入信任库。
+- **卸载**：`bash install.sh --uninstall [--purge]`（默认保留登记表与审计，`--purge` 一并删除）。
+
 ### 知识库同步（KB）
 
 实例把 Runbook / 处置案例沉淀到本地 `~/.omo/knowledge/`，并通过 git 与中心知识库（Gitea/GitLab 任一 HTTPS 远端）同步；

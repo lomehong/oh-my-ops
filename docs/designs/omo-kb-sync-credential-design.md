@@ -160,6 +160,14 @@
 | 客户端自证 | 兑换成功即落盘 0600 + 刷新 git store，并**立刻拉一次主线**（pull-only）确证可用 |
 | 撤销语义 | `revoke` 码 → 服务改乱密码 + 撤权；客户端**删除**本地凭据与 store 文件（本地知识库保留） |
 
+**部署形态（as-built，2026-09-18）**：`scripts/install-enroll-service.sh` 一键安装（与 omo 同形态）——
+私有域 `~/.omo-kb/`（服务 / config.env / tls / registry / audit，均 0600）+ `~/.local/bin/omo-kb` 启动器
+（`status|health|start|stop|restart|logs|cert|enroll-hint|code|list|create|rotate|revoke`）+ 可选 systemd 单元；
+CI 随发布产出独立小包 **`omo-kb-service-<ver>.tar.gz`**（含服务、供给 CLI、共用 lib 与安装器，带 sha256）。
+服务**零外部依赖**（审计链用 `scripts/lib/kb-audit.mjs`，与宿主 AuditLog 同算法并有对拍守卫）——
+真机曾因 `import "@ops-pi/core"` 装到私有域后 `Cannot find module` 而起不来。
+启动器不依赖 procps（PID 文件驱动），启动成功须「自身 PID 存活 **且** `/healthz` 通过」双判据（防端口被占误判）。
+
 **运行（位置任选：只要该机可达 Gitea，且实例可达它）**：
 ```bash
 # 证书（自签示例；生产建议用受信证书或把自签 CA 装到实例信任库）

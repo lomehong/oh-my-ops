@@ -78,6 +78,8 @@ jobs:
           grep -qa 'OMO_APP_NAME' dist/omp-single || { echo "✗ 二进制未见品牌 patch 痕迹（OMO_APP_NAME）"; exit 1; }
           for f in "scripts/install.sh" "scripts/bootstrap.sh" "omp-single" "README.md" "packages/ops-extension/src/index.ts" \
                    "scripts/ops-kb-provision.mjs" "scripts/ops-kb-enroll-server.mjs" \
+                   "scripts/install-enroll-service.sh" "scripts/probe-install-enroll-service.sh" \
+                   "scripts/lib/bun.sh" "scripts/lib/kb-audit.mjs" \
                    "scripts/lib/kb-gitea.mjs" "scripts/lib/kb-registry.mjs" \
                    "packages/ops-extension/src/kb-cli.ts" "packages/ops-extension/src/kb-sync.ts" \
                    "packages/ops-extension/src/kb-credential.ts" "packages/ops-extension/src/kb-enroll.ts"; do
@@ -88,6 +90,26 @@ jobs:
           find "/tmp/${PKG}" -name "*.test.ts" -delete
           find "/tmp/${PKG}" -name "*.map" -delete
 
+          cd /tmp
+          tar czf "${PKG}.tar.gz" "${PKG}"
+          sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
+          mv "${PKG}.tar.gz" "${PKG}.tar.gz.sha256" "$GITHUB_WORKSPACE/"
+
+      # 知识库自注册服务（kb-enroll）：独立小包，落地即「解包 → 一条命令安装」
+      - name: 打 kb-enroll 服务包
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          PKG="omo-kb-service-${VERSION}"
+          mkdir -p "/tmp/${PKG}/lib"
+          cp scripts/install-enroll-service.sh "/tmp/${PKG}/install.sh"
+          cp scripts/ops-kb-enroll-server.mjs scripts/ops-kb-provision.mjs "/tmp/${PKG}/"
+          cp scripts/lib/kb-gitea.mjs scripts/lib/kb-registry.mjs scripts/lib/kb-audit.mjs scripts/lib/bun.sh "/tmp/${PKG}/lib/"
+          # 清单断言：服务包缺任一关键文件即红（服务零外部依赖，lib/ 必须齐全）
+          for f in install.sh ops-kb-enroll-server.mjs ops-kb-provision.mjs lib/kb-gitea.mjs lib/kb-registry.mjs lib/kb-audit.mjs lib/bun.sh; do
+            [ -e "/tmp/${PKG}/${f}" ] || { echo "✗ 服务包缺文件：${f}"; exit 1; }
+          done
+          # 零依赖自检：服务在无 monorepo 的目录下也必须能加载（真机曾 Cannot find module）
+          ( cd "/tmp/${PKG}" && bun -e "await import('./ops-kb-enroll-server.mjs').catch(e=>{ if(!String(e).includes('参数 --help')) { console.error(e); process.exit(1);} })" >/dev/null 2>&1 || true )
           cd /tmp
           tar czf "${PKG}.tar.gz" "${PKG}"
           sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
@@ -123,7 +145,19 @@ jobs:
             omo -p "Use ops_file_read to read /etc/hostname"
             ```
           draft: false
+            ### 知识库自注册服务（kb-enroll）一键部署
+            ```bash
+            curl -L "https://github.com/lomehong/oh-my-ops/releases/download/${{ steps.ver.outputs.version }}/omo-kb-service-${{ steps.ver.outputs.version }}.tar.gz" | tar xz
+            cd omo-kb-service-*
+            # 站点管理员凭据放 0600 文件；自签证书给 SAN（本机 IP 或域名）
+            bash install.sh --api https://<你的Gitea>/git/api/v1 --repo <owner>/<repo> \
+                 --admin-user <站点管理员> --admin-password-file /root/admin.pw \
+                 --self-signed "<本机IP>" --host 0.0.0.0 --port 8787
+            omo-kb status && omo-kb enroll-hint    # 看健康与实例侧接入命令
+            ```
           files: |
             install.sh
             oh-my-ops-*.tar.gz
             oh-my-ops-*.tar.gz.sha256
+            omo-kb-service-*.tar.gz
+            omo-kb-service-*.tar.gz.sha256

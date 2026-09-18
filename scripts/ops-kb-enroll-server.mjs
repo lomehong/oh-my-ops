@@ -6,6 +6,8 @@
  * 形态：**零依赖常驻小服务**（bun 运行时），部署到哪由使用者决定，服务本身与位置无关。
  *
  * 授权模型（简单、可审计）：
+ *   - 服务零外部依赖（除 bun/Node 标准库）：审计链用本地 lib/kb-audit.mjs（与宿主侧 AuditLog 同算法，有对拍守卫），
+ *     避免安装到私有域后 `Cannot find module @ops-pi/core`（真机踩到）；
  *   - 服务持有**管理员引导凭据**（admin 作用域令牌 或 站点管理员账号+密码）；
  *   - 每个动作（enroll/rotate/revoke）都必须出示**一次性兑换码**（由 Owner 用
  *     `ops-kb-provision.mjs code` 签发；单次消费、默认 TTL 30 分钟、可选绑定设备名）；
@@ -26,7 +28,7 @@
  *       --registry /var/lib/omo-kb/registry.json --audit /var/lib/omo-kb/audit.jsonl \
  *       --host 0.0.0.0 --port 8787 --tls-cert /etc/omo-kb/tls.crt --tls-key /etc/omo-kb/tls.key
  */
-import { AuditLog } from "@ops-pi/core";
+import { AuditLog } from "./lib/kb-audit.mjs";
 import { readAdminAuth, makeApi, defaultTeam, randomPassword, credentialJson, ensureUser, grantAccess, revokeAccess, scramblePassword, verifyBotCredential, sha1 } from "./lib/kb-gitea.mjs";
 import { checkCode, consumeCode, upsertEntry, markRevoked, REGISTRY_VERSION } from "./lib/kb-registry.mjs";
 
