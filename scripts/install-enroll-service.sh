@@ -6,15 +6,21 @@
 #
 #   curl -fsSL https://cdn.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/install-enroll-service.sh -o /tmp/install-omo-kb.sh
 #   bash /tmp/install-omo-kb.sh --api https://<gitea>/git/api/v1 --repo <owner>/<repo> \
-#        --admin-user <站点管理员> --admin-password-file /root/admin.pw \
+#        --admin-token-file /root/omo-kb.token \
 #        --self-signed "<本机IP或域名>" --host 0.0.0.0 --port 8787
 #
 # 参数：
 #   --api <base>                 Gitea API 基址（含子路径，如 https://host/git/api/v1）**必填**
 #   --repo <owner/repo>          知识库仓库 **必填**
-#   --admin-user <u>             站点管理员账号（与服务端基本认证配套）
-#   --admin-password-file <f>    站点管理员密码文件（0600）；与 --admin-token-file 二选一
-#   --admin-token-file <f>       管理员令牌文件（0600，作用域需含 read:admin/write:admin 等）
+#   --admin-token-file <f>       **推荐**：管理员令牌文件（0600）。作用域需含
+#                                read:admin,write:admin,write:repository,write:organization
+#                                生成（在 Git 服务器上，无需交出密码）：
+#                                  gitea admin user generate-access-token --username <站点管理员> \\
+#                                        --name omo-kb-enroll --scopes read:admin,write:admin,write:repository,write:organization \\
+#                                        --raw > /root/omo-kb.token && chmod 600 /root/omo-kb.token
+#                                或 UI：站点管理员 → 用户设置 → 应用 → 生成令牌 → 勾上述 4 个作用域
+#   --admin-user <u>             备选：站点管理员账号（与服务端基本认证配套）
+#   --admin-password-file <f>    备选：站点管理员密码文件（0600）——不如令牌：不可限权、不可单独吊销
 #   --team <名>                  授权用团队名（默认 omo-kb-<repo 名>）
 #   --permission read|write      团队/协作者权限（默认 write）
 #   --grant team|collab          授权方式（默认 team）
@@ -98,7 +104,7 @@ fi
 [ -n "$API" ] || die "缺少 --api"
 [ -n "$REPO" ] || die "缺少 --repo"
 if [ -z "$ADMIN_TOKEN_FILE" ] && { [ -z "$ADMIN_USER" ] || [ -z "$ADMIN_PW_FILE" ]; }; then
-  die "缺少管理员凭据：--admin-token-file <0600> 或 --admin-user + --admin-password-file <0600>"
+  die "缺少管理员凭据：请用 --admin-token-file <0600>（推荐；作用域见 --help）；备选 --admin-user + --admin-password-file <0600>"
 fi
 for f in "$ADMIN_TOKEN_FILE" "$ADMIN_PW_FILE" "$TLS_KEY"; do
   if [ -n "$f" ]; then
@@ -149,7 +155,7 @@ if [ -n "$ADMIN_TOKEN_FILE" ]; then
 else
   install -m 600 "$ADMIN_PW_FILE" "$DIR/admin.pw"; ADMIN_MODE="password"
 fi
-ok "管理员凭据已落盘（$DIR/admin.$([ "$ADMIN_MODE" = token ] && echo token || echo pw)，0600）"
+ok "管理员凭据已落盘（$DIR/admin.$([ "$ADMIN_MODE" = token ] && echo token || echo pw)，0600）$([ "$ADMIN_MODE" = token ] && echo "（令牌模式：可限权、可单独吊销）" || "")"
 
 # ── 3) TLS：用已有证书，或自签（SAN 必填）
 if [ -n "$TLS_CERT" ] && [ -n "$TLS_KEY" ]; then
@@ -189,12 +195,44 @@ OMO_KB_LOG=$DIR/logs/service.log
 EOF
 chmod 600 "$DIR/config.env"; ok "配置已写入 $DIR/config.env（0600）"
 
-# ── 5) 启动前自证：管理员凭据必须能调 /admin/*
+# ── 5) 启动前自证：凭据可用性 + **作用域逐项探测**
+#    探测手法：发**必然校验失败**（而非变更成功）的请求 —— 403+scope 提示 = 缺权；4xx 校验错 = 有权限。
+#    这样无需产生任何真实变更即可判定 4 个必需作用域。
 if [ "$ADMIN_MODE" = token ]; then CRED_ARGS=(--header "Authorization: token $(cat "$DIR/admin.token")")
 else CRED_ARGS=(--user "$ADMIN_USER:$(cat "$DIR/admin.pw")"); fi
-code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${CRED_ARGS[@]}" "$API/admin/users?limit=1" || echo 000)"
-[ "$code" = "200" ] || die "管理员凭据自证失败（GET /admin/users → HTTP $code）：请确认账号为站点管理员且凭据/作用域正确"
-ok "管理员凭据自证 ✓ 200"
+ORG="${REPO%%/*}"; REPO_NAME="${REPO##*/}"
+probe() { # $1=描述 $2=期望的「有权限」判定（re） $3=curl 参数…
+  local desc="$1" expect="$2"; shift 2
+  local out code
+  out="$(curl -sS -o /tmp/omo-kb-probe.json -w '%{http_code}' --max-time 20 "${CRED_ARGS[@]}" "$@" || echo 000)"
+  code="$out"
+  if [ "$code" = "403" ] && grep -q "scope" /tmp/omo-kb-probe.json 2>/dev/null; then
+    printf '  ✗ %s：HTTP 403 —— %s\n' "$desc" "$(head -c 200 /tmp/omo-kb-probe.json | tr -d '\n')"
+    return 1
+  fi
+  code="$out"
+  if printf '%s' "$code" | grep -qE "$expect"; then printf '  ✓ %s（HTTP %s）\n' "$desc" "$code"; return 0; fi
+  printf '  ⚠ %s：HTTP %s（既非缺权也非预期校验失败，仅提示——可人工确认）\n' "$desc" "$code"; return 0
+}
+
+echo "  作用域自检（令牌需：read:admin / write:admin / write:repository / write:organization）"
+FAILED_SCOPE=0
+probe "read:admin（列用户）"       "200"      "$API/admin/users?limit=1" || FAILED_SCOPE=1
+probe "write:admin（建用户）"      "422|400"  -X POST -H 'Content-Type: application/json' -d '{}' "$API/admin/users" || FAILED_SCOPE=1
+probe "write:repository（协作者）" "404|422|400" -X PUT -H 'Content-Type: application/json' -d '{"permission":"read"}' "$API/repos/$REPO/collaborators/__omo_scope_probe__" || FAILED_SCOPE=1
+probe "write:organization（团队）" "422|400"  -X POST -H 'Content-Type: application/json' -d '{}' "$API/orgs/$ORG/teams" || FAILED_SCOPE=1
+rm -f /tmp/omo-kb-probe.json
+if [ "$FAILED_SCOPE" != 0 ]; then
+  echo
+  echo "  ✗ 令牌作用域不足 —— 请用下列方式重签（任选其一）："
+  echo "      # ① 站点管理员在 Git 服务器上（推荐，无需交密码）"
+  echo "      gitea admin user generate-access-token --username <站点管理员> --name omo-kb-enroll \\"
+  echo "            --scopes read:admin,write:admin,write:repository,write:organization --raw > /root/omo-kb.token && chmod 600 /root/omo-kb.token"
+  echo "      # ② 站点管理员登录 Gitea → 用户设置 → 应用 → 生成令牌，勾选上述 4 个作用域"
+  echo "    然后重跑：bash $0 --api $API --repo $REPO --admin-token-file /root/omo-kb.token …"
+  exit 1
+fi
+ok "凭据与作用域自证：4/4 通过"
 
 # ── 6) 启动器（唯一对外痕迹）
 # 原子替换（同 install.sh：避免覆写正在执行的脚本）

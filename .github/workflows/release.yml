@@ -154,8 +154,9 @@ jobs:
             curl -L "https://github.com/lomehong/oh-my-ops/releases/download/${{ steps.ver.outputs.version }}/omo-kb-service-${{ steps.ver.outputs.version }}.tar.gz" | tar xz
             cd omo-kb-service-*
             # 站点管理员凭据放 0600 文件；自签证书给 SAN（本机 IP 或域名）
+            # 先签专用令牌（作用域：read:admin,write:admin,write:repository,write:organization）
             bash install.sh --api https://<你的Gitea>/git/api/v1 --repo <owner>/<repo> \
-                 --admin-user <站点管理员> --admin-password-file /root/admin.pw \
+                 --admin-token-file /root/omo-kb.token \
                  --self-signed "<本机IP>" --host 0.0.0.0 --port 8787
             omo-kb status && omo-kb enroll-hint
             ```

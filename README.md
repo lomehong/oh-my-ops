@@ -156,11 +156,21 @@ bash scripts/omo-kb-doctor.sh          # 检查：布局/凭据/同步状态/KB 
 # 1) 取服务包（发布页附件，或一行下载；<版本> 如 v0.11.0）
 curl -L "https://github.com/lomehong/oh-my-ops/releases/latest/download/omo-kb-service-<版本>.tar.gz" | tar xz && cd omo-kb-service-*
 # 2) 一条命令安装（管理员凭据放 0600 文件；自签证书给 SAN=本机IP或域名）
+# 先签一张**专用令牌**（推荐：可限权、可单独吊销；无需交出管理员密码）
+#   在 Git 服务器上（gitea CLI）：
+#     gitea admin user generate-access-token --username <站点管理员> --name omo-kb-enroll \
+#           --scopes read:admin,write:admin,write:repository,write:organization --raw \
+#           > /root/omo-kb.token && chmod 600 /root/omo-kb.token
+#   或 UI：站点管理员 → 用户设置 → 应用 → 生成令牌 → 勾上述 4 个作用域
 bash install.sh --api https://<你的Gitea>/git/api/v1 --repo <owner>/<repo> \
-     --admin-user <站点管理员> --admin-password-file <0600 文件> \
+     --admin-token-file /root/omo-kb.token \
      --self-signed "<本机IP>" --host 0.0.0.0 --port 8787
 omo-kb status && omo-kb enroll-hint        # 健康自证 + 实例侧接入命令
 ```
+
+- **安装器会做 4 项作用域自检**（read:admin / write:admin / write:repository / write:organization）：
+  用「必然校验失败」的请求判定权限，**不产生任何真实变更**；缺权会明确指出缺哪个 scope 并给出重签命令。
+- 备选（不如令牌）：`--admin-user <站点管理员> --admin-password-file <0600>`（基本认证；不可限权、不可单独吊销）。
 
 - **落点**：`~/.omo-kb/`（服务、配置、证书、登记表、审计链，均 0600/证书 0644）+ 唯一对外痕迹 `~/.local/bin/omo-kb`（可选 systemd 单元）。
 - **启动器子命令**：`status | health | start | stop | restart | logs | cert | enroll-hint | code | list | create | rotate | revoke`。

@@ -175,9 +175,10 @@ openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 36
   -subj "/CN=<服务域名或IP>" -addext "subjectAltName=IP:<服务IP>"
 chmod 600 key.pem
 
+# 推荐：专用令牌（作用域 read:admin,write:admin,write:repository,write:organization；可限权、可单独吊销）
 bun scripts/ops-kb-enroll-server.mjs --api <gitea>/api/v1 --repo <owner>/<repo> \
   --grant team --team <团队名> --permission write \
-  --admin-user <站点管理员> --admin-password-file <0600> \
+  --admin-token-file <0600 令牌文件> \
   --registry <0600>:registry.json --audit <0600>:audit.jsonl \
   --host 0.0.0.0 --port 8787 --tls-cert cert.pem --tls-key key.pem
 ```

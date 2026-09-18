@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # P0 契约验收：kb-enroll **服务安装器**（一键部署形态与 omo 一致 + 起服务自证健康）
-# 校验：HOME 重定向守卫 · 私有域布局与权限 · 管理员凭据自证（桩 Gitea）· 启动器 · TLS 自签 · /healthz 可服务 · 卸载
+# 校验：HOME 重定向守卫 · 私有域布局与权限 · 令牌路径 + 4 项作用域自检（桩 Gitea）· 启动器 · TLS 自签 · /healthz 可服务 · 卸载
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,8 +20,22 @@ H="$TMP/home"; mkdir -p "$H/.local/bin"
 
 # ── 桩 Gitea：/admin/users 返回 200（供安装器的管理员自证）
 cat > "$TMP/stub.mjs" <<EOF
-Bun.serve({ port: $STUB_PORT, fetch(req) { const u = new URL(req.url); if (u.pathname.endsWith('/admin/users')) return new Response('[]', { status: 200 }); return new Response('{}', { status: 200 }); } });
-console.log('STUB_READY');
+// 桩 Gitea：按真实的"校验失败/缺权"语义应答，供作用域自检判定
+Bun.serve({ port: $STUB_PORT, fetch(req) {
+  const u = new URL(req.url);
+  const auth = req.headers.get("authorization") ?? "";
+  const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { "Content-Type": "application/json" } });
+  // 缺权令牌（probe 用它验证"必须被拦"）：任何写端点返回 403 + scope 提示
+  if (auth.startsWith("token scoped-")) {
+    return json({ message: "token does not have at least one of required scope(s), required=[write:admin], token scope=read:repository" }, 403);
+  }
+  if (u.pathname.endsWith("/admin/users") && req.method === "GET") return json([], 200);
+  if (u.pathname.endsWith("/admin/users") && req.method === "POST") return json({ message: "[Username]: Required" }, 422);
+  if (u.pathname.includes("/collaborators/")) return json({ message: "user does not exist [name: __omo_scope_probe__]" }, 404);
+  if (u.pathname.endsWith("/teams") && req.method === "POST") return json({ message: "[Name]: Required" }, 422);
+  return json({}, 200);
+} });
+console.log("STUB_READY");
 EOF
 bun "$TMP/stub.mjs" >"$TMP/stub.log" 2>&1 &
 STUB_PID=$!
@@ -50,9 +64,20 @@ else
   grep -q "缺少 TLS" "$TMP/missing.log" && pass "缺 TLS 时明确拒绝" || fail "拒绝原因不明确：$(head -2 "$TMP/missing.log" | tr '\n' ' ')"
 fi
 
+echo "[2b] 缺权令牌必须被拦（403+scope ⇒ 指出缺哪个作用域并给重签命令）"
+printf 'scoped-bad\n' > "$TMP/scoped.token"; chmod 600 "$TMP/scoped.token"
+if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo acme/kb \
+     --admin-token-file "$TMP/scoped.token" --self-signed 127.0.0.1 --port "$PORT" --no-start >"$TMP/neg.log" 2>&1; then
+  fail "缺权令牌竟被接受"
+else
+  grep -q "作用域不足" "$TMP/neg.log" && pass "缺权令牌被拦并提示作用域" || fail "拦截原因不明确：$(head -3 "$TMP/neg.log" | tr '\n' ' ')"
+  grep -q "generate-access-token" "$TMP/neg.log" && pass "给出重签命令（令牌优先）" || fail "未给重签指引"
+fi
+
 echo "[3] 一键安装（--no-start）：布局/权限/证书/启动器"
-if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo acme/kb --admin-user root \
-     --admin-password-file "$TMP/pw" --self-signed 127.0.0.1 --port "$PORT" --no-start >"$TMP/install.log" 2>&1; then
+printf 'token good-token\n' > "$TMP/good.token"; chmod 600 "$TMP/good.token"
+if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo acme/kb \
+     --admin-token-file "$TMP/good.token" --self-signed 127.0.0.1 --port "$PORT" --no-start >"$TMP/install.log" 2>&1; then
   pass "安装器执行成功"
 else
   fail "安装器执行失败：$(tail -5 "$TMP/install.log" | tr '\n' ' ')"
@@ -65,7 +90,7 @@ done
 [ "$(stat -c %a "$H/.omo-kb/tls/key.pem")" = "600" ] && pass "TLS 私钥 0600" || fail "TLS 私钥权限异常"
 [ -x "$H/.local/bin/omo-kb" ] && pass "启动器可执行：~/.local/bin/omo-kb" || fail "启动器缺失/不可执行"
 grep -q '"ok":true' "$TMP/install.log" || grep -q "完成" "$TMP/install.log" && pass "安装输出含完成段" || fail "安装输出异常"
-grep -q "管理员凭据自证 ✓ 200" "$TMP/install.log" && pass "管理员凭据自证通过（桩 Gitea）" || fail "管理员自证未通过：$(grep -n '自证' "$TMP/install.log" | head -2 | tr '\n' ' ')"
+grep -q "凭据与作用域自证：4/4 通过" "$TMP/install.log" && pass "令牌路径 + 4 项作用域自检通过" || fail "作用域自检未通过：$(grep -E '作用域|✗' "$TMP/install.log" | head -3 | tr '\n' ' ')"
 
 echo "[4] 起服务并自证健康（启动器路径）"
 HOME="$H" "$H/.local/bin/omo-kb" start >"$TMP/start.log" 2>&1 || true
