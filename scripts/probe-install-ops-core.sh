@@ -82,20 +82,14 @@ H4="$TMP/h4"; mkdir -p "$H4"
 HOME="$H4" bash "$PKG/scripts/install.sh" --name no-token >"$TMP/install-notoken.log" 2>&1 || fail "无 token 安装失败（见 $TMP/install-notoken.log）"
 [ -d "$H4/.omo/home/.omp/agent/skills" ] && fail "无 token 仍部署 skills（门控失效）" || pass "无 token 不部署 skills（门控生效）"
 
-echo "[4b] 脱敏扩展部署（独立落位 \$HOME/.omp/agent/extensions，与御驿/凭据无关）"
-RDV="$PKG/vendor/omp-redact-extension.js"
+echo "[4b] 脱敏：内建实现（不再部署 vendor JS；遗留文件必被清理）"
 RD1="$H1/.omo/home/.omp/agent/extensions/omp-redact-extension.js"
-[ -f "$RDV" ] && pass "vendor/omp-redact-extension.js 随发布包提供" || fail "发布包缺 vendor/omp-redact-extension.js"
-[ -f "$RD1" ] && pass "脱敏扩展落位：\$HOME/.omp/agent/extensions/omp-redact-extension.js" || fail "脱敏扩展未落位（$RD1）"
-cmp -s "$RD1" "$RDV" && pass "安装后与 vendor 逐字节一致（本体未被改动）" || fail "安装后与 vendor 不一致（本体被改动或截断）"
-bun build --target=node --outfile="$TMP/redact.bundle.js" "$RD1" >/dev/null 2>&1 \
-  && pass "落位文件可被 JS 运行时解析（非空/非截断/语法有效）" \
-  || fail "落位文件无法解析（损坏或截断）"
-printf '// stale（模拟旧版本本体）\n' > "$RD1"
-install_into "$H1" redact-refresh || fail "重装失败（见 $TMP/install-redact-refresh.log）"
-cmp -s "$RD1" "$RDV" && pass "重装覆盖旧本体（vendor 为单一事实源）" || fail "重装未刷新扩展本体"
-RD4="$H4/.omo/home/.omp/agent/extensions/omp-redact-extension.js"
-if [ -f "$RD4" ] && cmp -s "$RD4" "$RDV"; then pass "无 token 安装仍落位脱敏扩展（未误加凭据门控）"; else fail "无 token 时脱敏扩展缺失/不一致（凭据门控误加到脱敏段）"; fi
+[ -f "$PKG/packages/ops-core/src/redact.ts" ] && pass "内建引擎随包：ops-core/src/redact.ts" || fail "缺内建引擎 ops-core/src/redact.ts"
+[ -f "$PKG/packages/ops-extension/src/redact.ts" ] && pass "内建装配随包：ops-extension/src/redact.ts" || fail "缺内建装配 ops-extension/src/redact.ts"
+[ -f "$RD1" ] && fail "仍部署了 vendor JS 脱敏扩展（会与内建双实现）" || pass "未部署 vendor JS 脱敏扩展（避免双实现）"
+mkdir -p "$(dirname "$RD1")"; printf '// legacy\n' > "$RD1"
+install_into "$H1" redact-legacy >/dev/null 2>&1 || fail "重装失败（见 $TMP/install-redact-legacy.log）"
+[ -f "$RD1" ] && fail "旧版本遗留的 vendor JS 未被清理" || pass "旧版本遗留的 vendor JS 已清理（升级收口）"
 
 echo "[5] KB 同步（OMO-KB-SYNC P1）：模块部署 + 启动器子命令"
 EXT2="$H2/.omo/extensions/ops-pi"

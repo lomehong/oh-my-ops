@@ -137,6 +137,9 @@ omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 - **账本**：`$OMO_DIR/home/.omp/redact/state.json`（0600，按会话分账，含**真实值**）——位于 PathGuard 机密根内，Agent 经 `ops_file_*` 读不到。
 - **调试**：`OMO_REDACT_DEBUG=1` ⇒ `$OMO_DIR/home/.omp/redact/debug.log`（MASK/RESTORE 计数，不含真实值）。
 - **已知边界**：助手文本流中的占位符保持原样（宿主无流拦截点，安全方向退化）；配置改后需重启会话生效。
+- **单一实现**：omo 用**内建 TS 实现**（`ops-core/src/redact.ts` + `ops-extension/src/redact.ts`，随 ops-pi 扩展加载）；
+  `vendor/omp-redact-extension.js` 是**裸 omp（非 omo）**的参考实现，omo **不再部署**它（避免双实现同挂钩子、争同一份账本）；
+  升级时会自动清理旧版本部署过的同名文件。
 
 ### 体检（只读）
 
