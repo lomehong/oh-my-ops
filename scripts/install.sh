@@ -295,7 +295,7 @@ case "\${1:-}" in
       # KB 定时同步（默认 15min，OMO_KB_INTERVAL 可调）：只拉主线，不推；日志 /tmp/omo-kb-sync.log
       if [ -n "\$BUN_BIN" ]; then
         # 与启动器 kb 分支同款：\$0=bun \$1=kb-cli 路径 \$2=policy 路径（可空） \$3=间隔秒
-        # （曾误把 bun 当入口 ⇒ 执行成 `bun kb sync` ⇒ Script not found，循环从未真正同步）
+        # （曾误把 bun 当入口 ⇒ 执行成 bun kb sync ⇒ Script not found，循环从未真正同步）
         # \$4=serve 的 PID：每轮自检，serve 不在了就退出（否则 setsid 出去的循环会变孤儿，
         #   升级/重启 serve 都不会杀掉它 ⇒ 旧代码继续写日志——真机踩到）
         setsid bash -c 'while :; do if [ -n "\$4" ] && ! kill -0 "\$4" 2>/dev/null; then echo "[kb] serve(\$4) 已退出，同步循环结束" >> /tmp/omo-kb-sync.log; exit 0; fi; printf "[kb] %s " "\$(date -Is)" >> /tmp/omo-kb-sync.log; [ -n "\$2" ] && export OMO_POLICY_PATH="\$2"; "\$0" "\$1" sync --quiet >> /tmp/omo-kb-sync.log 2>&1; echo "exit=\$?" >> /tmp/omo-kb-sync.log; sleep "\$3"; done' "\$BUN_BIN" "\$EXT/kb-cli.ts" "\$OMO_POLICY_PATH" "\${OMO_KB_INTERVAL:-900}" "\$P" >/dev/null 2>&1 &

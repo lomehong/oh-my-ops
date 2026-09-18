@@ -147,6 +147,16 @@ INO2="$(stat -c %i "$L" 2>/dev/null || echo 0)"
 if [ "$INO1" != "0" ] && [ "$INO1" != "$INO2" ]; then pass "重装后启动器 inode 变化（原子替换，非原地覆写）"; else fail "inode 未变化（$INO1→$INO2）：可能仍是原地覆写"; fi
 grep -q 'cat > "$BIN_TMP"' "$PKG/scripts/install.sh" && pass "安装器使用临时文件 + mv" || fail "安装器未见临时文件写法"
 
+echo "[5g] 安装输出必须干净（未加引号 heredoc 内的反引号会被当命令替换执行）"
+HG="$TMP/hg"; mkdir -p "$HG"
+install_into "$HG" g >/dev/null 2>&1 || true
+LOG="$TMP/install-g.log"
+if grep -qE "Script not found|command not found" "$LOG" 2>/dev/null; then
+  fail "安装输出含杂散命令执行：$(grep -m1 -E 'Script not found|command not found' "$LOG")"
+else
+  pass "安装输出无杂散命令执行（Script not found / command not found）"
+fi
+
 echo "[6] 安装器：Yuyi 凭据传递（--token-file 0600 强制；--token 告警）"
 TF="$TMP/token-600"; printf 'probe-token-from-file\n' > "$TF"; chmod 600 "$TF"
 TFW="$TMP/token-644"; printf 'x\n' > "$TFW"; chmod 644 "$TFW"
