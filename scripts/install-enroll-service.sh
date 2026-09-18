@@ -110,7 +110,7 @@ for f in "$ADMIN_TOKEN_FILE" "$ADMIN_PW_FILE" "$TLS_KEY"; do
   if [ -n "$f" ]; then
     [ -f "$f" ] || die "文件不存在：$f"
     perm="$(stat -c %a "$f" 2>/dev/null || stat -f %Lp "$f" 2>/dev/null || echo unknown)"
-    case "$perm" in 600|400) ;; *) die "权限过宽（应 0600）：$f 当前 $perm" ;; esac
+    case "$perm" in 600|400) ;; *) die "权限过宽（应 0600）：$f 当前 $perm —— 修复：chmod 600 $f 后重跑本条命令" ;; esac
   fi
 done
 
