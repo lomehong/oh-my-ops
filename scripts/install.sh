@@ -233,11 +233,10 @@ kill_kb_orphans() {
   for f in /proc/[0-9]*/cmdline; do
     [ -r "\$f" ] || continue
     pid="\${f#/proc/}"; pid="\${pid%/cmdline}"
-    [ "\$pid" = "$$" ] && continue
+    [ "\$pid" = "\$\$" ] && continue   # 跳过自身（\$\$ 必须转义：否则 heredoc 会展开成**安装器**的 PID）
     cmd="\$(tr '\0' ' ' < "\$f" 2>/dev/null || true)"
-    case "\$cmd" in
-      *kb-cli.ts*"*"*sync*|*"bun kb sync"*) kill "\$pid" 2>/dev/null && n=\$((n+1)) || true ;;
-    esac
+    case "\$cmd" in *"bun kb sync"*) kill "\$pid" 2>/dev/null && n=\$((n+1)) || true; continue ;; esac
+    case "\$cmd" in *kb-cli.ts*) case "\$cmd" in *sync*) kill "\$pid" 2>/dev/null && n=\$((n+1)) || true ;; esac ;; esac
   done
   [ "\$n" -gt 0 ] && echo "[omo] ↻ 已清理 \$n 个遗留 KB 同步循环"
   rm -f /tmp/omo-kb-sync.pid

@@ -30,6 +30,9 @@ mkdir -p "$PKG/scripts"; cp "$INSTALLER" "$PKG/scripts/install.sh"
 mkdir -p "$PKG/scripts/lib"; cp "$REPO_ROOT/scripts/lib/"*.sh "$PKG/scripts/lib/"
 printf '#!/usr/bin/env bash\necho "omp/18.1.18 (probe-stub)"\n' > "$PKG/omp-single"; chmod +x "$PKG/omp-single"
 
+# 判活：僵尸进程在 /proc 里仍有目录但 cmdline 为空 ⇒ 以「cmdline 非空」为准
+alive() { [ -s "/proc/$1/cmdline" ]; }
+
 install_into() { HOME="$1" bash "$PKG/scripts/install.sh" --token probe-token --name probe-dev >"$TMP/install-$2.log" 2>&1; }
 exports_of() { (cd "$1/.omo/extensions/ops-pi" && bun -e 'import("@ops-pi/core").then(m=>console.log(Object.keys(m).sort().join(","))).catch(e=>console.log("RESOLVE_FAIL: "+e.message))'); }
 
@@ -133,18 +136,21 @@ echo "$STALE_KB" > /tmp/omo-kb-sync.pid
 printf 'stale' > /tmp/omo-serve.stamp
 install_into "$HE" e >/dev/null 2>&1 || true
 sleep 1
-if kill -0 "$STALE_KB" 2>/dev/null; then fail "安装后遗留 KB 循环仍在（PID $STALE_KB）"; else pass "安装时已清理遗留 KB 循环"; fi
+if alive "$STALE_KB"; then fail "安装后遗留 KB 循环仍在（PID $STALE_KB）"; else pass "安装时已清理遗留 KB 循环"; fi
 [ -e /tmp/omo-kb-sync.pid ] && fail "遗留 pid 文件未清理" || pass "遗留 pid 文件已清理"
 [ -e /tmp/omo-serve.stamp ] && fail "遗留 serve 指纹未清理（旧服务会误判）" || pass "遗留 serve 指纹已清理"
 kill "$STALE_KB" 2>/dev/null || true
-# 兜底分支：孤儿已覆盖 pid 文件（不可达）⇒ 只能按命令行特征清
-bash -c 'exec -a "bun kb-cli.ts sync" sleep 60' >/dev/null 2>&1 &   # 伪造命令行为「bun kb-cli.ts sync」的孤儿
-ORPHAN=$!
-sleep 0.5
+# 兜底分支：孤儿已覆盖 pid 文件（不可达）⇒ 只能按命令行特征清（两种形态各验一次）
+bash -c 'exec -a "bun kb sync" tail -f /dev/null /dev/null' >/dev/null 2>&1 &
+O1=$!
+bash -c 'exec -a "bun /p/kb-cli.ts" tail -f /dev/null /dev/null' >/dev/null 2>&1 &   # kb-cli 在 sync 之前
+O2=$!
+sleep 0.6
 install_into "$HE" e2 >/dev/null 2>&1 || true
 sleep 1
-if kill -0 "$ORPHAN" 2>/dev/null; then fail "按特征清理未生效（不可达孤儿仍在，PID $ORPHAN）"; else pass "不可达孤儿（覆盖过 pid 文件）也被清理"; fi
-kill "$ORPHAN" 2>/dev/null || true
+if alive "$O1"; then fail "旧形态孤儿（bun kb sync）未被清理"; else pass "旧形态孤儿（bun kb sync）已清理"; fi
+if alive "$O2"; then fail "kb-cli 形态孤儿未被清理"; else pass "kb-cli 形态孤儿已清理"; fi
+kill "$O1" "$O2" 2>/dev/null || true
 
 echo "[5f] 启动器必须**原子替换**（原地覆写会让正在执行的脚本读到新内容 ⇒ 真机 [3/5] 处 Script not found \"kb\"）"
 HF="$TMP/hf"; mkdir -p "$HF"
