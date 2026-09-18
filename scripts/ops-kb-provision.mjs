@@ -323,6 +323,12 @@ async function selftest() {
 		const code = await run(["code", "--op", "enroll", "--device", "node-9", "--ttl", "30", "--registry", reg]);
 		const r3 = JSON.parse(fs.readFileSync(reg, "utf8"));
 		const plain = /码（\*\*只显示这一次\*\*）：(\S+)/.exec(code.out)?.[1];
+	const codeRaw = await run(["code", "--op", "enroll", "--device", "node-9", "--ttl", "30", "--registry", reg, "--raw"]);
+	checks.push(["code --raw 只输出码本身（32 位，便于脚本取用）", /^[A-Za-z0-9_-]{32}$/.test(codeRaw.out.trim())]);
+	const codeJson = await run(["code", "--op", "enroll", "--device", "node-9", "--ttl", "30", "--registry", reg, "--json"]);
+	let codeJsonOk = false;
+	try { const o = JSON.parse(codeJson.out.trim()); codeJsonOk = o.op === "enroll" && o.device === "node-9" && typeof o.code === "string" && o.code.length === 32 && typeof o.expiresAt === "string"; } catch {}
+	checks.push(["code --json 输出结构化（op/device/code/expiresAt）", codeJsonOk]);
 		checks.push(["签发兑换码：明文只打印一次，登记表只存 sha256", code.code === 0 && typeof plain === "string" && r3.codes.at(-1).sha256 !== plain && r3.codes.at(-1).device === "node-9" && !JSON.stringify(r3).includes(plain), code.out]);
 	} finally {
 		server.stop(true);
