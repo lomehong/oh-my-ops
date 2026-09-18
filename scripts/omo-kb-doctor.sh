@@ -47,7 +47,10 @@ fi
 if [ -f "$STATE" ]; then
   LAST="$(sed -n 's/.*"lastSyncAt"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$STATE" | head -1)"
   OK_="$(sed -n 's/.*"ok"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$STATE" | head -1)"
-  [ "$OK_" = "true" ] && ok "最后同步：$LAST ✓" || warn "最后同步：$LAST ✗（看图 kb/state.json 或 omo kb status）"
+  if [ ! -f "$CRED" ]; then
+    ok "最后同步：$LAST ✓（**本地模式**：未配置远端，此记录非远端同步结果）"
+  elif [ "$OK_" = "true" ]; then ok "最后同步：$LAST ✓"
+  else warn "最后同步：$LAST ✗（看图 kb/state.json 或 omo kb status）"; fi
 else
   warn "尚无同步记录（kb/state.json 不存在）"
 fi
