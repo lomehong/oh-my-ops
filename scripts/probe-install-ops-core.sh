@@ -137,6 +137,16 @@ sleep 1
 if kill -0 "$ORPHAN" 2>/dev/null; then fail "按特征清理未生效（不可达孤儿仍在，PID $ORPHAN）"; else pass "不可达孤儿（覆盖过 pid 文件）也被清理"; fi
 kill "$ORPHAN" 2>/dev/null || true
 
+echo "[5f] 启动器必须**原子替换**（原地覆写会让正在执行的脚本读到新内容 ⇒ 真机 [3/5] 处 Script not found \"kb\"）"
+HF="$TMP/hf"; mkdir -p "$HF"
+install_into "$HF" f >/dev/null 2>&1 || true
+L="$HF/.local/bin/omo"; [ -x "$L" ] || L="/usr/local/bin/omo"
+INO1="$(stat -c %i "$L" 2>/dev/null || echo 0)"
+install_into "$HF" f2 >/dev/null 2>&1 || true
+INO2="$(stat -c %i "$L" 2>/dev/null || echo 0)"
+if [ "$INO1" != "0" ] && [ "$INO1" != "$INO2" ]; then pass "重装后启动器 inode 变化（原子替换，非原地覆写）"; else fail "inode 未变化（$INO1→$INO2）：可能仍是原地覆写"; fi
+grep -q 'cat > "$BIN_TMP"' "$PKG/scripts/install.sh" && pass "安装器使用临时文件 + mv" || fail "安装器未见临时文件写法"
+
 echo "[6] 安装器：Yuyi 凭据传递（--token-file 0600 强制；--token 告警）"
 TF="$TMP/token-600"; printf 'probe-token-from-file\n' > "$TF"; chmod 600 "$TF"
 TFW="$TMP/token-644"; printf 'x\n' > "$TFW"; chmod 644 "$TFW"

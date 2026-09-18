@@ -183,7 +183,10 @@ mkdir -p "$(dirname "$BIN_DST")"
 if [ -f "$BIN_DST" ] && ! grep -q "OMO_LAUNCHER_V4" "$BIN_DST" 2>/dev/null; then
   echo "✗ $BIN_DST 已存在且非本产品启动器——拒绝覆盖（请自行处理）"; exit 1
 fi
-cat > "$BIN_DST" <<OMOEOF
+# ★ 原子替换：先写同目录临时文件再 mv。**不能** `cat > "$BIN_DST"`（原地截断会让正在执行该脚本的进程
+#   从新内容继续读 ⇒ 执行出杂散命令——真机 [3/5] 步骤处反复出现 `Script not found "kb"` 的根因）
+BIN_TMP="$BIN_DST.tmp.$$"
+cat > "$BIN_TMP" <<OMOEOF
 #!/usr/bin/env bash
 # json_str：极简 JSON 取值（第 1 参=键名，第 2 参=文件）——status 面板读 kb/state.json 用；
 # 与安装脚本同名同实现（唯一来源是安装脚本，随产物生成以免两套实现漂移）
@@ -373,7 +376,8 @@ case "\${1:-}" in
     exec "\$RUN" --profile ops "\${EXT_ARGS[@]}" "\$@" ;;
 esac
 OMOEOF
-chmod +x "$BIN_DST"
+chmod +x "$BIN_TMP"
+mv -f "$BIN_TMP" "$BIN_DST"
 echo "  ✓ $BIN_DST"
 # 覆盖启动器后：遗留的 KB 循环仍按旧代码运行（setsid 孤儿）⇒ 一并清掉；serve 重启时会自动起新的
 OLDKB0="$(cat /tmp/omo-kb-sync.pid 2>/dev/null || true)"

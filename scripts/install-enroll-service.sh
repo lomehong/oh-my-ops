@@ -197,7 +197,9 @@ code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${CRED_ARGS[@]}" 
 ok "管理员凭据自证 ✓ 200"
 
 # ── 6) 启动器（唯一对外痕迹）
-cat > "$LAUNCHER" <<'LAUNCHER_EOF'
+# 原子替换（同 install.sh：避免覆写正在执行的脚本）
+LAUNCHER_TMP="$LAUNCHER.tmp.$$"
+cat > "$LAUNCHER_TMP" <<'LAUNCHER_EOF'
 #!/usr/bin/env bash
 # omo-kb —— 知识库自注册服务的运维入口（由安装器生成）
 set -euo pipefail
@@ -289,7 +291,7 @@ case "$cmd" in
   *) echo "用法：omo-kb <status|health|start|stop|restart|logs|cert|enroll-hint|code|list|create|rotate|revoke>"; exit 2 ;;
 esac
 LAUNCHER_EOF
-chmod 755 "$LAUNCHER"; ok "启动器：$LAUNCHER"
+chmod 755 "$LAUNCHER_TMP"; mv -f "$LAUNCHER_TMP" "$LAUNCHER"; ok "启动器：$LAUNCHER"
 
 # ── 7) systemd 单元（或说明手动启动）
 if command -v systemctl >/dev/null 2>&1 && { [ "$USE_SYSTEM" = true ] || systemctl --user show-environment >/dev/null 2>&1; }; then
