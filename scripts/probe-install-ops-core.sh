@@ -128,6 +128,14 @@ if kill -0 "$STALE_KB" 2>/dev/null; then fail "安装后遗留 KB 循环仍在�
 [ -e /tmp/omo-kb-sync.pid ] && fail "遗留 pid 文件未清理" || pass "遗留 pid 文件已清理"
 [ -e /tmp/omo-serve.stamp ] && fail "遗留 serve 指纹未清理（旧服务会误判）" || pass "遗留 serve 指纹已清理"
 kill "$STALE_KB" 2>/dev/null || true
+# 兜底分支：孤儿已覆盖 pid 文件（不可达）⇒ 只能按命令行特征清
+bash -c 'exec -a "bun kb-cli.ts sync" sleep 60' >/dev/null 2>&1 &   # 伪造命令行为「bun kb-cli.ts sync」的孤儿
+ORPHAN=$!
+sleep 0.5
+install_into "$HE" e2 >/dev/null 2>&1 || true
+sleep 1
+if kill -0 "$ORPHAN" 2>/dev/null; then fail "按特征清理未生效（不可达孤儿仍在，PID $ORPHAN）"; else pass "不可达孤儿（覆盖过 pid 文件）也被清理"; fi
+kill "$ORPHAN" 2>/dev/null || true
 
 echo "[6] 安装器：Yuyi 凭据传递（--token-file 0600 强制；--token 告警）"
 TF="$TMP/token-600"; printf 'probe-token-from-file\n' > "$TF"; chmod 600 "$TF"

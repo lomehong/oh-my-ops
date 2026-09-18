@@ -224,6 +224,23 @@ EXT_ARGS=()
 # 旧写法 grep "mode rpc" 依赖「参数被写进 bash -c 脚本串」的老启动形式；v4 把参数挪到
 # exec "\$0" … "\$@" 之后，argv 里 --mode / rpc 是两个独立元素，旧模式既漏报真进程、
 # 又误命中任何 argv 含该字面量的无关进程（2026-09-17 实测）。
+# 清理 KB 同步循环的遗留进程（纯 /proc 扫描，不依赖 procps；旧版循环 setsid 脱离后 pid 文件可能已被覆盖 ⇒ 只能按特征找）
+kill_kb_orphans() {
+  local f pid cmd n=0
+  for f in /proc/[0-9]*/cmdline; do
+    [ -r "\$f" ] || continue
+    pid="\${f#/proc/}"; pid="\${pid%/cmdline}"
+    [ "\$pid" = "$$" ] && continue
+    cmd="\$(tr '\0' ' ' < "\$f" 2>/dev/null || true)"
+    case "\$cmd" in
+      *kb-cli.ts*sync*|*"bun kb sync"*) kill "\$pid" 2>/dev/null && n=\$((n+1)) || true ;;
+    esac
+  done
+  [ "\$n" -gt 0 ] && echo "[omo] ↻ 已清理 \$n 个遗留 KB 同步循环"
+  rm -f /tmp/omo-kb-sync.pid
+  return 0
+}
+
 rpc_pids() {
   local f a
   for f in /proc/[0-9]*/cmdline; do
@@ -270,6 +287,8 @@ case "\${1:-}" in
       OLDKB="\$(cat /tmp/omo-kb-sync.pid 2>/dev/null || true)"
       if [ -n "\$OLDKB" ] && kill -0 "\$OLDKB" 2>/dev/null; then kill "\$OLDKB" 2>/dev/null || true; echo "[omo] ↻ 已停止遗留的 KB 同步循环（PID \$OLDKB）"; fi
       rm -f /tmp/omo-kb-sync.pid
+      # 兜底：更早版本的孤儿可能已被后续循环覆盖 pid 文件（不可达）⇒ 按 /proc 特征清理
+      kill_kb_orphans >/dev/null 2>&1 || true
       # KB 定时同步（默认 15min，OMO_KB_INTERVAL 可调）：只拉主线，不推；日志 /tmp/omo-kb-sync.log
       if [ -n "\$BUN_BIN" ]; then
         # 与启动器 kb 分支同款：\$0=bun \$1=kb-cli 路径 \$2=policy 路径（可空） \$3=间隔秒
@@ -281,6 +300,10 @@ case "\${1:-}" in
       fi
       [ -n "\$P" ] && echo "[omo] ✓ 服务已启动 PID \$P" || echo "[omo] ⚠ 服务启动后 15s 未检测到 PID（大镜像首载可能较慢，可稍后 omo status 重查）"
     fi ;;
+  __kb-cleanup)
+    # 内部：清理遗留 KB 循环（安装器覆盖启动器后调用；单一实现，避免两套清理逻辑漂移）
+    kill_kb_orphans
+    exit 0 ;;
   kb)
     shift
     [ -n "\$BUN_BIN" ] || { echo "✗ 需要 bun 运行 kb 子命令（重跑安装脚本以安装 bun）"; exit 1; }
@@ -359,6 +382,9 @@ if [ -n "$OLDKB0" ] && kill -0 "$OLDKB0" 2>/dev/null; then
   echo "  ↻ 已停止遗留的 KB 同步循环（PID $OLDKB0）——重启 serve 后会按新代码自动起新的"
 fi
 rm -f /tmp/omo-kb-sync.pid /tmp/omo-serve.stamp
+# 兜底：更早版本的孤儿可能已被后续循环覆盖 pid 文件（真机：旧 serve 的循环 setsid 脱离后 pid 文件被下一次启动覆盖）
+# ⇒ 复用启动器里的同一实现（/proc 扫描，不依赖 procps）
+"$BIN_DST" __kb-cleanup >/dev/null 2>&1 || true
 
 # ── 4) Yuyi 适配器配置（真实 HOME 的 ~/.yuyi，跨 Agent 凭据不进 ~/.omo）
 echo "[4/5] Yuyi 配置…"
