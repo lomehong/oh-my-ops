@@ -16,7 +16,7 @@
 一行命令（bootstrap 自动多通道回退；进入包内 install.sh 后 bun 自动装到 `~/.omo/bin`、omp 单文件运行时随包携带）：
 
 ```bash
-for u in "https://cdn.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://fastly.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://raw.githubusercontent.com/lomehong/oh-my-ops/main/scripts/bootstrap.sh"; do curl -fsSL --retry 3 --connect-timeout 8 "$u" -o /tmp/omo-install.sh && break; done; bash /tmp/omo-install.sh
+for u in "https://cdn.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://fastly.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://raw.githubusercontent.com/lomehong/oh-my-ops/main/scripts/bootstrap.sh"; do rm -f /tmp/omo-install.sh; curl -fsSL --retry 3 --connect-timeout 8 "$u" -o /tmp/omo-install.sh && break; done; [ -s /tmp/omo-install.sh ] && grep -q "omo 安装" /tmp/omo-install.sh && bash /tmp/omo-install.sh || echo "✗ bootstrap 下载失败（三源均不可达）：不要沿用 /tmp/omo-install.sh 旧文件，请重试或改用发布包"
 ```
 
 GitHub 访问稳定时也可用短版：
@@ -30,7 +30,8 @@ curl -fsSL https://github.com/lomehong/oh-my-ops/releases/latest/download/instal
 ```bash
 # 方式一（推荐）：官方入口经 jsdelivr 取 bootstrap（内部再取 release 资产；资产走 objects.githubusercontent.com）
 for u in "https://cdn.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" \
-         "https://fastly.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh"; do curl -fsSL --retry 3 --connect-timeout 8 "$u" -o /tmp/omo-install.sh && break; done; bash /tmp/omo-install.sh
+         "https://fastly.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh"; do rm -f /tmp/omo-install.sh; curl -fsSL --retry 3 --connect-timeout 8 "$u" -o /tmp/omo-install.sh && break; done
+[ -s /tmp/omo-install.sh ] && grep -q "omo 安装" /tmp/omo-install.sh && bash /tmp/omo-install.sh || echo "✗ bootstrap 下载失败：请勿沿用旧 /tmp/omo-install.sh"
 
 # 方式二：codeload 取源码包（无需 git），复用本机已有运行时（无 471MB 下载）
 curl -fsSL -o /tmp/omo.tar.gz "https://codeload.github.com/lomehong/oh-my-ops/tar.gz/refs/heads/main"

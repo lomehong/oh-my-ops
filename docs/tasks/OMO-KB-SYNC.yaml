@@ -91,3 +91,7 @@ report:
     op: 'report'
     by: 'omp-architect'
     note: '主人升级 logstash-124 实测确认修复生效（新循环写 [kb] <时间> exit=0；残留的 Script not found 系升级前旧进程历史日志）。据其过程再修两处：①**升级后旧 serve 未重启**的识别——安装时记录启动器 sha256 戳（/tmp/omo-serve.stamp），status 与 serve 均比对，不一致即明确提示「该服务是升级前启动的：kill <pid> && omo serve」（真机踩到：旧循环继续跑旧代码，KB 定时同步实际未修好）；②bootstrap 的 PATH 提示按实际落点（root → /usr/local/bin，普通用户 → ~/.local/bin；此前 root 安装却提示 ~/.local/bin 与实际不符）。探针补 [5d]（伪装存活旧 PID + 过期指纹 ⇒ status 必须告警）；过程中还修掉自己一处实现错误（指纹取值漏命令替换 ⇒ 判定恒不触发且把哈希打到输出）。'
+  - ts: '2026-09-18T02:50:00.000Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: 'logstash-124 二次升级（v0.11.2）现象归因并修复：①**入口静默失败**——主人脚本 `for u …; curl -o /tmp/omo-install.sh && break; done; bash /tmp/omo-install.sh`：三源全失败时循环不中断，**旧的 /tmp/omo-install.sh 被沿用**并继续执行 ⇒ 实际跑的是旧版 bootstrap（旧 PATH 文案、行为像未修）。已把 README 与 Release 说明的入口改为「先 rm 旧文件 + 下载后校验非空且含 bootstrap 特征，否则报错退出」；②**旧版 KB 循环的孤儿进程**——循环用 setsid 脱离，重启/升级 serve 都不会杀掉它，于是继续按旧代码（bun kb sync）往日志写 Script not found。已三处加固：循环每轮自检 serve PID（不在即退出）、serve 启动前清理遗留循环、安装器覆盖启动器后清理遗留循环与指纹戳。探针补 [5e]（伪装遗留循环 ⇒ 安装必须清理）。'

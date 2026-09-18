@@ -117,6 +117,18 @@ out="$(HOME="$HD" "$HD/.local/bin/omo" status 2>&1 || true)"
 if echo "$out" | grep -q "升级前"; then pass "status 识别旧服务并提示重启"; else fail "status 未提示旧服务：$(echo "$out" | grep -E '服务|知识库' | head -2 | tr '\n' ' ')"; fi
 rm -f /tmp/omo-serve.stamp /tmp/omo-serve.pid; kill "$FAKE_PID" 2>/dev/null || true
 
+echo "[5e] 安装/重启清理遗留 KB 循环（旧版孤儿会一直按旧代码写日志）"
+HE="$TMP/he"; mkdir -p "$HE"
+sleep 60 & STALE_KB=$!
+echo "$STALE_KB" > /tmp/omo-kb-sync.pid
+printf 'stale' > /tmp/omo-serve.stamp
+install_into "$HE" e >/dev/null 2>&1 || true
+sleep 1
+if kill -0 "$STALE_KB" 2>/dev/null; then fail "安装后遗留 KB 循环仍在（PID $STALE_KB）"; else pass "安装时已清理遗留 KB 循环"; fi
+[ -e /tmp/omo-kb-sync.pid ] && fail "遗留 pid 文件未清理" || pass "遗留 pid 文件已清理"
+[ -e /tmp/omo-serve.stamp ] && fail "遗留 serve 指纹未清理（旧服务会误判）" || pass "遗留 serve 指纹已清理"
+kill "$STALE_KB" 2>/dev/null || true
+
 echo "[6] 安装器：Yuyi 凭据传递（--token-file 0600 强制；--token 告警）"
 TF="$TMP/token-600"; printf 'probe-token-from-file\n' > "$TF"; chmod 600 "$TF"
 TFW="$TMP/token-644"; printf 'x\n' > "$TFW"; chmod 644 "$TFW"

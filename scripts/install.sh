@@ -266,11 +266,17 @@ case "\${1:-}" in
       echo "\$P" > /tmp/omo-serve.pid 2>/dev/null || true
       # 记录本次服务所用**启动器指纹**：升级后若未重启，serve/status 都能识别（真机踩到：升级后旧循环仍跑旧代码）
       { command -v sha256sum >/dev/null 2>&1 && sha256sum "\$0" | cut -d' ' -f1 || echo ""; } > /tmp/omo-serve.stamp 2>/dev/null || true
+      # 先清理遗留的 KB 循环（含旧版孤儿：setsid 出去、serve 死后仍在跑，会一直按旧代码写日志）
+      OLDKB="\$(cat /tmp/omo-kb-sync.pid 2>/dev/null || true)"
+      if [ -n "\$OLDKB" ] && kill -0 "\$OLDKB" 2>/dev/null; then kill "\$OLDKB" 2>/dev/null || true; echo "[omo] ↻ 已停止遗留的 KB 同步循环（PID \$OLDKB）"; fi
+      rm -f /tmp/omo-kb-sync.pid
       # KB 定时同步（默认 15min，OMO_KB_INTERVAL 可调）：只拉主线，不推；日志 /tmp/omo-kb-sync.log
       if [ -n "\$BUN_BIN" ]; then
         # 与启动器 kb 分支同款：\$0=bun \$1=kb-cli 路径 \$2=policy 路径（可空） \$3=间隔秒
         # （曾误把 bun 当入口 ⇒ 执行成 `bun kb sync` ⇒ Script not found，循环从未真正同步）
-        setsid bash -c 'while :; do printf "[kb] %s " "\$(date -Is)" >> /tmp/omo-kb-sync.log; [ -n "\$2" ] && export OMO_POLICY_PATH="\$2"; "\$0" "\$1" sync --quiet >> /tmp/omo-kb-sync.log 2>&1; echo "exit=\$?" >> /tmp/omo-kb-sync.log; sleep "\$3"; done' "\$BUN_BIN" "\$EXT/kb-cli.ts" "\$OMO_POLICY_PATH" "\${OMO_KB_INTERVAL:-900}" >/dev/null 2>&1 &
+        # \$4=serve 的 PID：每轮自检，serve 不在了就退出（否则 setsid 出去的循环会变孤儿，
+        #   升级/重启 serve 都不会杀掉它 ⇒ 旧代码继续写日志——真机踩到）
+        setsid bash -c 'while :; do if [ -n "\$4" ] && ! kill -0 "\$4" 2>/dev/null; then echo "[kb] serve(\$4) 已退出，同步循环结束" >> /tmp/omo-kb-sync.log; exit 0; fi; printf "[kb] %s " "\$(date -Is)" >> /tmp/omo-kb-sync.log; [ -n "\$2" ] && export OMO_POLICY_PATH="\$2"; "\$0" "\$1" sync --quiet >> /tmp/omo-kb-sync.log 2>&1; echo "exit=\$?" >> /tmp/omo-kb-sync.log; sleep "\$3"; done' "\$BUN_BIN" "\$EXT/kb-cli.ts" "\$OMO_POLICY_PATH" "\${OMO_KB_INTERVAL:-900}" "\$P" >/dev/null 2>&1 &
         echo "\$!" > /tmp/omo-kb-sync.pid 2>/dev/null || true
       fi
       [ -n "\$P" ] && echo "[omo] ✓ 服务已启动 PID \$P" || echo "[omo] ⚠ 服务启动后 15s 未检测到 PID（大镜像首载可能较慢，可稍后 omo status 重查）"
@@ -346,6 +352,13 @@ esac
 OMOEOF
 chmod +x "$BIN_DST"
 echo "  ✓ $BIN_DST"
+# 覆盖启动器后：遗留的 KB 循环仍按旧代码运行（setsid 孤儿）⇒ 一并清掉；serve 重启时会自动起新的
+OLDKB0="$(cat /tmp/omo-kb-sync.pid 2>/dev/null || true)"
+if [ -n "$OLDKB0" ] && kill -0 "$OLDKB0" 2>/dev/null; then
+  kill "$OLDKB0" 2>/dev/null || true
+  echo "  ↻ 已停止遗留的 KB 同步循环（PID $OLDKB0）——重启 serve 后会按新代码自动起新的"
+fi
+rm -f /tmp/omo-kb-sync.pid /tmp/omo-serve.stamp
 
 # ── 4) Yuyi 适配器配置（真实 HOME 的 ~/.yuyi，跨 Agent 凭据不进 ~/.omo）
 echo "[4/5] Yuyi 配置…"

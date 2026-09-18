@@ -124,7 +124,9 @@ jobs:
             ## oh-my-ops ${{ steps.ver.outputs.version }}
             ### 安装（一行命令，多通道自动回退，推荐）
             ```bash
-            for u in "https://cdn.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://fastly.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://raw.githubusercontent.com/lomehong/oh-my-ops/main/scripts/bootstrap.sh"; do curl -fsSL --retry 3 --connect-timeout 8 "$u" -o /tmp/omo-install.sh && break; done; bash /tmp/omo-install.sh
+            rm -f /tmp/omo-install.sh
+            for u in "https://cdn.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://fastly.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://raw.githubusercontent.com/lomehong/oh-my-ops/main/scripts/bootstrap.sh"; do curl -fsSL --retry 3 --connect-timeout 8 "$u" -o /tmp/omo-install.sh && break; done
+            [ -s /tmp/omo-install.sh ] && grep -q "omo 安装" /tmp/omo-install.sh && bash /tmp/omo-install.sh || echo "✗ bootstrap 下载失败：不要沿用旧文件"
             ```
 
             ### 短版（GitHub 访问稳定时）
