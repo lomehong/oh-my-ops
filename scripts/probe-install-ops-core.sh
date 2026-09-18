@@ -88,34 +88,22 @@ grep -q '^export OMO_DIR=' "$L" && pass "启动器导出 OMO_DIR" || fail "启�
 grep -q 'kb/credential.json' "$L" && pass "omo status 展示 KB 同步状态" || fail "omo status 未展示 KB 状态"
 
 echo
-echo "[5b] 启动器 KB 循环：命令必须真能跑通（曾误传 bun 路径 ⇒ Script not found）"
+echo "[5b] 启动器 KB 循环：命令能真跑通（曾误传 bun 路径 ⇒ Script not found）"
 HB="$TMP/hb"; mkdir -p "$HB"
 install_into "$HB" b >/dev/null 2>&1 || true
-# 复刻启动器里给定时循环用的同一条 argv：<启动器> kb sync --quiet
-if HOME="$HB" "$HB/.local/bin/omo" kb sync --quiet >"$TMP/kb-loop-cmd.log" 2>&1; then
-  pass "启动器 kb sync 可执行（本地模式）"
-else
-  fail "启动器 kb sync 失败：$(tail -2 "$TMP/kb-loop-cmd.log" | tr '\n' ' ')"
-fi
-grep -q "Script not found" "$TMP/kb-loop-cmd.log" && fail "出现 bun 误调用（Script not found）" || pass "无 bun 误调用（Script not found）"
-if grep -q 'sync --quiet' "$PKG/scripts/install.sh" && grep -q 'kb-cli.ts' "$PKG/scripts/install.sh"; then pass "循环调用形态正确（bun + kb-cli.ts）"; else fail "循环调用形态异常（应经 kb-cli.ts）"; fi
+if HOME="$HB" "$HB/.local/bin/omo" kb sync --quiet >"$TMP/kb-loop-cmd.log" 2>&1; then pass "启动器 kb sync 可执行（本地模式）"; else fail "启动器 kb sync 失败：$(tail -2 "$TMP/kb-loop-cmd.log" | tr '\n' ' ')"; fi
+grep -q "Script not found" "$TMP/kb-loop-cmd.log" && fail "出现 bun 误调用（Script not found）" || pass "无 bun 误调用"
+if grep -q 'sync --quiet' "$PKG/scripts/install.sh" && grep -q 'kb-cli.ts' "$PKG/scripts/install.sh"; then pass "循环调用形态正确（bun + kb-cli.ts）"; else fail "循环调用形态异常"; fi
 
-echo "[5c] 服务模式 KB 循环：实跑一次生成的循环并断言无错（真机曾 Script not found / command not found）"
+echo "[5c] 服务模式 KB 循环：实跑生成的循环并断言无错"
 HC="$TMP/hc"; mkdir -p "$HC"
 install_into "$HC" c >/dev/null 2>&1 || true
-rm -f /tmp/omo-kb-sync.pid; : > /tmp/omo-kb-sync.log   # 只认本轮：先截断共享日志
+rm -f /tmp/omo-kb-sync.pid; : > /tmp/omo-kb-sync.log
 HOME="$HC" OMO_KB_INTERVAL=2 "$HC/.local/bin/omo" serve >/dev/null 2>&1 || true
 sleep 4
 if [ -f /tmp/omo-kb-sync.log ]; then
-  if grep -qE "Script not found|command not found|exit=127" /tmp/omo-kb-sync.log; then
-    fail "循环日志出现调用错误：$(grep -m1 -E 'Script not found|command not found' /tmp/omo-kb-sync.log)"
-  else
-    pass "循环日志无调用错误（$(grep -c 'exit=' /tmp/omo-kb-sync.log) 轮已执行）"
-  fi
-  grep -q "本地模式" /tmp/omo-kb-sync.log && pass "无凭据时循环如实报本地模式" || pass "无凭据时循环已执行（本地模式提示随版本）"
-else
-  fail "循环未产出日志（serve 分支未起 KB 循环）"
-fi
+  if grep -qE "Script not found|command not found|exit=127" /tmp/omo-kb-sync.log; then fail "循环日志出现调用错误：$(grep -m1 -E 'Script not found|command not found' /tmp/omo-kb-sync.log)"; else pass "循环日志无调用错误（$(grep -c 'exit=' /tmp/omo-kb-sync.log) 轮已执行）"; fi
+else fail "循环未产出日志"; fi
 KBPID="$(cat /tmp/omo-kb-sync.pid 2>/dev/null || true)"; [ -n "$KBPID" ] && kill "$KBPID" 2>/dev/null || true
 pkill -f "kb-cli.ts sync" 2>/dev/null || true
 
