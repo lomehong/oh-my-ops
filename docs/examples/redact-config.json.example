@@ -1,0 +1,23 @@
+{
+  "enabled": true,
+  "restore": true,
+  "categories": {
+    "secret": true,
+    "id": true,
+    "bank": true,
+    "phone": true,
+    "email": true
+  },
+  "customRules": [
+    {
+      "name": "工单号",
+      "pattern": "WO-\\d{6}"
+    }
+  ],
+  "aliases": [
+    {
+      "term": "内网核心库",
+      "replacement": "CORE"
+    }
+  ]
+}

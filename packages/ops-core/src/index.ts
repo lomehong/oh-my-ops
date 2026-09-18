@@ -27,3 +27,33 @@ export { AuditLog, AUDIT_GENESIS, hashRecord } from "./audit.ts";
 export type { AuditData, AuditRecord, AuditVerifyResult } from "./audit.ts";
 export { PathGuard, realize } from "./path-guard.ts";
 export type { PathGuardRoots } from "./path-guard.ts";
+
+export {
+	isPlaceholderShape,
+	createMaskMap,
+	restoreText,
+	restoreAll,
+	restoreDeep,
+	maskText,
+	maskDeep,
+	extractAliasEntries,
+	builtinRules,
+	compileCustomRules,
+	MAX_CUSTOM_RULES,
+	MAX_PATTERN_LENGTH,
+	MAX_TERM_RULES,
+	MAX_TERM_LENGTH,
+	MAX_REPLACEMENT_LENGTH,
+	compileTermRules,
+	customRuleCode,
+	escapeRegExp,
+	defaultConfig,
+	finalizeConfig,
+	configFromRaw,
+	MappingStore,
+	loadStateSync,
+	saveStateSync,
+	SESSION_TTL_MS,
+	MAX_SESSIONS,
+} from "./redact.ts";
+export type { MaskMap, MaskHit, RedactConfig, RedactConfigInput, RedactRule, RedactCategories, PersistedState } from "./redact.ts";

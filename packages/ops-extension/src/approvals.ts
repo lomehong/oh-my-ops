@@ -1,3 +1,4 @@
+import { restoreToolInput } from "./redact.ts";
 import { evaluateAuthorization, READ, WRITE, EXEC, tierOf, needsOwnerAuth } from "@ops-pi/core";
 import type { ApprovalDecision, Tier, TargetPolicy, TokenStore } from "@ops-pi/core";
 import type { ExtensionAPI, ToolDefinition } from "@oh-my-pi/pi-coding-agent";
@@ -108,8 +109,15 @@ export function registerOpsTool(pi: ExtensionAPI, def: ToolDefinition): void {
 	if (!def.name.startsWith("ops_")) throw new Error(`[ops-pi] 工具名必须以 ops_ 前缀：${def.name}`);
 	if (def.loadMode !== "essential") throw new Error(`[ops-pi] ${def.name} 缺少 loadMode:"essential"（O8/X4–X6）`);
 	if (def.approval === undefined) throw new Error(`[ops-pi] ${def.name} 缺少 approval 档位（O2）`);
-	REGISTERED_DEFS.set(def.name, def);
-	pi.registerTool(def);
+	// 入站还原收口：模型回填的占位符一律在此还原为真实值（工具以真实值执行）。
+	// 宿主事件层的 `tool_call` 结果契约是「原始执行入参」，对部分工具不生效（真机实测）；
+	// 这里是我们自己工具的唯一入口，还原在此保证生效（未启用脱敏时 restoreToolInput 为 no-op）。
+	const wrapped: ToolDefinition = {
+		...def,
+		execute: (toolCallId, params, signal, onUpdate, ctx) => def.execute(toolCallId, restoreToolInput(params), signal, onUpdate, ctx),
+	};
+	REGISTERED_DEFS.set(def.name, wrapped);
+	pi.registerTool(wrapped);
 }
 
 // ── 审批层工厂（①-a）：把授权判定接进宿主 approval ──

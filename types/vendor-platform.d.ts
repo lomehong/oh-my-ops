@@ -115,6 +115,13 @@ declare module "@oh-my-pi/pi-coding-agent" {
 		/** ★ omp 为 string[]（X12）；返回值接受 string（O10，runner 归一化） */
 		systemPrompt: string[];
 	}
+	/** 发送给模型厂商之前触发；handler 可返回替换后的 payload（unknown） */
+	export interface BeforeProviderRequestEvent {
+		type: "before_provider_request";
+		payload: unknown;
+	}
+	export type BeforeProviderRequestEventResult = unknown;
+
 	export interface BeforeAgentStartEventResult {
 		systemPrompt?: string;
 	}
@@ -125,6 +132,10 @@ declare module "@oh-my-pi/pi-coding-agent" {
 		on(
 			event: "session_shutdown",
 			handler: (event: { type: "session_shutdown" }, ctx: ExtensionContext) => Promise<void> | void,
+		): void;
+		on(
+			event: "before_provider_request",
+			handler: (event: BeforeProviderRequestEvent, ctx: ExtensionContext) => Promise<BeforeProviderRequestEventResult | void> | BeforeProviderRequestEventResult | void,
 		): void;
 		on(
 			event: "before_agent_start",

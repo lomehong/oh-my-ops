@@ -12,6 +12,7 @@ import { setupHooks } from "./hooks.ts";
 import { registerOpsCommands } from "./commands.ts";
 import { registerWriteTools } from "./tools/write.ts";
 import { registerKnowledgeTools } from "./tools/knowledge.ts";
+import { setupRedact } from "./redact.ts";
 
 /**
  * omo 扩展入口（方案 §7.3）。
@@ -45,5 +46,12 @@ export default function (pi: ExtensionAPI): void {
 	registerOpsCommands(pi, ctx);
 	registerWriteTools(pi, ctx, ctx.vault, approval);
 	registerKnowledgeTools(pi, ctx, approval);
+	// 模型厂商边界双向脱敏（移植 omp-redact-extension）：出站掩码 + 入站还原。
+	// best-effort：任何异常都不得阻断扩展加载（否则工具清单断言会拒绝启动）。
+	try {
+		setupRedact(pi, ctx);
+	} catch (err) {
+		process.stderr.write(`[omo-redact] 装配失败（脱敏未启用，其余功能不受影响）：${String((err as Error)?.message ?? err)}\n`);
+	}
 	setupHooks(pi, ctx);
 }

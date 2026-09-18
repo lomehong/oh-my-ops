@@ -127,6 +127,17 @@ omo policy explain ops_shell_exec host=web-01 command="systemctl status nginx"
 omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 ```
 
+### 脱敏（模型厂商边界）
+
+发给模型厂商的请求在**出站**被脱敏为占位符，工具执行时**入站**还原为真实值——厂商看不到真实敏感值，本机工具始终用真实值。
+
+- **内置五类**：密钥（`sk-`/AKIA/ghp/github_pat/xox/JWT/Bearer/私钥块/`password=` 等赋值式）、身份证（**校验位**正确才脱敏）、
+  银行卡（**Luhn** 通过才脱敏）、手机号、邮箱；另有**自定义正则**与**别名**（固定词替换，可反向还原）。
+- **配置**：`$OMO_DIR/home/.omp/redact/config.json`（缺省=全内置启用+还原开）。示例见 `docs/examples/redact-config.json.example`。
+- **账本**：`$OMO_DIR/home/.omp/redact/state.json`（0600，按会话分账，含**真实值**）——位于 PathGuard 机密根内，Agent 经 `ops_file_*` 读不到。
+- **调试**：`OMO_REDACT_DEBUG=1` ⇒ `$OMO_DIR/home/.omp/redact/debug.log`（MASK/RESTORE 计数，不含真实值）。
+- **已知边界**：助手文本流中的占位符保持原样（宿主无流拦截点，安全方向退化）；配置改后需重启会话生效。
+
 ### 体检（只读）
 
 ```bash
