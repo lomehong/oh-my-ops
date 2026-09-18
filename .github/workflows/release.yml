@@ -144,7 +144,7 @@ jobs:
             omo status
             omo -p "Use ops_file_read to read /etc/hostname"
             ```
-          draft: false
+
             ### 知识库自注册服务（kb-enroll）一键部署
             ```bash
             curl -L "https://github.com/lomehong/oh-my-ops/releases/download/${{ steps.ver.outputs.version }}/omo-kb-service-${{ steps.ver.outputs.version }}.tar.gz" | tar xz
@@ -153,8 +153,9 @@ jobs:
             bash install.sh --api https://<你的Gitea>/git/api/v1 --repo <owner>/<repo> \
                  --admin-user <站点管理员> --admin-password-file /root/admin.pw \
                  --self-signed "<本机IP>" --host 0.0.0.0 --port 8787
-            omo-kb status && omo-kb enroll-hint    # 看健康与实例侧接入命令
+            omo-kb status && omo-kb enroll-hint
             ```
+          draft: false
           files: |
             install.sh
             oh-my-ops-*.tar.gz

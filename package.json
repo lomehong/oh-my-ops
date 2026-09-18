@@ -12,7 +12,7 @@
     "test:l1": "node --test packages/ops-core/test/*.test.ts",
     "test:l2": "bun test packages/ops-extension/test/guards.test.ts packages/ops-extension/test/platform.test.ts packages/ops-extension/test/audit-view.test.ts packages/ops-extension/test/read-tier-structure.test.ts packages/ops-extension/test/kb-sync.test.ts packages/ops-extension/test/kb-enroll.test.ts packages/ops-extension/test/knowledge.test.ts",
     "test:all": "bun test",
-    "test:ci": "npm run test:l1 && npm run test:l2 && npm run kb:provision:selftest && npm run test:enroll-install && npm run typecheck && npm run test:install && npm run test:bootstrap",
+    "test:ci": "npm run test:l1 && npm run test:l2 && npm run kb:provision:selftest && npm run test:enroll-install && npm run typecheck && npm run test:workflow && npm run test:install && npm run test:bootstrap",
     "typecheck": "npm run typecheck:core && node node_modules/typescript/bin/tsc -p packages/ops-extension/tsconfig.json --noEmit",
     "typecheck:core": "node node_modules/typescript/bin/tsc -p packages/ops-core/tsconfig.json --noEmit",
     "hooks:install": "git config core.hooksPath .githooks",
@@ -22,7 +22,8 @@
     "test:bootstrap": "bash scripts/probe-bootstrap-version.sh",
     "kb:provision:selftest": "bun scripts/ops-kb-provision.mjs --selftest",
     "kb:enroll:serve": "bun scripts/ops-kb-enroll-server.mjs",
-    "test:enroll-install": "bash scripts/probe-install-enroll-service.sh"
+    "test:enroll-install": "bash scripts/probe-install-enroll-service.sh",
+    "test:workflow": "bash scripts/probe-workflow-yaml.sh"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
