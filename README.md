@@ -127,6 +127,13 @@ omo policy explain ops_shell_exec host=web-01 command="systemctl status nginx"
 omo -p "用 yuyi_peers 查看当前在线的 Agent 列表"
 ```
 
+### 体检（只读）
+
+```bash
+bash scripts/omo-kb-doctor.sh          # 检查：布局/凭据/同步状态/KB 循环形态/旧服务/日志最近一轮
+```
+退出码 0=未发现阻断性问题，1=有 ✗ 项；只读、不重启任何服务。
+
 ### 知识库自注册服务（enroll）一键部署
 
 实例侧要「零人工」拿到凭据，需要一台常驻的自注册服务（形态与 omo 一致：私有域 + 一个启动器/单元，可整体删除）。

@@ -105,7 +105,16 @@ if [ -f /tmp/omo-kb-sync.log ]; then
   if grep -qE "Script not found|command not found|exit=127" /tmp/omo-kb-sync.log; then fail "循环日志出现调用错误：$(grep -m1 -E 'Script not found|command not found' /tmp/omo-kb-sync.log)"; else pass "循环日志无调用错误（$(grep -c 'exit=' /tmp/omo-kb-sync.log) 轮已执行）"; fi
 else fail "循环未产出日志"; fi
 KBPID="$(cat /tmp/omo-kb-sync.pid 2>/dev/null || true)"; [ -n "$KBPID" ] && kill "$KBPID" 2>/dev/null || true
-pkill -f "kb-cli.ts sync" 2>/dev/null || true
+# 清理本探针起的循环（不依赖 procps：纯 /proc 扫描）；否则它们会持续往共享日志写 Module not found（沙箱目录已删）
+for f in /proc/[0-9]*/cmdline; do
+  [ -r "$f" ] || continue
+  p="\${f#/proc/}"; p="\${p%/cmdline}"
+  c="$(tr '\0' ' ' < "$f" 2>/dev/null || true)"
+  case "$c" in *kb-cli.ts*"*"*sync*|*"bun kb sync"*) kill "$p" 2>/dev/null || true ;; esac
+done
+sleep 0.5
+LEFT=0; for f in /proc/[0-9]*/cmdline; do c="$(tr '\0' ' ' < "$f" 2>/dev/null || true)"; case "$c" in *kb-cli.ts*"*"*sync*|*"bun kb sync"*) LEFT=$((LEFT+1)) ;; esac; done
+[ "$LEFT" -eq 0 ] && pass "探针收尾：无遗留 KB 循环" || fail "探针遗留 KB 循环 $LEFT 个"
 
 echo "[5d] 旧服务识别：启动器变更后 status 必须提示重启（真机踩到：升级后旧循环仍跑旧代码）"
 HD="$TMP/hd"; mkdir -p "$HD"

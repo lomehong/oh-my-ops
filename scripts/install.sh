@@ -236,7 +236,7 @@ kill_kb_orphans() {
     [ "\$pid" = "$$" ] && continue
     cmd="\$(tr '\0' ' ' < "\$f" 2>/dev/null || true)"
     case "\$cmd" in
-      *kb-cli.ts*sync*|*"bun kb sync"*) kill "\$pid" 2>/dev/null && n=\$((n+1)) || true ;;
+      *kb-cli.ts*"*"*sync*|*"bun kb sync"*) kill "\$pid" 2>/dev/null && n=\$((n+1)) || true ;;
     esac
   done
   [ "\$n" -gt 0 ] && echo "[omo] ↻ 已清理 \$n 个遗留 KB 同步循环"
