@@ -84,7 +84,7 @@ jobs:
                    "packages/ops-extension/src/kb-cli.ts" "packages/ops-extension/src/kb-sync.ts" \
                    "packages/ops-extension/src/kb-credential.ts" "packages/ops-extension/src/kb-enroll.ts" \
                    "packages/ops-extension/src/redact.ts" "packages/ops-core/src/redact.ts" \
-                   "examples/redact-config.json.example"; do "packages/ops-extension/src/redact.ts" "packages/ops-core/src/redact.ts"
+                   "examples/redact-config.json.example"; do
             [ -e "/tmp/${PKG}/${f}" ] || { echo "✗ 打包缺关键文件：${f}"; exit 1; }
           done
 
