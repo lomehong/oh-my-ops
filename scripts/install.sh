@@ -7,6 +7,7 @@
 #   ~/.omo/extensions/ops-pi/     ← ops 扩展（含 ops-core 实体拷贝）
 #   ~/.omo/extensions/yuyi-omp-extension.js ← Yuyi 适配器
 #   ~/.omo/home/                  ← omp 进程的 HOME（状态根：.omp/…、.ops-pi/policy.json、.omp/agent/AGENTS.md）
+#   ~/.omo/home/.omp/agent/extensions/omp-redact-extension.js ← 脱敏扩展（厂商边界双向脱敏）
 #   ~/.local/bin/omo              ← 启动器（HOME 重定向 → omp-single）
 #
 # 前置：curl（解压/网络）。**不要求**机器上已有 omp/node/bun——运行时自备。
@@ -46,6 +47,7 @@ else
 fi
 YUYI_DIR="$REAL_HOME/.yuyi"
 YUYI_SRC="$REPO_ROOT/vendor/yuyi-omp-extension.js"
+REDACT_SRC="$REPO_ROOT/vendor/omp-redact-extension.js"
 
 # 取 JSON 字符串字段的纯 bash 实现（自包含：目标机可能没有 node/python）
 json_str() { # $1=键名  $2=json文件 → 打印值（无则空）
@@ -175,6 +177,19 @@ if [ -f "$YUYI_SRC" ]; then
   cp "$YUYI_SRC" "$EXT_DIR/yuyi-omp-extension.js"; echo "  ✓ Yuyi 适配器已部署"
 else
   echo "  ⚠ vendor/yuyi-omp-extension.js 不存在——跨 Agent 通讯不可用"
+fi
+
+# ── 脱敏扩展（厂商边界双向脱敏）：**与御驿/凭据完全无关**——不设 token 门控，任何安装形态都必须落位。
+#    落点 = 私有 HOME 的 omp 扩展目录：启动器把 HOME 重定向到 $HOME_DIR，omp 自动从这里加载
+#    （与 skills 同源的 $HOME/.omp/agent/ 约定；无需改启动器的 --extension 参数表）。
+#    单一事实源 = vendor/omp-redact-extension.js；install(1) 覆盖同名旧文件 ⇒ 重装/升级即刷新扩展本体。
+REDACT_DST="$HOME_DIR/.omp/agent/extensions/omp-redact-extension.js"
+if [ -f "$REDACT_SRC" ]; then
+  mkdir -p "$(dirname "$REDACT_DST")"
+  install -m 644 "$REDACT_SRC" "$REDACT_DST"
+  echo "  ✓ 脱敏扩展已部署：$REDACT_DST"
+else
+  echo "  ⚠ vendor/omp-redact-extension.js 不存在——模型厂商边界脱敏不可用"
 fi
 
 # ── 3) omo 启动器（HOME 重定向 = 与原生 omp 状态隔离的唯一机制，H4 探针实证）

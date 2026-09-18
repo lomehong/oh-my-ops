@@ -58,7 +58,7 @@ bash scripts/install.sh
 
 1. 安装私有 bun 到 `~/.omo/bin/`（锁 1.4.x；官方脚本直连 → npmmirror 镜像回退；已装同版本则跳过）
 2. 布置预编译 omp 单文件运行时到 `~/.omo/runtime/`（品牌内置；构建自 pin 的 oh-my-pi 18.1.18）
-3. 部署 ops-pi 扩展 + Yuyi 适配器到 `~/.omo/extensions/`
+3. 部署 ops-pi 扩展 + Yuyi 适配器到 `~/.omo/extensions/`，脱敏扩展（模型厂商边界双向脱敏）到 `~/.omo/home/.omp/agent/extensions/`（与凭据无关，无 token 也落位）
 4. 创建 `omo` CLI（启动器将 HOME 重定向到 `~/.omo/home`——状态/策略/凭据/会话全部私有，**与原生 omp 及 `~/.omp` 零接触**）
 5. 初始化策略（缺省：变更类操作全拒）+ Yuyi 通讯配置（沿用已有 token/设备名）
 

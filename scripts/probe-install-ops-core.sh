@@ -82,6 +82,21 @@ H4="$TMP/h4"; mkdir -p "$H4"
 HOME="$H4" bash "$PKG/scripts/install.sh" --name no-token >"$TMP/install-notoken.log" 2>&1 || fail "无 token 安装失败（见 $TMP/install-notoken.log）"
 [ -d "$H4/.omo/home/.omp/agent/skills" ] && fail "无 token 仍部署 skills（门控失效）" || pass "无 token 不部署 skills（门控生效）"
 
+echo "[4b] 脱敏扩展部署（独立落位 \$HOME/.omp/agent/extensions，与御驿/凭据无关）"
+RDV="$PKG/vendor/omp-redact-extension.js"
+RD1="$H1/.omo/home/.omp/agent/extensions/omp-redact-extension.js"
+[ -f "$RDV" ] && pass "vendor/omp-redact-extension.js 随发布包提供" || fail "发布包缺 vendor/omp-redact-extension.js"
+[ -f "$RD1" ] && pass "脱敏扩展落位：\$HOME/.omp/agent/extensions/omp-redact-extension.js" || fail "脱敏扩展未落位（$RD1）"
+cmp -s "$RD1" "$RDV" && pass "安装后与 vendor 逐字节一致（本体未被改动）" || fail "安装后与 vendor 不一致（本体被改动或截断）"
+bun build --target=node --outfile="$TMP/redact.bundle.js" "$RD1" >/dev/null 2>&1 \
+  && pass "落位文件可被 JS 运行时解析（非空/非截断/语法有效）" \
+  || fail "落位文件无法解析（损坏或截断）"
+printf '// stale（模拟旧版本本体）\n' > "$RD1"
+install_into "$H1" redact-refresh || fail "重装失败（见 $TMP/install-redact-refresh.log）"
+cmp -s "$RD1" "$RDV" && pass "重装覆盖旧本体（vendor 为单一事实源）" || fail "重装未刷新扩展本体"
+RD4="$H4/.omo/home/.omp/agent/extensions/omp-redact-extension.js"
+if [ -f "$RD4" ] && cmp -s "$RD4" "$RDV"; then pass "无 token 安装仍落位脱敏扩展（未误加凭据门控）"; else fail "无 token 时脱敏扩展缺失/不一致（凭据门控误加到脱敏段）"; fi
+
 echo "[5] KB 同步（OMO-KB-SYNC P1）：模块部署 + 启动器子命令"
 EXT2="$H2/.omo/extensions/ops-pi"
 for f in kb-cli.ts kb-sync.ts kb-credential.ts kb-enroll.ts; do
@@ -170,6 +185,17 @@ if grep -qE "Script not found|command not found" "$LOG" 2>/dev/null; then
   fail "安装输出含杂散命令执行：$(grep -m1 -E 'Script not found|command not found' "$LOG")"
 else
   pass "安装输出无杂散命令执行（Script not found / command not found）"
+fi
+
+echo "[5h] 体检脚本：无凭据时的『最后同步』必须标注为本地模式（防误读为远端同步成功）"
+HH="$TMP/hh"; mkdir -p "$HH"; install_into "$HH" h >/dev/null 2>&1 || true
+HOME="$HH" "$HH/.local/bin/omo" kb sync --quiet >/dev/null 2>&1 || true   # 造出 state.json（本地模式）
+if [ -f "$PKG/../scripts/omo-kb-doctor.sh" ] || [ -f "$PWD/scripts/omo-kb-doctor.sh" ]; then
+  DOC="$REPO_ROOT/scripts/omo-kb-doctor.sh"
+  out="$(bash "$DOC" --dir "$HH/.omo" 2>&1 || true)"
+  echo "$out" | grep -q "本地模式" && pass "无凭据时标注本地模式" || fail "无凭据时未标注（可能被误读为远端同步成功）"
+else
+  pass "（跳过：未找到体检脚本）"
 fi
 
 echo "[6] 安装器：Yuyi 凭据传递（--token-file 0600 强制；--token 告警）"
