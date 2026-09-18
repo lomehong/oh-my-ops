@@ -176,16 +176,31 @@ else
     esac
     san="IP:$SELF_SIGNED"
     case "$SELF_SIGNED" in *[a-zA-Z]*) san="DNS:$SELF_SIGNED" ;; esac
+    # 用**配置文件**而非 -addext：-addext 是 OpenSSL 1.1.1+ 才有，el7 自带 1.0.2（真机踩到 ⇒ 安装静默中止）
+    CFG="$DIR/logs/openssl.cnf"
+    cat > "$CFG" <<EOF
+[req]
+distinguished_name=dn
+x509_extensions=v3
+prompt=no
+[dn]
+CN=$SELF_SIGNED
+[v3]
+subjectAltName=$san
+basicConstraints=CA:TRUE
+EOF
     if ! openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
-        -keyout "$DIR/tls/key.pem" -out "$DIR/tls/cert.pem" \
-        -subj "/CN=$SELF_SIGNED" -addext "subjectAltName=$san" >"$DIR/logs/openssl.log" 2>&1; then
+        -keyout "$DIR/tls/key.pem" -out "$DIR/tls/cert.pem" -config "$CFG" >"$DIR/logs/openssl.log" 2>&1; then
       echo "  ✗ 生成自签证书失败（openssl 输出如下）："
       sed 's/^/      /' "$DIR/logs/openssl.log" | tail -5
       die "请改用 --self-signed auto 或 --tls-cert/--tls-key 提供证书"
     fi
-    rm -f "$DIR/logs/openssl.log"
+    rm -f "$DIR/logs/openssl.log" "$CFG"
     chmod 600 "$DIR/tls/key.pem"; chmod 644 "$DIR/tls/cert.pem"
-    ok "已生成自签证书（SAN=$san，有效期 10 年）"
+    if ! openssl x509 -in "$DIR/tls/cert.pem" -noout -text 2>/dev/null | grep -q "Subject Alternative Name"; then
+      die "自签证书缺少 SAN（实例会校验失败）：请改用 --tls-cert/--tls-key 提供证书"
+    fi
+    ok "已生成自签证书（SAN=$san，有效期 10 年，openssl $(openssl version | awk '{print $2}')）"
 fi
 FP="$(openssl x509 -in "$DIR/tls/cert.pem" -noout -fingerprint -sha256 2>/dev/null | sed 's/^.*=//' || echo '')"
 
