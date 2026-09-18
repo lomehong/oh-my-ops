@@ -87,3 +87,7 @@ report:
     op: 'report'
     by: 'omp-architect'
     note: '服务模式验证（主人要求「4 台实例都是服务模式启动，先验证」）发现并修复**上线级缺陷**：①启动器的 KB 定时循环把 `$BUN_BIN` 当入口，实际执行成 `bun kb sync` ⇒ 日志恒为 `Script not found "kb"`（我 P1 引入）⇒ **服务模式的 KB 定时同步从未真正跑过**，而 `omo status` 只看 pid 就报「定时中」（假绿）；②`omo status` 的 KB 行在生成物里调用仅存在于安装脚本的 `json_str` ⇒ `command not found`、显示成 `最后同步  ✗`；③修循环时误引生成物中不存在的 `$BIN_DST` ⇒ `: command not found`；④修 json_str 时在未加引号 heredoc 的注释里留了 `$1` 被安装器展开（v0.9.9 同类老坑）。全部修复：循环改为与启动器 kb 分支同款（bun + kb-cli.ts，可选 OMO_POLICY_PATH），每轮记时间戳与 exit；status 的 KB 行改读 kb/state.json 显示**真实最后同步时间与结果**；json_str 随产物生成（注释内 $ 全转义）；探针新增 [5b]/[5c]——**实跑生成的循环**并断言日志无 Script not found / command not found / exit=127。服务模式行为实测（沙箱）：无凭据→如实报本地模式；**热加凭据不重启服务即自动拉取（48s 内拉到 5 条目）**；篡改凭据→循环 exit=1 如实报失败。'
+  - ts: '2026-09-18T02:20:00.000Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: '主人升级 logstash-124 实测确认修复生效（新循环写 [kb] <时间> exit=0；残留的 Script not found 系升级前旧进程历史日志）。据其过程再修两处：①**升级后旧 serve 未重启**的识别——安装时记录启动器 sha256 戳（/tmp/omo-serve.stamp），status 与 serve 均比对，不一致即明确提示「该服务是升级前启动的：kill <pid> && omo serve」（真机踩到：旧循环继续跑旧代码，KB 定时同步实际未修好）；②bootstrap 的 PATH 提示按实际落点（root → /usr/local/bin，普通用户 → ~/.local/bin；此前 root 安装却提示 ~/.local/bin 与实际不符）。探针补 [5d]（伪装存活旧 PID + 过期指纹 ⇒ status 必须告警）；过程中还修掉自己一处实现错误（指纹取值漏命令替换 ⇒ 判定恒不触发且把哈希打到输出）。'

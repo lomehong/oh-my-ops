@@ -160,9 +160,12 @@ bash "$PKG_DIR/scripts/install.sh" "$@"
 # ── [4/4] 完成
 ELAPSED=$((SECONDS - T0))
 step "清理临时文件 ✓"
+# 启动器落点随身份而变：root → /usr/local/bin（系统级标准 PATH），普通用户 → ~/.local/bin
+# （真机踩到：root 装完却提示「~/.local/bin 不在 PATH」，与实际落点不符）
+LAUNCH_DIR="/usr/local/bin"; [ "$(id -u)" = "0" ] || LAUNCH_DIR="$HOME/.local/bin"
 case ":$PATH:" in
-  *":$HOME/.local/bin:"*) ;;
-  *) warn "~/.local/bin 不在 PATH：export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+  *":$LAUNCH_DIR:"*) ;;
+  *) warn "$LAUNCH_DIR 不在 PATH：export PATH=\"$LAUNCH_DIR:\$PATH\"" ;;
 esac
 printf '\n%s═══ ✓ omo 安装完成（%s，耗时 %ss）═══%s\n' "$G" "$VER" "$ELAPSED" "$N"
 printf '  %somo%s               交互式\n' "$B" "$N"

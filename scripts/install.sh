@@ -242,7 +242,14 @@ case "\${1:-}" in
     for arg in "\$@"; do case "\$arg" in --foreground) FOREGROUND=true ;; *) EXTRA_ARGS+=("\$arg") ;; esac; done
     if [ -n "\$(rpc_pids | head -1)" ]; then
       LIVE=\$(rpc_pids | head -1 || true)
-      echo "[omo] ✓ 已有 serve 在运行（PID \$LIVE），本次不重复启动。停止：kill \$LIVE"
+      CUR="\$( { command -v sha256sum >/dev/null 2>&1 && sha256sum "\$0" | cut -d' ' -f1 || echo ""; } 2>/dev/null )"
+      OLDST="\$(cat /tmp/omo-serve.stamp 2>/dev/null || true)"
+      if [ -n "\$CUR" ] && [ -n "\$OLDST" ] && [ "\$CUR" != "\$OLDST" ]; then
+        echo "[omo] ⚠ 已有 serve 在运行（PID \$LIVE），但它是**升级前**的旧进程（启动器已变更）"
+        echo "      请重启以生效：kill \$LIVE && omo serve"
+      else
+        echo "[omo] ✓ 已有 serve 在运行（PID \$LIVE），本次不重复启动。停止：kill \$LIVE"
+      fi
       exit 0
     fi
     if [ "\$FOREGROUND" = true ]; then
@@ -257,6 +264,8 @@ case "\${1:-}" in
       # PID 检测 retry loop：471MB 二进制加载需数秒，单次 sleep 1 会竞态空文件（logstash-124 实测）
       P=""; for i in \$(seq 1 15); do sleep 1; P="\$(rpc_pids | tail -1 || true)"; [ -n "\$P" ] && break; done
       echo "\$P" > /tmp/omo-serve.pid 2>/dev/null || true
+      # 记录本次服务所用**启动器指纹**：升级后若未重启，serve/status 都能识别（真机踩到：升级后旧循环仍跑旧代码）
+      { command -v sha256sum >/dev/null 2>&1 && sha256sum "\$0" | cut -d' ' -f1 || echo ""; } > /tmp/omo-serve.stamp 2>/dev/null || true
       # KB 定时同步（默认 15min，OMO_KB_INTERVAL 可调）：只拉主线，不推；日志 /tmp/omo-kb-sync.log
       if [ -n "\$BUN_BIN" ]; then
         # 与启动器 kb 分支同款：\$0=bun \$1=kb-cli 路径 \$2=policy 路径（可空） \$3=间隔秒
@@ -283,6 +292,13 @@ case "\${1:-}" in
       echo "  服务：✓ PID \$LIVE（pid 文件过期已修正）"; echo "\$LIVE" > /tmp/omo-serve.pid
     else
       echo "  服务：✗（omo serve 启动）"
+    fi
+    # 旧服务识别（无论走哪条分支都判定一次）：启动器已变更但服务仍是升级前启动的 ⇒ 明确提示重启
+    SERV_PID="\$(cat /tmp/omo-serve.pid 2>/dev/null || true)"
+    CUR2="\$( { command -v sha256sum >/dev/null 2>&1 && sha256sum "\$0" | cut -d' ' -f1 || echo ""; } 2>/dev/null )"
+    OLD2="\$(cat /tmp/omo-serve.stamp 2>/dev/null || true)"
+    if [ -n "\$SERV_PID" ] && kill -0 "\$SERV_PID" 2>/dev/null && [ -n "\$CUR2" ] && [ -n "\$OLD2" ] && [ "\$CUR2" != "\$OLD2" ]; then
+      echo "        ⚠ 该服务（PID \$SERV_PID）是**升级前**启动的（启动器已变更）：kill \$SERV_PID && omo serve（否则 KB 定时同步仍走旧代码）"
     fi
     if [ -f "\$OMO_DIR/kb/credential.json" ]; then
       KBPID="\$(cat /tmp/omo-kb-sync.pid 2>/dev/null || true)"
