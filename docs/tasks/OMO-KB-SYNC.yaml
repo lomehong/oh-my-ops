@@ -75,3 +75,7 @@ report:
     op: 'report'
     by: 'omp-architect'
     note: 'P1/P2/P3 收口（自报，待主人确认）：代码、测试、文档、打包四件事完成。①代码：实例侧同步（kb-cli/kb-sync/kb-credential/git-compat）+ 供给 CLI（ops-kb-provision）+ 自注册服务与客户端（ops-kb-enroll-server/kb-enroll/共享 lib）；②测试：kb-sync 18 例、kb-enroll 5 例、provisioner 自检 11/11、门禁含 core+extension 双侧 typecheck；③文档：设计文档（含 Gitea 1.27.3 实测表与 as-built §5.2″/§5.6′）、五轮执行记录、README 新增「知识库同步（KB）」与文档表两行；④打包：release.yml 清单断言已覆盖 KB 脚本/服务/模块，本地按同一 cp 序列模拟验证全部在包内。生产验收（本机 PC-SZ-375）已完成 enroll/同步/轮换/吊销/恢复全链。遗留（非本任务可完成）：节点升级与实例接入由主人手工执行；PR #1 合并与 main 分支保护待主人决定。'
+  - ts: '2026-09-18T00:20:00.000Z'
+    op: 'report'
+    by: 'omp-architect'
+    note: '上线缺陷修复（v0.10.1）：v0.10.0 安装后扩展拒绝加载——`ops_kb_status：冒名的 ops_ 工具`（生产 session_start 的工具清单断言）。根因：新增工具未登记 `TIER_TABLE`；而既有测试助手 `registerAll` 是**遍历 TIER_TABLE 生成工具清单**（循环论证）⇒ CI 结构性漏检。处置：①`approvals.ts` 补 `ops_kb_status: READ`；②新增「真实注册编排 × 档位表全覆盖」守卫——调用 extension.ts 同款 8 个真实注册函数，再交给生产的 `checkToolRegistry` 判定（先红后绿，红时复现的就是生产原话）；③澄清 registerAll 语义（它只是制桩，不是覆盖率守卫）。'

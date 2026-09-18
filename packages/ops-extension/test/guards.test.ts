@@ -10,6 +10,15 @@ import {
 	standardAuthzView,
 } from "../src/guards.ts";
 import type { AuthorizationView } from "../src/guards.ts";
+import { makeApprovalFactory } from "../src/approvals.ts";
+import type { OpsContext } from "../src/context.ts";
+import { registerReadOnlyTools } from "../src/tools/read-only.ts";
+import { registerShellTools } from "../src/tools/shell.ts";
+import { registerLogTools } from "../src/tools/log.ts";
+import { registerDockerTools, registerK8sTools } from "../src/tools/docker-k8s.ts";
+import { registerServiceTools } from "../src/tools/service.ts";
+import { registerWriteTools } from "../src/tools/write.ts";
+import { registerKnowledgeTools } from "../src/tools/knowledge.ts";
 
 // ── 桩：模拟 omp 注入面（工具注册表）──
 type RegisteredTool = { name: string; loadMode?: string; approval?: unknown; sourceInfo?: { path?: string } };
@@ -40,6 +49,8 @@ function minimalDef(name: string): RegisteredTool & { loadMode: string; execute:
 	} as RegisteredTool & { loadMode: string; execute: () => Promise<unknown> };
 }
 
+/** 注意：本助手**由 TIER_TABLE 生成**，只用于制造注册表状态（劫持/冲突类用例）；
+ *  它**不是**覆盖率守卫——「加了工具忘了进档位表」由下方「真实注册编排」用例拦截。 */
 function registerAll(pi: FakePi): void {
 	for (const name of Object.keys(TIER_TABLE)) {
 		registerOpsTool(pi as never, minimalDef(name) as never);
@@ -266,5 +277,78 @@ describe("assertAuthorized（③ execute 权威复核，X19 场景）", () => {
 			new StaticTokenStore([]),
 		);
 		expect(assertAuthorized("ops_file_write", { path: "/tmp/ok", content: "x" }, writable)).toBe("policy");
+	});
+});
+
+// ── 真实注册编排守卫（2026-09-18：v0.10.0 上线后生产报「ops_kb_status：冒名的 ops_ 工具」）
+// 教训：旧助手 registerAll 是**遍历 TIER_TABLE 生成工具清单**（循环论证）⇒ 永远发现不了
+// 「加了工具但没进档位表」。此处改为**调用真实注册函数**，交给生产的 checkToolRegistry 判定。
+
+type ToolDefLike = { name: string; label: string; description: string; loadMode: string; approval: unknown; parameters: unknown; execute: (id: string, params: unknown, signal?: AbortSignal) => Promise<unknown> };
+
+const zStub = (): Record<string, unknown> => {
+	const chain: Record<string, unknown> = {};
+	chain.describe = () => chain;
+	chain.optional = () => chain;
+	return chain;
+};
+
+class RealFakePi {
+	readonly registered: Record<string, ToolDefLike> = {};
+	readonly zod = { object: () => zStub(), string: () => zStub(), number: () => zStub(), array: () => zStub(), enum: () => zStub(), boolean: () => zStub(), record: () => zStub(), any: () => zStub() };
+	registerTool(def: ToolDefLike): void {
+		this.registered[def.name] = def;
+	}
+	getAllTools(): Array<{ name: string; sourceInfo?: { path?: string } }> {
+		return Object.entries(this.registered).map(([name, def]) => ({
+			name,
+			sourceInfo: { path: (def as unknown as { sourceInfo?: { path?: string } }).sourceInfo?.path ?? `ops-extension/src/tools/${name}.ts` },
+		}));
+	}
+}
+
+function fakeOps(): { ctx: OpsContext; approval: (name: string) => unknown } {
+	const policy = new DefaultDenyPolicy([{ host: LOCAL_HOST, actions: ["shell"] }]);
+	const tokens = new StaticTokenStore([]);
+	const shell = { exec: async () => ({ stdout: "", stderr: "", exitCode: 0, durationMs: 0, truncated: false }) };
+	const ctx = {
+		authzView: standardAuthzView(policy, tokens),
+		forHost: () => ({ host: undefined, shell }),
+		shell,
+		omoDir: "/tmp/omo-guard-test",
+		kbDir: "/tmp/omo-guard-test/knowledge",
+		kbRepo: undefined,
+		kbBranch: "main",
+		kb: { list: async () => [], search: async () => [], save: async () => ({ title: "t", file: "f" }) },
+		vault: { store: async () => {}, read: async () => "", keys: async () => [], remove: async () => {}, rekey: async () => {} },
+	} as unknown as OpsContext;
+	return { ctx, approval: makeApprovalFactory(policy, tokens) };
+}
+
+/** 复刻 extension.ts 的真实注册编排（工具面） */
+function registerRealTools(pi: RealFakePi): void {
+	const { ctx, approval } = fakeOps();
+	registerShellTools(pi as never, ctx, approval as never);
+	registerLogTools(pi as never, ctx);
+	registerDockerTools(pi as never, ctx, approval as never);
+	registerK8sTools(pi as never, ctx, approval as never);
+	registerServiceTools(pi as never, ctx, approval as never);
+	registerReadOnlyTools(pi as never, ctx);
+	registerWriteTools(pi as never, ctx, (ctx as unknown as { vault: never }).vault, approval as never);
+	registerKnowledgeTools(pi as never, ctx, approval as never);
+}
+
+describe("★ 真实注册编排 × 档位表全覆盖（CI 拦截「加了工具忘了进 TIER_TABLE」）", () => {
+	test("真实注册出来的每个 ops_ 工具都必须在 TIER_TABLE 内，且档位表声明的都已注册", () => {
+		const pi = new RealFakePi();
+		registerRealTools(pi);
+		const names = Object.keys(pi.registered).sort();
+		// 反向保障：本批真实注册确实发生了（防桩写错导致空跑）
+		expect(names.length).toBeGreaterThan(15);
+		expect(names).toContain("ops_kb_status");
+
+		const report = checkToolRegistry(pi as never);
+		expect(report.failures).toEqual([]);
+		expect(report.hijacked).toEqual([]);
 	});
 });

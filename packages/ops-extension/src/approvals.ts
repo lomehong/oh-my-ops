@@ -37,6 +37,7 @@ export const TIER_TABLE: Readonly<Record<string, Tier | ((args: unknown) => Tier
 	ops_kb_search: READ,
 	ops_kb_save: WRITE,
 	ops_kb_sync: WRITE,
+	ops_kb_status: READ,
 
 	// P14 · write（vault 口令轮换）
 	ops_vault_rekey: WRITE,
