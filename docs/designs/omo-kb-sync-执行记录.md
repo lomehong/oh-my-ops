@@ -177,6 +177,10 @@ git ls-remote（同凭据）          → ✓（自证二；**证明生产允许
 | **TLS 直连** | ✓ 服务 HTTPS（`/healthz` → `tls:true`）；客户端默认拒绝自签证书；`--allow-insecure-tls` 后经 TLS 完成生产轮换 |
 
 **顺带清理**：今日用 `provision` 临时建的 `omo-bot-pcsz375` 已 `revoke --delete-user`（同一设备只留一个 bot）。
+> ⚠️ **2026-09-20 勘误**：服务端实查该账号**仍然存在**——上述清理未生效（或未实际执行）。
+> 同日核查确认：`omo-bot-pc-sz-375` 为 09-18 兑换端到端所建，至今仍是 PC-SZ-375 的**活跃凭据**
+> （credential.json 在用，ls-remote 实测有效），但因当时兑换走临时 registry，**生产 registry 无此条目**
+> ⇒ 不可轮换/审计。两号待正规化：删旧建新（enroll 重签）后迁移。
 
 **门禁**：`npm run test:ci` 全绿（L1 150、L2 含 enroll 5 例、provisioner 自检 11/11、**core+extension 双侧 typecheck**、install/bootstrap 探针）。
 
