@@ -1,0 +1,15 @@
+id: 'KBORG-1'
+title: '知识库组织 reform：域活档案 + sync 机械归并 + 合流期 lint 门禁（即前述 KBUI-2 方向）'
+state: '待执行'
+level: 'data-plane(改变 4 实例的合流语义；分期 warn→strict 降低切换风险)'
+created: '2026-09-21T09:43:42.286Z'
+accept:
+  - 'sync --push 按「系统: X」头机械归并进 <X>/README.md 活档案（幂等：归并后移除条目文件）；无头/未知域兜底 runbooks 并在报告警示'
+  - 'kb 服务新增 /kb/webhook（HMAC 校验）+ lint：路径白名单/文件名/元数据一致性硬拦，相似度 >0.9 硬拦、0.5~0.9 PR 评论警示；status 回写 kb-lint'
+  - 'domains.yml 入库（域白名单唯一事实源），lint 模式 warn→strict 可配置（存量过渡）'
+  - '渲染/契约/回归探针全绿；旧实例（未升级 sync）走 warn 模式不阻塞合流'
+events:
+  - ts: '2026-09-21T09:43:42.433Z'
+    op: 'create'
+    by: 'omp-architect'
+    note: '知识库组织 reform：域活档案 + sync 机械归并 + 合流期 lint 门禁（即前述 KBUI-2 方向）'
