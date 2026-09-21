@@ -97,7 +97,7 @@ if (configPath !== undefined) {
 }
 const useTls = args["tls-cert"] !== undefined && args["tls-key"] !== undefined;
 const UI_ON = args.ui === true || args.ui === "on";
-const UI_IDENTITY_HEADER = typeof args["ui-identity-header"] === "string" && args["ui-identity-header"] !== "" ? args["ui-identity-header"] : "X-Forwarded-User";
+const UI_IDENTITY_HEADER = typeof args["ui-identity-header"] === "string" && args["ui-identity-header"] !== "" ? args["ui-identity-header"] : "X-Auth-Username"; // 真机实测定值（yufu/huntian-gateway）
 
 if (args.repo === undefined || args.api === undefined) {
 	console.error("✗ 需要 --api 与 --repo（或提供 --config <config.env>）");
