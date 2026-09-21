@@ -110,7 +110,7 @@ jobs:
           cp scripts/omo-kb-fleet.sh "/tmp/${PKG}/"
           mkdir -p "/tmp/${PKG}/ui"
           cp scripts/ui/index.html "/tmp/${PKG}/ui/index.html"
-          cp scripts/lib/kb-gitea.mjs scripts/lib/kb-registry.mjs scripts/lib/kb-audit.mjs scripts/lib/kb-auth.mjs scripts/lib/kb-ui-config.mjs scripts/lib/bun.sh "/tmp/${PKG}/lib/"
+          cp scripts/lib/kb-gitea.mjs scripts/lib/kb-registry.mjs scripts/lib/kb-audit.mjs scripts/lib/kb-auth.mjs scripts/lib/kb-ui-config.mjs scripts/lib/kb-lint.mjs scripts/lib/bun.sh "/tmp/${PKG}/lib/"
           # 清单断言：服务包缺任一关键文件即红（服务零外部依赖，lib/ 必须齐全）
           for f in install.sh ops-kb-enroll-server.mjs ops-kb-provision.mjs omo-kb-fleet.sh ui/index.html lib/kb-gitea.mjs lib/kb-registry.mjs lib/kb-audit.mjs lib/kb-auth.mjs lib/kb-ui-config.mjs lib/kb-lint.mjs lib/bun.sh; do
             [ -e "/tmp/${PKG}/${f}" ] || { echo "✗ 服务包缺文件：${f}"; exit 1; }
