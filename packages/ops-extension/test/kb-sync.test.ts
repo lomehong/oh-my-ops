@@ -60,6 +60,7 @@ describe("syncKb：分支纪律（真 git + file:// 裸仓）", () => {
 			expect(branches1).not.toContain("main"); // A 的提交没有进 main
 
 			// B 节点：只拉 main → 看不到 A 的条目（符合「main 由中心合流」模型）
+			// KBORG-1：无头条目被 organize 归并进 runbooks/README.md（条目文件移除，内容在活档案）
 			const rb = await syncKb({ omoDir: dirs.b, kbDir: path.join(dirs.b, "knowledge"), repo: bare, branch: "main", device: "node-b", runner: shell, push: false });
 			expect(rb.ok).toBe(true);
 			expect(fs.existsSync(path.join(dirs.b, "knowledge", "runbook-502.md"))).toBe(false);
@@ -75,10 +76,12 @@ describe("syncKb：分支纪律（真 git + file:// 裸仓）", () => {
 			const pushMain = await shell.exec(["git", "push", "origin", "FETCH_HEAD:refs/heads/main"], { cwd: coordClone, timeoutMs: 30_000 });
 			expect(pushMain.exitCode).toBe(0);
 
-			// B 再同步 → 见到条目
+			// B 再同步 → 见到条目（KBORG-1：以活档案小节形式存在）
 			const rb2 = await syncKb({ omoDir: dirs.b, kbDir: path.join(dirs.b, "knowledge"), repo: bare, branch: "main", device: "node-b", runner: shell, push: false });
 			expect(rb2.ok).toBe(true);
-			expect(fs.existsSync(path.join(dirs.b, "knowledge", "runbook-502.md"))).toBe(true);
+			const seen = fs.readFileSync(path.join(dirs.b, "knowledge", "runbooks", "README.md"), "utf8");
+			expect(seen).toContain("Runbook 502");
+			expect(seen).toContain("现象/根因/处置");
 		} finally {
 			cleanup();
 		}
@@ -170,7 +173,8 @@ describe("凭据绝不入库（含 kbDir 与 $OMO_DIR/kb 误配的场景）", ()
 			const r = await syncKb({ omoDir: omo, kbDir: omo, repo: bare, branch: "main", device: "node-nested", runner: shell, push: true });
 			expect(r.ok).toBe(true);
 			const tracked = await shell.exec(["git", "ls-files"], { cwd: omo, timeoutMs: 30_000 });
-			expect(tracked.stdout).toContain("real-entry.md");
+			// KBORG-1：无头条目归并进 runbooks/README.md（仍被 track；凭据三件套依旧必须不在）
+			expect(tracked.stdout).toContain("runbooks/README.md");
 			expect(tracked.stdout).not.toContain("credential.json");
 			expect(tracked.stdout).not.toContain("state.json");
 			expect(tracked.stdout).not.toContain("git-credentials");
@@ -298,8 +302,12 @@ describe("★ 同设备名的新克隆：远端已有实例分支时必须能推
 
 			// 远端实例分支应同时含两个条目
 			const ls = await shell.exec(["git", "--git-dir", remote, "ls-tree", "-r", "--name-only", "instance/node-1"]);
-			expect(ls.stdout).toContain("a.md");
-			expect(ls.stdout).toContain("b.md");
+			// KBORG-1：条目归并为域活档案（两个条目都在 ⇒ 体现在活档案内容里）
+			expect(ls.stdout).toContain("runbooks/README.md");
+			const living = await shell.exec(["git", "--git-dir", remote, "show", "instance/node-1:runbooks/README.md"]);
+			expect(living.stdout).toContain("from A");
+			expect(living.stdout).toContain("from B");
+			// 真机回归：B 的归并不得覆盖 integrate 带下来的 A 小节（曾因缺基底被整文件覆盖）
 		} finally {
 			fs.rmSync(root, { recursive: true, force: true });
 		}
@@ -326,12 +334,14 @@ describe("★ 已有本地提交但本轮无新改动时，也必须推送（真
 			fs.writeFileSync(path.join(clone, "stale.md"), "stranded\n");
 			await shell.exec(["git", "-C", clone, "add", "-A"]);
 			await shell.exec(["git", "-C", clone, "commit", "-m", "stale（上次推送失败留下）"]);
-			// 本轮没有任何新改动
+			// KBORG-1：手工 stale.md（无头）本轮被 organize 归并 ⇒ 产生新提交并推送（漏推回归仍被覆盖）
 			const r = await syncKb({ omoDir: root, kbDir: clone, repo: remote, branch: "main", device: "node-9", runner: shell, push: true });
-			expect(r.actions.join(" ")).toContain("无本地改动，无需提交");
+			expect(r.actions.join(" ")).toContain("归并：1 条并入域活档案");
+			expect(r.actions.join(" ")).toContain("commit ✓");
 			expect(r.actions.join(" ")).toContain("push instance/node-9 ✓");
-			const ls = await shell.exec(["git", "--git-dir", remote, "ls-tree", "-r", "--name-only", "instance/node-9"]);
-			expect(ls.stdout).toContain("stale.md");
+			expect(r.actions.join(" ")).toContain("push instance/node-9 ✓");
+			const stranded = await shell.exec(["git", "--git-dir", remote, "show", "instance/node-9:runbooks/README.md"]);
+			expect(stranded.stdout).toContain("stranded");
 		} finally {
 			fs.rmSync(root, { recursive: true, force: true });
 		}

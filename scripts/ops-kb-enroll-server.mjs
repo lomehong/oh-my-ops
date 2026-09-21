@@ -34,6 +34,7 @@ import { AuditLog } from "./lib/kb-audit.mjs";
 import { readAdminAuth, makeApi, defaultTeam, randomPassword, credentialJson, ensureUser, grantAccess, revokeAccess, scramblePassword, verifyBotCredential, sha1 } from "./lib/kb-gitea.mjs";
 import { checkCode, consumeCode, upsertEntry, markRevoked, REGISTRY_VERSION, loadRegistry, issueCode } from "./lib/kb-registry.mjs";
 import { identityFromRequest, unauthorizedResponse } from "./lib/kb-auth.mjs";
+import { buildComment, lintSimilarity, lintStructure, verifyHmac } from "./lib/kb-lint.mjs";
 import { UI_CONFIG_KEYS, parseConfigEnv, readConfigEnv, validateValues, renderConfigEnv, writeConfigEnvAtomic, restoreConfigBackup, maskConfigForUi } from "./lib/kb-ui-config.mjs";
 
 function parseArgs(argv) {
@@ -78,6 +79,9 @@ const CONFIG_KEY_TO_ARG = {
 	OMO_KB_ADMIN_PASSWORD_FILE: "admin-password-file",
 	OMO_KB_UI: "ui",
 	OMO_KB_UI_IDENTITY_HEADER: "ui-identity-header",
+	OMO_KB_WEBHOOK_SECRET: "webhook-secret",
+	OMO_KB_LINT_MODE: "lint-mode",
+	OMO_KB_MAIN_BRANCH: "main-branch",
 };
 const configPath = typeof args.config === "string" && args.config !== "" ? args.config : undefined;
 if (configPath !== undefined) {
@@ -97,7 +101,10 @@ if (configPath !== undefined) {
 }
 const useTls = args["tls-cert"] !== undefined && args["tls-key"] !== undefined;
 const UI_ON = args.ui === true || args.ui === "on";
-const UI_IDENTITY_HEADER = typeof args["ui-identity-header"] === "string" && args["ui-identity-header"] !== "" ? args["ui-identity-header"] : "X-Auth-Username"; // 真机实测定值（yufu/huntian-gateway）
+const UI_IDENTITY_HEADER = typeof args["ui-identity-header"] === "string" && args["ui-identity-header"] !== "" ? args["ui-identity-header"] : "X-Auth-Username";
+const WEBHOOK_SECRET = typeof args["webhook-secret"] === "string" && args["webhook-secret"] !== "" ? args["webhook-secret"] : undefined;
+const LINT_MODE = typeof args["lint-mode"] === "string" ? args["lint-mode"] : "warn"; // off | warn | strict
+const MAIN_BRANCH = typeof args["main-branch"] === "string" && args["main-branch"] !== "" ? args["main-branch"] : "main"; // 真机实测定值（yufu/huntian-gateway）
 
 if (args.repo === undefined || args.api === undefined) {
 	console.error("✗ 需要 --api 与 --repo（或提供 --config <config.env>）");
@@ -152,6 +159,66 @@ if (args.check === true) {
 	}
 	console.log(`CHECK OK repo=${args.repo} api=${args.api} port=${port} registry=${registryFile} ui=${UI_ON ? "on" : "off"}`);
 	process.exit(0);
+}
+
+/* ── /kb/webhook：合流期 lint 门禁（KBORG-1）──
+   Gitea PR 事件（opened/synchronized，base=main）⇒ 拉 PR 变更文件 ⇒ 结构规则 + 相似度 ⇒
+   回写 commit status（context=kb-lint）与 PR 评论。HMAC-SHA256 签名防伪造；恒 200（幂等）。 */
+async function handleKbWebhook(req, ip) {
+	if (LINT_MODE === "off" || WEBHOOK_SECRET === undefined) return json(503, { error: "lint 未启用（需 --webhook-secret 且 --lint-mode 非 off）" });
+	const raw = await req.text();
+	if (!verifyHmac(WEBHOOK_SECRET, raw, req.headers.get("X-KB-Signature") ?? "")) {
+		audit.append({ event: "webhook.denied", ts: new Date().toISOString(), ip });
+		return json(401, { error: "签名校验失败" });
+	}
+	let payload;
+	try {
+		payload = JSON.parse(raw);
+	} catch {
+		return json(400, { error: "请求体必须是 JSON" });
+	}
+	const pr = payload?.pull_request;
+	const action = payload?.action;
+	if (pr === undefined || !["opened", "synchronized"].includes(action)) return json(200, { ignored: true, reason: "非 PR opened/synchronized 事件" });
+	if (pr.base?.ref !== MAIN_BRANCH) return json(200, { ignored: true, reason: `非 ${MAIN_BRANCH} 目标分支` });
+	if (payload.repository?.full_name !== undefined && payload.repository.full_name !== args.repo) return json(200, { ignored: true, reason: "仓库不匹配" });
+	const number = payload.number ?? pr.number;
+	const sha = String(pr.head?.sha ?? "");
+	try {
+		const domainsRes = await api.get(`/repos/${args.repo}/contents/domains.yml`);
+		const domainsText = domainsRes.status === 200 && domainsRes.json?.content !== undefined ? Buffer.from(domainsRes.json.content, "base64").toString("utf8") : undefined;
+		const filesRes = await api.get(`/repos/${args.repo}/pulls/${number}/files?limit=50`);
+		const changed = (filesRes.json ?? []).map((f) => f.filename);
+		const contents = [];
+		for (const f of (filesRes.json ?? []).slice(0, 30)) {
+			if (!/\.(md|json)$/.test(f.filename)) continue;
+			const c = await api.get(`/repos/${args.repo}/contents/${f.filename}?ref=${sha}`);
+			if (c.status === 200 && c.json?.content !== undefined) contents.push({ path: f.filename, text: Buffer.from(c.json.content, "base64").toString("utf8") });
+		}
+		const existing = [];
+		for (const d of new Set(changed.map((p) => p.split("/")[0]))) {
+			if (d === "") continue;
+			const e = await api.get(`/repos/${args.repo}/contents/${d}/README.md?ref=${MAIN_BRANCH}`);
+			if (e.status === 200 && e.json?.content !== undefined) existing.push({ domain: d, path: `${d}/README.md`, text: Buffer.from(e.json.content, "base64").toString("utf8") });
+		}
+		const struct = lintStructure({ changedPaths: changed, contents, domainsText });
+		const sim = lintSimilarity({ contents, existing, thresholds: { block: 0.9, warn: 0.5 } });
+		const hard = [...struct.hard, ...sim.hard];
+		const warnings = [...struct.warnings, ...sim.warnings];
+		const blocked = LINT_MODE === "strict" && hard.length > 0;
+		const comment = buildComment({ mode: LINT_MODE, hard, warnings });
+		await api.post(`/repos/${args.repo}/statuses/${sha}`, {
+			state: blocked ? "failure" : "success",
+			context: "kb-lint",
+			description: (blocked ? `✗ ${hard.length} 条违规` : warnings.length > 0 ? `⚠ ${warnings.length} 条提示` : "✓ 合规").slice(0, 200),
+		});
+		if (comment !== "") await api.post(`/repos/${args.repo}/issues/${number}/comments`, { body: comment });
+		audit.append({ event: `lint.${blocked ? "blocked" : "passed"}`, ts: new Date().toISOString(), pr: number, sha: sha.slice(0, 8), mode: LINT_MODE, hard: hard.length, warnings: warnings.length, actor: "webhook", ip });
+		return json(200, { ok: true, blocked, hard: hard.length, warnings: warnings.length });
+	} catch (err) {
+		audit.append({ event: "lint.error", ts: new Date().toISOString(), reason: String(err?.message ?? err), ip });
+		return json(200, { ok: false, error: `lint 执行失败（已入审计）：${String(err?.message ?? err)}` });
+	}
 }
 
 /* ── /ui 管理后台（yufu 网关信任模式：身份头缺失一律 401）── */
@@ -420,6 +487,7 @@ for (let deadline = Date.now() + bindRetryMs; ; ) {
 				const ip = server.requestIP(req)?.address ?? "unknown";
 				if (u.pathname === "/healthz") return json(200, { ok: true, repo: args.repo, registryVersion: REGISTRY_VERSION, tls: useTls });
 				if (u.pathname === "/enroll" && req.method === "POST") return await handleEnroll(req, ip);
+				if (u.pathname === "/kb/webhook" && req.method === "POST") return await handleKbWebhook(req, ip);
 				if (UI_ON && (u.pathname === "/ui" || u.pathname.startsWith("/ui/"))) {
 					const actor = identityFromRequest(req, UI_IDENTITY_HEADER);
 					if (actor === null) {
@@ -455,4 +523,4 @@ if (typeof args["pid-file"] === "string" && args["pid-file"] !== "") {
 }
 
 // 打印监听端口（测试与运维都靠这一行判定就绪；日志一律不含秘密）
-console.log(`LISTEN ${useTls ? "https" : "http"}://${host}:${server.port} repo=${args.repo} registry=${registryFile} audit=${auditFile} codeTtlMin=${codeTtlMin} ui=${UI_ON ? "on" : "off"} auth=${UI_ON ? `identity-header(${UI_IDENTITY_HEADER})` : "n/a"} config=${configPath ?? "-"}`);
+console.log(`LISTEN ${useTls ? "https" : "http"}://${host}:${server.port} repo=${args.repo} registry=${registryFile} audit=${auditFile} codeTtlMin=${codeTtlMin} ui=${UI_ON ? "on" : "off"} auth=${UI_ON ? `identity-header(${UI_IDENTITY_HEADER})` : "n/a"} lint=${LINT_MODE}${WEBHOOK_SECRET === undefined ? "(未配密钥)" : ""} config=${configPath ?? "-"}`);

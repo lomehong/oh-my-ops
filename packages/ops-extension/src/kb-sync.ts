@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { detectGitCaps, GitCompat } from "@ops-pi/core";
+import { loadDomains, organizeEntries, parseEntry } from "./kb-org.js";
 import type { Runner } from "@ops-pi/core";
 import { redactUrl, saveKbState } from "./kb-credential.ts";
 import type { KbCredential } from "./kb-credential.ts";
@@ -163,6 +164,51 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 			const integrated = await g.integrateRemoteBranch("origin", instanceBranch);
 			actions.push(integrated);
 			if (integrated.includes("冲突已中止")) failed = true;
+
+			// ── KBORG-1：机械归并（域活档案）——任何失败都降级为原样提交，绝不阻塞同步 ──
+			if (process.env.OMO_KB_ORGANIZE !== "off") {
+				try {
+					const domains = await loadDomains(opts.kbDir, (p) => fs.readFile(p, "utf8"));
+					const device = opts.device ?? deviceName();
+					const dateIso = (opts.now ?? (() => new Date()))().toISOString();
+					const rootAllow = new Set(domains.rootAllowlist);
+					const rootNames = (await fs.readdir(opts.kbDir)).filter(
+						(f) => f.endsWith(".md") && !rootAllow.has(f) && !f.startsWith("."),
+					);
+					const entries: { name: string; text: string }[] = [];
+					for (const n of rootNames) entries.push({ name: n, text: await fs.readFile(path.join(opts.kbDir, n), "utf8") });
+					// 现存活档案作归并基底（integrate 刚带下来的远端内容不能被覆盖——真机回归抓到）
+					const existingLiving: { domain: string; text: string }[] = [];
+					const seenDomains = new Set<string>();
+					for (const e of entries) {
+						const sys = parseEntry(e.text, dateIso).system;
+						if (seenDomains.has(sys)) continue;
+						seenDomains.add(sys);
+						const livingPath = path.join(opts.kbDir, sys, "README.md");
+						const text = await fs.readFile(livingPath, "utf8").catch(() => "");
+						existingLiving.push({ domain: sys, text });
+					}
+					const plan = organizeEntries(entries, domains, device, dateIso, existingLiving);
+					for (const mv of plan.moves) {
+						const to = path.join(opts.kbDir, mv.to);
+						await fs.mkdir(path.dirname(to), { recursive: true });
+						await fs.rename(path.join(opts.kbDir, mv.from), to);
+					}
+					for (const ld of plan.livingDocs) {
+						const p = path.join(opts.kbDir, ld.path);
+						await fs.mkdir(path.dirname(p), { recursive: true });
+						await fs.writeFile(p, ld.text);
+					}
+					for (const mg of plan.merges) await fs.rm(path.join(opts.kbDir, mg.removeFile), { force: true });
+					actions.push(
+						`归并：${plan.merges.length} 条并入域活档案、移动 ${plan.moves.length} 个文档` +
+							(plan.warnings.length > 0 ? `；⚠ ${plan.warnings.join("；")}` : ""),
+					);
+				} catch (err) {
+					actions.push(`⚠ 组织步骤失败（已跳过，按原样提交）：${String((err as Error)?.message ?? err)}`);
+				}
+			}
+
 			const commit = await g.commitAll(`kb: sync ${now().toISOString()}@${opts.device ?? deviceName()}`);
 			if (commit === undefined) actions.push("无本地改动，无需提交");
 			else actions.push(commit);

@@ -132,7 +132,7 @@ for cand in "$SELF_DIR" "$SELF_DIR/.." "$SELF_DIR/../scripts"; do
 done
 if [ -n "$FILE_BASE" ]; then
   cp "$FILE_BASE/ops-kb-enroll-server.mjs" "$FILE_BASE/ops-kb-provision.mjs" "$SERVICE_DIR/"
-  cp "$FILE_BASE/lib/kb-gitea.mjs" "$FILE_BASE/lib/kb-registry.mjs" "$FILE_BASE/lib/kb-audit.mjs" "$FILE_BASE/lib/kb-auth.mjs" "$FILE_BASE/lib/kb-ui-config.mjs" "$SERVICE_DIR/lib/"
+  cp "$FILE_BASE/lib/kb-gitea.mjs" "$FILE_BASE/lib/kb-registry.mjs" "$FILE_BASE/lib/kb-audit.mjs" "$FILE_BASE/lib/kb-auth.mjs" "$FILE_BASE/lib/kb-ui-config.mjs" "$FILE_BASE/lib/kb-lint.mjs" "$SERVICE_DIR/lib/"
   mkdir -p "$SERVICE_DIR/ui"
   cp "$FILE_BASE/ui/index.html" "$SERVICE_DIR/ui/index.html"
   ok "服务文件取自本机包（$FILE_BASE）"
@@ -146,6 +146,7 @@ else
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-registry.mjs" -o "$SERVICE_DIR/lib/kb-registry.mjs" \
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-audit.mjs" -o "$SERVICE_DIR/lib/kb-audit.mjs" \
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-auth.mjs" -o "$SERVICE_DIR/lib/kb-auth.mjs" \
+       && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-lint.mjs" -o "$SERVICE_DIR/lib/kb-lint.mjs" \
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-ui-config.mjs" -o "$SERVICE_DIR/lib/kb-ui-config.mjs" \
        && { mkdir -p "$SERVICE_DIR/ui" && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/ui/index.html" -o "$SERVICE_DIR/ui/index.html"; }; then
       ok "服务文件已下载（$src）"; fetched=true; break
@@ -230,6 +231,11 @@ OMO_KB_LOG=$DIR/logs/service.log
 # 管理后台（/ui）：默认关。开启前先把本服务接入 yufu 网关（认证+TLS 由 yufu 负责），
 # 服务只认网关注入的身份头（真机实测定为 X-Auth-Username（值=username）；如网关行为不同可改）。
 OMO_KB_UI=off
+# 知识合流期 lint 门禁（/kb/webhook）：warn=只评论；strict=违规 status=failure 阻断合并；off=关闭。
+# 需先在 Gitea 配置 webhook（指向 https://<本机>:8787/kb/webhook）并在此填共享密钥后重启。
+# OMO_KB_WEBHOOK_SECRET=
+# OMO_KB_LINT_MODE=warn
+# OMO_KB_MAIN_BRANCH=main
 OMO_KB_UI_IDENTITY_HEADER=X-Auth-Username
 EOF
 chmod 600 "$DIR/config.env"; ok "配置已写入 $DIR/config.env（0600）"

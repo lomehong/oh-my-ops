@@ -1,0 +1,18 @@
+# ops-kb 知识库域白名单（唯一事实源；放仓库根目录）
+# sync 工具（实例侧）与 lint（服务侧）都以 main 上的这份为准。
+domains:
+  - avatar
+  - omo-kb
+  - yufu
+  - huntian
+  - twin-hzins
+  - yuyi
+  - yuheng
+  - runbooks
+  - docseal
+fallback: runbooks
+root_allowlist:
+  - README.md
+  - PREFIX-REGISTRY.md
+  - domains.yml
+  - deploy-overview-three-planes.md
