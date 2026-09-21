@@ -95,6 +95,7 @@ C1="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 3 "https://127.0.0.1:$P
 C301="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 3 "https://127.0.0.1:$PORT/ui" -H "$HDR")"
 [ "$C301" = "301" ] && pass "带头 ⇒ /ui 301 → /ui/" || fail "/ui 应 301（$C301）"
 curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/" -H "$HDR" | grep -q "omo-kb 管理后台" && pass "带头 ⇒ 页面 200（中文后台）" || fail "带头访问页面失败"
+curl -skI --max-time 3 "https://127.0.0.1:$PORT/ui/" -H "$HDR" | grep -qi "cache-control:.*no-store" && pass "页面响应 no-store（防升级后旧页缓存）" || fail "页面缺 no-store"
 PAGE="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/" -H "$HDR")"
 echo "$PAGE" | grep -q 'location.pathname.endsWith("/")' && pass "页面含前缀挂载 BASE 归一化（网关 /omo-kb 无斜杠场景安全）" || fail "页面缺 BASE 归一化"
 echo "$PAGE" | grep -qE "fetch\(BASE \+ url" && pass "API 调用统一走 BASE 前缀" || fail "API 调用未走 BASE"

@@ -159,7 +159,8 @@ let uiPageCache;
 function uiPageResponse() {
 	try {
 		if (uiPageCache === undefined) uiPageCache = fs.readFileSync(path.join(import.meta.dir, "ui", "index.html"), "utf8");
-		return new Response(uiPageCache, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+		// no-store：升级后不得命中浏览器/中间层旧页（真机教训：升了版本页面还是老样子）
+		return new Response(uiPageCache, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store, must-revalidate" } });
 	} catch {
 		return json(503, { error: "UI 页面缺失（ui/index.html）——服务包不完整" });
 	}
