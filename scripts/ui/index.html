@@ -122,8 +122,12 @@ document.querySelectorAll("nav button[data-tab]").forEach((b) =>
     $("#tab-" + b.dataset.tab).classList.add("on");
   }));
 
+/* 前缀挂载安全：页面可能被网关以 /omo-kb（无尾斜杠）暴露 ⇒ 统一按「当前路径 + /」拼 API，
+   避免相对路径解析到站点根（/api/... 而不是 /omo-kb/api/...）。 */
+const BASE = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
+
 async function jfetch(url, opts) {
-  const r = await fetch(url, opts);
+  const r = await fetch(BASE + url, opts);
   if (r.status === 401) { $("#auth-overlay").classList.remove("hidden"); throw new Error("401"); }
   const body = await r.json().catch(() => ({}));
   return { ok: r.ok, status: r.status, body };
