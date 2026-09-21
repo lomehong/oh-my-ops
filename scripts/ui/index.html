@@ -190,11 +190,14 @@ function renderRegistry({ entries, pendingCodes, file, error }) {
     return;
   }
   const src = `<p class="dim" style="margin:0 0 8px">来源：${esc(file ?? "-")}</p>`;
-  $("#reg-entries").innerHTML = src + (entries.length === 0 ? '<span class="dim">（暂无登记项）</span>' :
-    `<table><tr><th>设备</th><th>bot 账号</th><th>仓库</th><th>授予</th><th>状态</th></tr>` +
-    entries.map((e) => `<tr><td>${esc(e.device)}</td><td>${esc(e.login)}</td><td>${esc(e.repo)}</td>` +
-      `<td>${esc(e.grant)}${e.team ? `(团队 ${esc(e.team)}/${esc(e.permission)})` : ""}</td>` +
-      `<td>${e.revokedAt ? `<span class="bad">已吊销 ${esc(e.revokedAt)}</span>` : '<span class="ok">● 有效</span>'}</td></tr>`).join("") + "</table>";
+  const table = entries.length === 0
+    ? '<span class="dim">（暂无登记项）</span>'
+    : `<table><tr><th>设备</th><th>bot 账号</th><th>仓库</th><th>授予</th><th>状态</th></tr>`
+      + entries.map((e) => `<tr><td>${esc(e.device)}</td><td>${esc(e.login)}</td><td>${esc(e.repo)}</td>`
+        + `<td>${esc(e.grant)}${e.team ? `(团队 ${esc(e.team)}/${esc(e.permission)})` : ""}</td>`
+        + `<td>${e.revokedAt ? `<span class="bad">已吊销 ${esc(e.revokedAt)}</span>` : '<span class="ok">● 有效</span>'}</td></tr>`).join("")
+      + `</table>`;
+  $("#reg-entries").innerHTML = src + table;
   $("#reg-codes").innerHTML = pendingCodes.length === 0 ? '<span class="dim">（无未使用兑换码）</span>' :
     "<table><tr><th>op</th><th>设备</th><th>过期</th></tr>" +
     pendingCodes.map((c) => `<tr><td>${esc(c.op)}</td><td>${esc(c.device)}</td><td class="dim">${esc(c.expiresAt)}</td></tr>`).join("") + "</table>";

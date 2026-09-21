@@ -80,6 +80,7 @@ jobs:
                    "scripts/ops-kb-provision.mjs" "scripts/ops-kb-enroll-server.mjs" \
                    "scripts/install-enroll-service.sh" "scripts/probe-install-enroll-service.sh" "scripts/omo-kb-doctor.sh" \
                    "scripts/omo-kb-fleet.sh" "scripts/ui/index.html" "scripts/lib/kb-auth.mjs" "scripts/lib/kb-ui-config.mjs" \
+                   "scripts/probe-kb-ui-render.mjs" \
                    "scripts/lib/bun.sh" "scripts/lib/kb-audit.mjs" \
                    "scripts/lib/kb-gitea.mjs" "scripts/lib/kb-registry.mjs" \
                    "packages/ops-extension/src/kb-cli.ts" "packages/ops-extension/src/kb-sync.ts" \

@@ -181,7 +181,10 @@ function handleUiState(actor) {
 	if (configPath === undefined) configView = { error: "服务未经 --config 启动，无法查看/修改配置" };
 	else {
 		const parsed = readConfigEnv(configPath);
-		configView = parsed ? maskConfigForUi(parsed.values) : { error: "配置文件不可读" };
+		// 与 GET /ui/api/config 同形状（{keys, values}）——两种形状曾导致配置表单渲染为空（headless 抓到）
+		configView = parsed === undefined
+			? { error: "配置文件不可读" }
+			: { keys: Object.fromEntries(Object.entries(UI_CONFIG_KEYS).map(([k, m]) => [k, m.label])), values: maskConfigForUi(parsed.values) };
 	}
 	let auditTail = [];
 	try {

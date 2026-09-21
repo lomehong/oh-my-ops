@@ -61,6 +61,20 @@ A(maskConfigForUi({ OMO_KB_ADMIN_TOKEN_FILE: "/x/t" }).OMO_KB_ADMIN_TOKEN_FILE =
 fs.rmSync(f, { force: true });
 '
 
+echo "[0b] 页面 JS 语法 + 渲染真执行（headless fixture）"
+python3 - "$REPO_ROOT/scripts/ui/index.html" <<'PYX'
+import re, sys
+h = open(sys.argv[1], encoding="utf-8").read()
+js = re.search(r"<script>\n(.*)\n</script>", h, re.S).group(1)
+open("/tmp/kbui-page-check.mjs", "w", encoding="utf-8").write(js)
+PYX
+bun build /tmp/kbui-page-check.mjs --target=bun --outfile /dev/null >/dev/null 2>&1 && pass "页面 JS 解析通过（防语法错整页废）" || fail "页面 JS 解析失败（语法错误）"
+if bun "$REPO_ROOT/scripts/probe-kb-ui-render.mjs" "$REPO_ROOT/scripts/ui/index.html" >"$TMP/render.log" 2>&1; then
+  grep -q "渲染验收：" "$TMP/render.log" && pass "渲染真执行全过（$(grep -o '渲染验收：[0-9]*/[0-9]*' "$TMP/render.log")）" || fail "渲染脚本输出异常"
+else
+  fail "渲染真执行不过：$(grep -E '✗' "$TMP/render.log" | head -2 | tr '\n' ' ')"
+fi
+
 echo "[1] UI 默认关：升级零变化"
 HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo acme/kb \
      --admin-token-file "$TMP/good.token" --self-signed auto --port "$PORT" --no-start >"$TMP/install.log" 2>&1 \
