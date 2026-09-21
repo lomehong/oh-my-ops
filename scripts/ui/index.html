@@ -135,13 +135,17 @@ async function jfetch(url, opts) {
 
 async function loadState() {
   try {
-    const { ok, body } = await jfetch("api/state");
-    if (!ok) return;
+    const { ok, status, body } = await jfetch("api/state");
+    if (!ok) {
+      // 不静默：状态拉取失败必须可见（含网关 302/404 等非 JSON 应答）
+      $("#hdr-sub").innerHTML = `<span class="bad">状态接口异常：HTTP ${status}</span> <span class="dim">——多为网关路径映射（前缀/尾斜杠）问题</span>`;
+      return;
+    }
     ACTOR = body.actor ?? "";
     $("#actor").textContent = ACTOR ? "操作者：" + ACTOR : "";
     $("#auth-overlay").classList.add("hidden");
     renderStatus(body);
-    renderRegistry(body.registry);
+    renderRegistry(body.registry ?? {});
     renderAudit(body.auditTail);
     renderConfig(body.config, body.ui);
   } catch { /* 401 已处理 */ }
@@ -179,8 +183,14 @@ $("#code-issue").addEventListener("click", async () => {
   $("#code-copy").onclick = () => navigator.clipboard.writeText(body.code).then(() => { $("#code-copy").textContent = "已复制 ✓"; setTimeout(() => ($("#code-copy").textContent = "复制码"), 1500); });
 });
 
-function renderRegistry({ entries, pendingCodes }) {
-  $("#reg-entries").innerHTML = entries.length === 0 ? '<span class="dim">（暂无）</span>' :
+function renderRegistry({ entries, pendingCodes, file, error }) {
+  if (error) {
+    $("#reg-entries").innerHTML = `<span class="bad">✗ 登记表读取失败：${esc(error)}</span><br><span class="dim">文件：${esc(file ?? "-")}</span>`;
+    $("#reg-codes").innerHTML = '<span class="dim">（登记表不可读，兑换码列表同源不可用）</span>';
+    return;
+  }
+  const src = `<p class="dim" style="margin:0 0 8px">来源：${esc(file ?? "-")}</p>`;
+  $("#reg-entries").innerHTML = src + (entries.length === 0 ? '<span class="dim">（暂无登记项）</span>' :
     `<table><tr><th>设备</th><th>bot 账号</th><th>仓库</th><th>授予</th><th>状态</th></tr>` +
     entries.map((e) => `<tr><td>${esc(e.device)}</td><td>${esc(e.login)}</td><td>${esc(e.repo)}</td>` +
       `<td>${esc(e.grant)}${e.team ? `(团队 ${esc(e.team)}/${esc(e.permission)})` : ""}</td>` +

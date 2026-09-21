@@ -101,6 +101,18 @@ grep -q '"event":"ui.code.issued"' "$H/.omo-kb/audit.jsonl" && pass "审计 ui.c
 ENROLL="$(curl -sk --max-time 8 "https://127.0.0.1:$PORT/enroll" -H 'Content-Type: application/json' -d "{\"code\":\"$CODE\",\"device\":\"probe-node\"}")"
 echo "$ENROLL" | grep -q '"ok":true' && pass "UI 签的码真实兑换成功（/enroll 闭环）" || fail "兑换失败：$(printf '%s' "$ENROLL" | head -c 160)"
 
+echo "[3b] 登记表不可读必须显式暴露（不静默空表）"
+cp "$H/.omo-kb/registry.json" "$TMP/registry.bak"
+printf '{ 坏 JSON' > "$H/.omo-kb/registry.json"
+STATE_ERR="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/state" -H "$HDR")"
+cp "$TMP/registry.bak" "$H/.omo-kb/registry.json"
+echo "$STATE_ERR" | grep -q '"error"' && pass "登记表读取失败 ⇒ state 带 error（不静默）" || fail "空表无原因（静默降级）"
+echo "$STATE_ERR" | grep -q '"file":"' && pass "state 回传登记表文件路径（可定位）" || fail "缺登记表路径"
+curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/" -H "$HDR" | grep -q "登记表读取失败" && pass "页面展示登记表错误文案" || fail "页面未展示登记表错误"
+echo "$STATE_ERR" | grep -q '"entries":\[\]' && pass "失败态回退空表（不崩）" || fail "失败态异常"
+STATE_OK="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/state" -H "$HDR")"
+echo "$STATE_OK" | grep -q '"probe-node"' && pass "恢复后登记表数据回来（对照）" || fail "恢复后仍空"
+
 echo "[5] 配置校验失败：硬停不写盘"
 OLD_PID="$(echo "$STATE" | grep -o '"pid":[0-9]*' | cut -d: -f2)"
 CFG_BAD="$(curl -sk --max-time 5 "https://127.0.0.1:$PORT/ui/api/config" -H "$HDR" -H 'Content-Type: application/json' -d '{"values":{"OMO_KB_REPO":"bad repo!!"}}')"

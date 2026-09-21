@@ -167,10 +167,13 @@ function uiPageResponse() {
 
 function handleUiState(actor) {
 	let reg;
+	let registryError;
 	try {
 		reg = loadRegistry(registryFile);
-	} catch {
+	} catch (err) {
+		// 不静默：空表必须能区分「真的没有」与「读不到」（真机教训：空表无原因，Owner 无法判断）
 		reg = { entries: [], codes: [] };
+		registryError = String(err?.message ?? err);
 	}
 	const entries = (reg.entries ?? []).map((e) => ({ device: e.device ?? "-", login: e.login, repo: e.repo ?? "-", grant: e.grant ?? "-", team: e.team ?? "-", permission: e.permission ?? "-", revokedAt: e.revokedAt, createdAt: e.createdAt }));
 	const pendingCodes = (reg.codes ?? []).filter((c) => c.usedAt === undefined).map((c) => ({ op: c.op, device: c.device ?? "任意", expiresAt: c.expiresAt }));
@@ -197,7 +200,7 @@ function handleUiState(actor) {
 		health: { ok: true, repo: args.repo, registryVersion: REGISTRY_VERSION, tls: useTls, pid: process.pid, uptimeSec: Math.round(process.uptime()) },
 		ui: { on: UI_ON, identityHeader: UI_IDENTITY_HEADER, configPath: configPath ?? null },
 		config: configView,
-		registry: { entries, pendingCodes },
+		registry: { entries, pendingCodes, file: registryFile, ...(registryError === undefined ? {} : { error: registryError }) },
 		auditTail,
 	});
 }
