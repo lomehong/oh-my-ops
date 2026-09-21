@@ -28,9 +28,13 @@
  *       --registry /var/lib/omo-kb/registry.json --audit /var/lib/omo-kb/audit.jsonl \
  *       --host 0.0.0.0 --port 8787 --tls-cert /etc/omo-kb/tls.crt --tls-key /etc/omo-kb/tls.key
  */
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { AuditLog } from "./lib/kb-audit.mjs";
 import { readAdminAuth, makeApi, defaultTeam, randomPassword, credentialJson, ensureUser, grantAccess, revokeAccess, scramblePassword, verifyBotCredential, sha1 } from "./lib/kb-gitea.mjs";
-import { checkCode, consumeCode, upsertEntry, markRevoked, REGISTRY_VERSION } from "./lib/kb-registry.mjs";
+import { checkCode, consumeCode, upsertEntry, markRevoked, REGISTRY_VERSION, loadRegistry, issueCode } from "./lib/kb-registry.mjs";
+import { identityFromRequest, unauthorizedResponse } from "./lib/kb-auth.mjs";
+import { UI_CONFIG_KEYS, parseConfigEnv, readConfigEnv, validateValues, renderConfigEnv, writeConfigEnvAtomic, restoreConfigBackup, maskConfigForUi } from "./lib/kb-ui-config.mjs";
 
 function parseArgs(argv) {
 	const out = {};
@@ -38,7 +42,7 @@ function parseArgs(argv) {
 		const a = argv[i];
 		if (!a.startsWith("--")) continue;
 		const key = a.slice(2);
-		if (["allow-insecure-http", "help"].includes(key)) {
+		if (["allow-insecure-http", "help", "check", "ui"].includes(key)) {
 			out[key] = true;
 			continue;
 		}
@@ -55,10 +59,51 @@ if (args.help === true) {
 	console.log("用法见脚本头注释。");
 	process.exit(0);
 }
+/* ── 配置文件默认值（--config）：显式参数优先，config.env 兜底 ──
+   /ui 在线改配置依赖 --config（要知道写回哪个文件）；启动器与重启接力都会带上它。 */
+const CONFIG_KEY_TO_ARG = {
+	OMO_KB_API: "api",
+	OMO_KB_REPO: "repo",
+	OMO_KB_TEAM: "team",
+	OMO_KB_PERMISSION: "permission",
+	OMO_KB_GRANT: "grant",
+	OMO_KB_HOST: "host",
+	OMO_KB_PORT: "port",
+	OMO_KB_TLS_CERT: "tls-cert",
+	OMO_KB_TLS_KEY: "tls-key",
+	OMO_KB_REGISTRY: "registry",
+	OMO_KB_AUDIT: "audit",
+	OMO_KB_ADMIN_TOKEN_FILE: "admin-token-file",
+	OMO_KB_ADMIN_USER: "admin-user",
+	OMO_KB_ADMIN_PASSWORD_FILE: "admin-password-file",
+	OMO_KB_UI: "ui",
+	OMO_KB_UI_IDENTITY_HEADER: "ui-identity-header",
+};
+const configPath = typeof args.config === "string" && args.config !== "" ? args.config : undefined;
+if (configPath !== undefined) {
+	const parsed = readConfigEnv(configPath);
+	if (parsed === undefined) {
+		console.error(`✗ --config 指定的文件不可读：${configPath}`);
+		process.exit(1);
+	}
+	for (const [key, argName] of Object.entries(CONFIG_KEY_TO_ARG)) {
+		if (parsed.values[key] === undefined) continue;
+		if (args[argName] !== undefined) continue; // 显式参数优先
+		const raw = String(parsed.values[key]).trim();
+		if (argName === "ui") {
+			if (raw === "on") args.ui = true;
+		} else if (raw !== "") args[argName] = raw;
+	}
+}
+const useTls = args["tls-cert"] !== undefined && args["tls-key"] !== undefined;
+const UI_ON = args.ui === true || args.ui === "on";
+const UI_IDENTITY_HEADER = typeof args["ui-identity-header"] === "string" && args["ui-identity-header"] !== "" ? args["ui-identity-header"] : "X-Auth-Username"; // 真机实测定值（yufu/huntian-gateway）
+
 if (args.repo === undefined || args.api === undefined) {
-	console.error("✗ 需要 --api 与 --repo");
+	console.error("✗ 需要 --api 与 --repo（或提供 --config <config.env>）");
 	process.exit(1);
 }
+
 const registryFile = args.registry ?? "ops-kb-registry.json";
 const auditFile = args["audit"] ?? "ops-kb-audit.jsonl";
 const grant = args.grant ?? "team";
@@ -76,6 +121,182 @@ try {
 } catch (err) {
 	console.error(`✗ ${err.message}`);
 	process.exit(1);
+}
+
+/* ── --check 预检模式：Gitea 可达 + 登记表可读 + （如配 TLS）证书可用 ⇒ 退出 ──
+   /ui 在线改配置保存时自动跑（失败不重启、自动回滚 .bak）；运维也可手动执行验证配置。 */
+if (args.check === true) {
+	try {
+		await fetch(args.api, { signal: AbortSignal.timeout(5000) }); // 任何 HTTP 应答=可达（Gitea 对匿名常 403/404，也算通）
+	} catch (err) {
+		console.error(`CHECK FAIL: API 不可达 ${args.api}（${String(err?.cause?.code ?? err?.message ?? err)}）`);
+		process.exit(1);
+	}
+	try {
+		loadRegistry(registryFile);
+	} catch (err) {
+		console.error(`CHECK FAIL: 登记表不可读 ${registryFile}（${String(err?.message ?? err)}）`);
+		process.exit(1);
+	}
+	try {
+		const probe = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			...(useTls ? { tls: { cert: Bun.file(args["tls-cert"]), key: Bun.file(args["tls-key"]) } } : {}),
+			fetch: () => json(200, { ok: true }),
+		});
+		probe.stop(true);
+	} catch (err) {
+		console.error(`CHECK FAIL: 监听/证书不可用（${String(err?.message ?? err)}）`);
+		process.exit(1);
+	}
+	console.log(`CHECK OK repo=${args.repo} api=${args.api} port=${port} registry=${registryFile} ui=${UI_ON ? "on" : "off"}`);
+	process.exit(0);
+}
+
+/* ── /ui 管理后台（yufu 网关信任模式：身份头缺失一律 401）── */
+let uiPageCache;
+function uiPageResponse() {
+	try {
+		if (uiPageCache === undefined) uiPageCache = fs.readFileSync(path.join(import.meta.dir, "ui", "index.html"), "utf8");
+		return new Response(uiPageCache, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+	} catch {
+		return json(503, { error: "UI 页面缺失（ui/index.html）——服务包不完整" });
+	}
+}
+
+function handleUiState(actor) {
+	let reg;
+	try {
+		reg = loadRegistry(registryFile);
+	} catch {
+		reg = { entries: [], codes: [] };
+	}
+	const entries = (reg.entries ?? []).map((e) => ({ device: e.device ?? "-", login: e.login, repo: e.repo ?? "-", grant: e.grant ?? "-", team: e.team ?? "-", permission: e.permission ?? "-", revokedAt: e.revokedAt, createdAt: e.createdAt }));
+	const pendingCodes = (reg.codes ?? []).filter((c) => c.usedAt === undefined).map((c) => ({ op: c.op, device: c.device ?? "任意", expiresAt: c.expiresAt }));
+	let configView;
+	if (configPath === undefined) configView = { error: "服务未经 --config 启动，无法查看/修改配置" };
+	else {
+		const parsed = readConfigEnv(configPath);
+		configView = parsed ? maskConfigForUi(parsed.values) : { error: "配置文件不可读" };
+	}
+	let auditTail = [];
+	try {
+		const lines = fs.readFileSync(auditFile, "utf8").split("\n").filter((l) => l.trim() !== "");
+		auditTail = lines.slice(-50).map((l) => {
+			try {
+				const r = JSON.parse(l);
+				return { seq: r.seq, ts: r.ts, event: r.event, actor: r.actor, device: r.device, ip: r.ip };
+			} catch {
+				return { raw: l.slice(0, 80) };
+			}
+		});
+	} catch { /* 审计文件尚不存在 */ }
+	return json(200, {
+		actor,
+		health: { ok: true, repo: args.repo, registryVersion: REGISTRY_VERSION, tls: useTls, pid: process.pid, uptimeSec: Math.round(process.uptime()) },
+		ui: { on: UI_ON, identityHeader: UI_IDENTITY_HEADER, configPath: configPath ?? null },
+		config: configView,
+		registry: { entries, pendingCodes },
+		auditTail,
+	});
+}
+
+async function handleUiCode(req, ip, actor) {
+	let body;
+	try {
+		body = await req.json();
+	} catch {
+		return json(400, { error: "请求体必须是 JSON" });
+	}
+	const device = typeof body?.device === "string" ? body.device.trim() : "";
+	const ttlMin = body?.ttlMin === undefined ? codeTtlMin : Number(body.ttlMin);
+	if (device === "") return json(400, { error: "缺少 device" });
+	if (!Number.isFinite(ttlMin) || ttlMin < 1 || ttlMin > 1440) return json(400, { error: "ttlMin 需为 1-1440 的分钟数" });
+	try {
+		const { code, expiresAt } = issueCode(registryFile, { op: "enroll", device, ttlMin, by: `ui:${actor}` });
+		audit.append({ event: "ui.code.issued", ts: new Date().toISOString(), device, actor, ttlMin, expiresAt, ip });
+		// 明文只出现在本次响应（与 CLI 签码同一纪律）
+		return json(200, { ok: true, code, expiresAt, device, hint: "omo kb enroll --server <服务地址> --code-file <0600 码文件>" });
+	} catch (err) {
+		return json(400, { error: String(err?.message ?? err) });
+	}
+}
+
+function handleUiConfigGet(actor) {
+	if (configPath === undefined) return json(400, { error: "服务未经 --config 启动，无法查看/修改配置" });
+	const parsed = readConfigEnv(configPath);
+	if (parsed === undefined) return json(400, { error: `配置文件不可读：${configPath}` });
+	return json(200, { actor, keys: Object.fromEntries(Object.entries(UI_CONFIG_KEYS).map(([k, m]) => [k, m.label])), values: maskConfigForUi(parsed.values) });
+}
+
+/** 重启接力：新进程带绑定重试先起，等旧进程让位（窗口 <1s，/healthz 短暂拒绝属预期） */
+function successorArgs() {
+	// 只丢弃「UI 白名单可改」的键（以 config 文件新值为准）；管理员凭据路径不在 UI 白名单内 ⇒ 原样接力，
+	// 否则预检/重启子进程丢凭据必假失败（V6 真机教训）。
+	const drop = new Set(["api", "repo", "team", "permission", "grant", "host", "port", "tls-cert", "tls-key", "registry", "audit", "config"]);
+	const out = [process.execPath, import.meta.path];
+	const argv = process.argv.slice(2);
+	for (let i = 0; i < argv.length; i++) {
+		const a = argv[i];
+		if (!a.startsWith("--")) continue;
+		const key = a.slice(2);
+		if (drop.has(key)) {
+			const v = argv[i + 1];
+			if (v !== undefined && !v.startsWith("--")) i++;
+			continue;
+		}
+		out.push(a);
+		const v = argv[i + 1];
+		if (v !== undefined && !v.startsWith("--")) {
+			out.push(v);
+			i++;
+		}
+	}
+	if (configPath !== undefined) out.push("--config", configPath);
+	return out;
+}
+
+async function handleUiConfigPost(req, ip, actor) {
+	if (configPath === undefined) return json(400, { error: "服务未经 --config 启动，无法在线修改配置" });
+	let body;
+	try {
+		body = await req.json();
+	} catch {
+		return json(400, { error: "请求体必须是 JSON" });
+	}
+	const values = body?.values;
+	if (typeof values !== "object" || values === null || Array.isArray(values)) return json(400, { error: "缺少 values 对象" });
+	const strValues = {};
+	for (const [k, v] of Object.entries(values)) strValues[k] = String(v);
+	const parsed = readConfigEnv(configPath);
+	if (parsed === undefined) return json(400, { error: `配置文件不可读：${configPath}` });
+	const verdict = validateValues(strValues);
+	if (!verdict.ok) {
+		audit.append({ event: "ui.config.rejected", ts: new Date().toISOString(), actor, reason: JSON.stringify(verdict.errors), ip });
+		return json(400, { error: "校验失败", errors: verdict.errors });
+	}
+	writeConfigEnvAtomic(configPath, renderConfigEnv(parsed, strValues));
+	// 预检：新配置起临时服务自证（Gitea 可达/登记表可读/证书可用）；失败 ⇒ 回滚 .bak，绝不重启
+	// 继承 successorArgs（管理员凭据等未被 --config 覆盖的原始参数），否则无凭据起不来必假失败
+	const check = Bun.spawn([...successorArgs(), "--check"], { stdout: "pipe", stderr: "pipe" });
+	const [out, err] = await Promise.all([new Response(check.stdout).text(), new Response(check.stderr).text()]);
+	const checkCodeExit = await check.exited;
+	if (checkCodeExit !== 0) {
+		restoreConfigBackup(configPath);
+		const detail = `${out}${err}`.trim().slice(-400);
+		audit.append({ event: "ui.config.preflight_failed", ts: new Date().toISOString(), actor, detail, ip });
+		return json(400, { error: "预检失败，已回滚配置，服务未重启", detail });
+	}
+	audit.append({ event: "ui.config.updated", ts: new Date().toISOString(), actor, changed: Object.keys(strValues), ip });
+	Bun.spawn(successorArgs(), { stdin: "ignore", stdout: "inherit", stderr: "inherit", env: { ...process.env, OMO_KB_BIND_RETRY_MS: "5000" } }).unref();
+	setTimeout(() => {
+		try {
+			server.stop(true);
+		} catch { /* 已停 */ }
+		process.exit(0);
+	}, 300);
+	return json(200, { ok: true, restarting: true, detail: "配置已写入并通过预检，服务正在切换（<1s 窗口）" });
 }
 
 /* ---------------- 限流：同一来源 1 分钟内最多 10 次失败 ---------------- */
@@ -173,25 +394,58 @@ async function handleEnroll(req, ip) {
 	}
 }
 
-const useTls = args["tls-cert"] !== undefined && args["tls-key"] !== undefined;
 if (!useTls && args["allow-insecure-http"] !== true) {
 	console.error("✗ 拒绝以明文 HTTP 启动（凭据将经网络传输）：请提供 --tls-cert/--tls-key，或显式 --allow-insecure-http（仅限本机/受信内网）");
 	process.exit(1);
 }
 if (!useTls) console.error("⚠ 明文 HTTP 模式（--allow-insecure-http）：凭据将以明文经网络传输，仅限受信链路！");
 
-const server = Bun.serve({
-	hostname: host,
-	port,
-	...(useTls ? { tls: { cert: Bun.file(args["tls-cert"]), key: Bun.file(args["tls-key"]) } } : {}),
-	async fetch(req) {
-		const u = new URL(req.url);
-		const ip = server.requestIP(req)?.address ?? "unknown";
-		if (u.pathname === "/healthz") return json(200, { ok: true, repo: args.repo, registryVersion: REGISTRY_VERSION, tls: useTls });
-		if (u.pathname === "/enroll" && req.method === "POST") return await handleEnroll(req, ip);
-		return json(404, { error: "not found" });
-	},
-});
+let server;
+const bindRetryMs = Number.parseInt(process.env.OMO_KB_BIND_RETRY_MS ?? "0", 10) || 0;
+for (let deadline = Date.now() + bindRetryMs; ; ) {
+	try {
+		server = Bun.serve({
+			hostname: host,
+			port,
+			...(useTls ? { tls: { cert: Bun.file(args["tls-cert"]), key: Bun.file(args["tls-key"]) } } : {}),
+			async fetch(req) {
+				const u = new URL(req.url);
+				const ip = server.requestIP(req)?.address ?? "unknown";
+				if (u.pathname === "/healthz") return json(200, { ok: true, repo: args.repo, registryVersion: REGISTRY_VERSION, tls: useTls });
+				if (u.pathname === "/enroll" && req.method === "POST") return await handleEnroll(req, ip);
+				if (UI_ON && (u.pathname === "/ui" || u.pathname.startsWith("/ui/"))) {
+					const actor = identityFromRequest(req, UI_IDENTITY_HEADER);
+					if (actor === null) {
+						if (throttled(ip)) return json(429, { error: "尝试过于频繁" });
+						audit.append({ event: "ui.denied", ts: new Date().toISOString(), ip, via: u.pathname });
+						return unauthorizedResponse();
+					}
+					if (u.pathname === "/ui") return new Response(null, { status: 301, headers: { Location: "ui/" } });
+					if (u.pathname === "/ui/") return uiPageResponse();
+					if (u.pathname === "/ui/api/state" && req.method === "GET") return handleUiState(actor);
+					if (u.pathname === "/ui/api/code" && req.method === "POST") return await handleUiCode(req, ip, actor);
+					if (u.pathname === "/ui/api/config" && req.method === "GET") return handleUiConfigGet(actor);
+					if (u.pathname === "/ui/api/config" && req.method === "POST") return await handleUiConfigPost(req, ip, actor);
+					return json(404, { error: "not found" });
+				}
+				return json(404, { error: "not found" });
+			},
+		});
+		break;
+	} catch (err) {
+		if (Date.now() >= deadline) {
+			console.error(`✗ 端口绑定失败 ${host}:${port}（${String(err?.message ?? err)}）`);
+			process.exit(1);
+		}
+		await new Promise((r) => setTimeout(r, 250));
+	}
+}
+if (typeof args["pid-file"] === "string" && args["pid-file"] !== "") {
+	try {
+		fs.mkdirSync(path.dirname(args["pid-file"]), { recursive: true });
+		fs.writeFileSync(args["pid-file"], `${process.pid}\n`);
+	} catch { /* pid 文件写不进不阻断服务 */ }
+}
 
 // 打印监听端口（测试与运维都靠这一行判定就绪；日志一律不含秘密）
-console.log(`LISTEN ${useTls ? "https" : "http"}://${host}:${server.port} repo=${args.repo} registry=${registryFile} audit=${auditFile} codeTtlMin=${codeTtlMin}`);
+console.log(`LISTEN ${useTls ? "https" : "http"}://${host}:${server.port} repo=${args.repo} registry=${registryFile} audit=${auditFile} codeTtlMin=${codeTtlMin} ui=${UI_ON ? "on" : "off"} auth=${UI_ON ? `identity-header(${UI_IDENTITY_HEADER})` : "n/a"} config=${configPath ?? "-"}`);

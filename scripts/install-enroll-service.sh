@@ -132,7 +132,9 @@ for cand in "$SELF_DIR" "$SELF_DIR/.." "$SELF_DIR/../scripts"; do
 done
 if [ -n "$FILE_BASE" ]; then
   cp "$FILE_BASE/ops-kb-enroll-server.mjs" "$FILE_BASE/ops-kb-provision.mjs" "$SERVICE_DIR/"
-  cp "$FILE_BASE/lib/kb-gitea.mjs" "$FILE_BASE/lib/kb-registry.mjs" "$FILE_BASE/lib/kb-audit.mjs" "$SERVICE_DIR/lib/"
+  cp "$FILE_BASE/lib/kb-gitea.mjs" "$FILE_BASE/lib/kb-registry.mjs" "$FILE_BASE/lib/kb-audit.mjs" "$FILE_BASE/lib/kb-auth.mjs" "$FILE_BASE/lib/kb-ui-config.mjs" "$SERVICE_DIR/lib/"
+  mkdir -p "$SERVICE_DIR/ui"
+  cp "$FILE_BASE/ui/index.html" "$SERVICE_DIR/ui/index.html"
   ok "服务文件取自本机包（$FILE_BASE）"
 else
   [ -n "$VERSION" ] || die "本机包内无服务文件：请用 --version <v> 指定版本（如 --version v0.11.0），或从发布包内运行本脚本"
@@ -142,7 +144,10 @@ else
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/ops-kb-provision.mjs" -o "$SERVICE_DIR/ops-kb-provision.mjs" \
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-gitea.mjs" -o "$SERVICE_DIR/lib/kb-gitea.mjs" \
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-registry.mjs" -o "$SERVICE_DIR/lib/kb-registry.mjs" \
-       && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-audit.mjs" -o "$SERVICE_DIR/lib/kb-audit.mjs"; then
+       && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-audit.mjs" -o "$SERVICE_DIR/lib/kb-audit.mjs" \
+       && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-auth.mjs" -o "$SERVICE_DIR/lib/kb-auth.mjs" \
+       && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-ui-config.mjs" -o "$SERVICE_DIR/lib/kb-ui-config.mjs" \
+       && { mkdir -p "$SERVICE_DIR/ui" && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/ui/index.html" -o "$SERVICE_DIR/ui/index.html"; }; then
       ok "服务文件已下载（$src）"; fetched=true; break
     fi
   done
@@ -222,6 +227,10 @@ OMO_KB_TLS_KEY=$DIR/tls/key.pem
 OMO_KB_REGISTRY=$DIR/registry.json
 OMO_KB_AUDIT=$DIR/audit.jsonl
 OMO_KB_LOG=$DIR/logs/service.log
+# 管理后台（/ui）：默认关。开启前先把本服务接入 yufu 网关（认证+TLS 由 yufu 负责），
+# 服务只认网关注入的身份头（真机实测定为 X-Auth-Username（值=username）；如网关行为不同可改）。
+OMO_KB_UI=off
+OMO_KB_UI_IDENTITY_HEADER=X-Auth-Username
 EOF
 chmod 600 "$DIR/config.env"; ok "配置已写入 $DIR/config.env（0600）"
 
@@ -310,10 +319,13 @@ case "$cmd" in
     mkdir -p "$DIR/logs"; cd "$DIR/service"
     # 三个标准流全部脱离调用方（真机踩到：服务继承调用方 stdout ⇒ 在管道里挂住）
     ADMIN_ARGS=(); if [ "$OMO_KB_ADMIN_MODE" = token ]; then ADMIN_ARGS=(--admin-token-file "$DIR/admin.token"); else ADMIN_ARGS=(--admin-user "$OMO_KB_ADMIN_USER" --admin-password-file "$DIR/admin.pw"); fi
-    nohup bun ops-kb-enroll-server.mjs --api "$OMO_KB_API" --repo "$OMO_KB_REPO" --team "$OMO_KB_TEAM" \
+    UI_ARGS=(); if [ "${OMO_KB_UI:-off}" = "on" ]; then UI_ARGS=(--ui --ui-identity-header "${OMO_KB_UI_IDENTITY_HEADER:-X-Auth-Username}"); fi
+    # --config：/ui 在线改配置的写回目标；--pid-file：UI 重启接力后 stop 仍能找到新进程
+    nohup bun ops-kb-enroll-server.mjs --config "$DIR/config.env" --pid-file "$DIR/service.pid" \
+      --api "$OMO_KB_API" --repo "$OMO_KB_REPO" --team "$OMO_KB_TEAM" \
       --permission "$OMO_KB_PERMISSION" --grant "$OMO_KB_GRANT" "${ADMIN_ARGS[@]}" \
       --registry "$OMO_KB_REGISTRY" --audit "$OMO_KB_AUDIT" --host "$OMO_KB_HOST" --port "$OMO_KB_PORT" \
-      --tls-cert "$OMO_KB_TLS_CERT" --tls-key "$OMO_KB_TLS_KEY" >>"$OMO_KB_LOG" 2>&1 </dev/null &
+      --tls-cert "$OMO_KB_TLS_CERT" --tls-key "$OMO_KB_TLS_KEY" "${UI_ARGS[@]}" >>"$OMO_KB_LOG" 2>&1 </dev/null &
     echo $! > "$DIR/service.pid"
     disown 2>/dev/null || true
     mypid="$(cat "$DIR/service.pid" 2>/dev/null || true)"
@@ -428,3 +440,4 @@ echo "  签码：  omo-kb code --op enroll --device <设备名>"
 [ -n "$FP" ] && echo "  证书指纹（SHA256）：$FP"
 echo "  实例侧：omo kb enroll --server https://<本机可达地址>:$PORT --code-file <0600 码文件>"
 echo "  批量接入：bash omo-kb-fleet.sh service <设备名…>（本包内；逐设备签码并给出实例侧一条命令）"
+echo "  管理后台：config.env 设 OMO_KB_UI=on 并 omo-kb restart ⇒ https://<本机>:${PORT}/ui/（建议经 yufu 反代；身份头 ${OMO_KB_UI_IDENTITY_HEADER:-X-Auth-Username}）"
