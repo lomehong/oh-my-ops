@@ -34,6 +34,41 @@ async function branchesOf(shell: ShellExec, bare: string): Promise<string> {
 	return r.stdout;
 }
 
+describe("KBORG-1：main 有存量 + 本地新知 ⇒ 归并（.122 真机场景回归）", () => {
+	test("存量留在根目录原地不动；本地新条目归并进域活档案", async () => {
+		const shell = new ShellExec();
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-org-"));
+		const remote = path.join(root, "remote.git");
+		const clone = path.join(root, "clone");
+		try {
+			await shell.exec(["git", "init", "--bare", "-b", "main", remote], { timeoutMs: 30_000 });
+			await shell.exec(["git", "clone", remote, clone], { timeoutMs: 30_000 });
+			await shell.exec(["git", "-C", clone, "config", "user.email", "t@t"], { timeoutMs: 30_000 });
+			await shell.exec(["git", "-C", clone, "config", "user.name", "t"], { timeoutMs: 30_000 });
+			// 存量：先入 origin/main 树（模拟 pull 下来的 32 篇平铺）
+			fs.writeFileSync(path.join(clone, "legacy-main-doc.md"), "# main 存量\n");
+			await shell.exec(["git", "-C", clone, "add", "legacy-main-doc.md"], { timeoutMs: 30_000 });
+			await shell.exec(["git", "-C", clone, "commit", "-m", "legacy"], { timeoutMs: 30_000 });
+			await shell.exec(["git", "-C", clone, "push", "origin", "main"], { timeoutMs: 30_000 });
+			// 本地新知：带「系统」头的未跟踪条目
+			fs.writeFileSync(path.join(clone, "kborg1-accept.md"), "系统: runbooks\n类型: 事件\n主题: KBORG-1 验收\n\n归并目标验证。\n");
+
+			const r = await syncKb({ omoDir: root, kbDir: clone, repo: remote, branch: "main", device: "node-x", runner: shell, push: true });
+			expect(r.ok).toBe(true);
+			expect(r.actions.join(" ")).toContain("归并：1 条并入域活档案");
+			// 存量原地保留（未被归并/移除）
+			const tracked = await shell.exec(["git", "ls-files"], { cwd: clone, timeoutMs: 30_000 });
+			expect(tracked.stdout).toContain("legacy-main-doc.md");
+			// 新知并入活档案
+			const living = fs.readFileSync(path.join(clone, "runbooks", "README.md"), "utf8");
+			expect(living).toContain("KBORG-1 验收");
+			expect(fs.existsSync(path.join(clone, "kborg1-accept.md"))).toBe(false);
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	});
+});
+
 describe("instanceBranchFor：分支名安全化", () => {
 	test("设备名含非法字符 → 归一；空名 → unknown", () => {
 		expect(instanceBranchFor("PC-SZ-375")).toBe("instance/PC-SZ-375");
