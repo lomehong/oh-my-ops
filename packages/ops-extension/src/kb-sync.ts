@@ -165,7 +165,7 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 			actions.push(integrated);
 			if (integrated.includes("冲突已中止")) failed = true;
 
-			// ── KBORG-1：机械归并（域活档案）——任何失败都降级为原样提交，绝不阻塞同步 ──
+			// ── // ── KBORG-1：机械归并（域活档案）——任何失败都降级为原样提交，绝不阻塞同步 ──
 			if (process.env.OMO_KB_ORGANIZE !== "off") {
 				try {
 					const domains = await loadDomains(opts.kbDir, (p) => fs.readFile(p, "utf8"));
@@ -173,23 +173,37 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 					const dateIso = (opts.now ?? (() => new Date()))().toISOString();
 					const rootAllow = new Set(domains.rootAllowlist);
 					// 只归并「不在 origin/main 树中」的根条目：main 存量（pull 下来的）绝不动——
-					// 判据与跟踪状态无关，可同时覆盖「未跟踪」与「已 commit 但漏推」两类本地知识
-					// （真机教训 .122：曾把 main 平铺存量整体误归并——存量不动由此获得机械保证）
+					// 判据与跟踪状态无关，可同时覆盖「未跟踪」与「已 commit 但漏推」两类本地知识。
 					const mainTree = new Set<string>();
-					const lsMain = await opts.runner.exec(
-						["git", "-C", opts.kbDir, "ls-tree", "-r", "--name-only", `origin/${mainBranch}`],
-						{ timeoutMs: 30_000 },
+					// 老 git（1.8.x）`fetch origin main` 只写 FETCH_HEAD 不建跟踪引用 ⇒ 显式 refspec 物化
+					await opts.runner.exec(
+						["git", "fetch", "origin", `+refs/heads/${mainBranch}:refs/remotes/origin/${mainBranch}`],
+						{ cwd: opts.kbDir, timeoutMs: 30_000 },
 					);
-					if (lsMain.exitCode === 0) {
-						for (const l of lsMain.stdout.split("\n")) {
-							const f = l.trim();
-							if (f !== "") mainTree.add(f);
+					// 老 git 不支持 -C ⇒ 走 cwd 形态（与 GitCompat 兼容路径一致）
+					const refCheck = await opts.runner.exec(
+						["git", "show-ref", "--verify", "--quiet", `refs/remotes/origin/${mainBranch}`],
+						{ cwd: opts.kbDir, timeoutMs: 30_000 },
+					);
+					if (refCheck.exitCode === 0) {
+						// 引用存在才按 main 树判存量；读树失败 ⇒ 显式抛错（外层兜底跳过组织），
+						// 绝不静默当作「main 为空」而把存量全量归并（.122 真机事故）
+						const lsMain = await opts.runner.exec(
+							["git", "ls-tree", "-r", "--name-only", `origin/${mainBranch}`],
+							{ cwd: opts.kbDir, timeoutMs: 30_000 },
+						);
+						if (lsMain.exitCode !== 0) {
+							throw new Error(`无法读取 origin/${mainBranch} 树（exit ${lsMain.exitCode}）——为防误归并存量，本轮跳过组织`);
+							}
+							for (const l of lsMain.stdout.split("\n")) {
+								const f = l.trim();
+								if (f !== "") mainTree.add(f);
+								}
 						}
-					}
-					const rootNames = (await fs.readdir(opts.kbDir)).filter(
-						(f) => f.endsWith(".md") && !rootAllow.has(f) && !f.startsWith(".") && !mainTree.has(f),
-					);
-					const entries: { name: string; text: string }[] = [];
+						const rootNames = (await fs.readdir(opts.kbDir)).filter(
+							(f) => f.endsWith(".md") && !rootAllow.has(f) && !f.startsWith(".") && !mainTree.has(f),
+						);
+				const entries: { name: string; text: string }[] = [];
 					for (const n of rootNames) entries.push({ name: n, text: await fs.readFile(path.join(opts.kbDir, n), "utf8") });
 					// 现存活档案作归并基底（integrate 刚带下来的远端内容不能被覆盖——真机回归抓到）
 					const existingLiving: { domain: string; text: string }[] = [];

@@ -76,12 +76,11 @@ describe("syncKb：分支纪律（真 git + file:// 裸仓）", () => {
 			const pushMain = await shell.exec(["git", "push", "origin", "FETCH_HEAD:refs/heads/main"], { cwd: coordClone, timeoutMs: 30_000 });
 			expect(pushMain.exitCode).toBe(0);
 
-			// B 再同步 → 见到条目（KBORG-1：以活档案小节形式存在）
+			// B 再同步 → 见到条目（KBORG-1 语义：A 的条目已归并为域活档案 runbooks/README.md）
 			const rb2 = await syncKb({ omoDir: dirs.b, kbDir: path.join(dirs.b, "knowledge"), repo: bare, branch: "main", device: "node-b", runner: shell, push: false });
 			expect(rb2.ok).toBe(true);
-			const seen = fs.readFileSync(path.join(dirs.b, "knowledge", "runbooks", "README.md"), "utf8");
-			expect(seen).toContain("Runbook 502");
-			expect(seen).toContain("现象/根因/处置");
+			expect(fs.existsSync(path.join(dirs.b, "knowledge", "runbook-502.md"))).toBe(false);
+			expect(fs.readFileSync(path.join(dirs.b, "knowledge", "runbooks", "README.md"), "utf8")).toContain("Runbook 502");
 		} finally {
 			cleanup();
 		}
@@ -173,8 +172,9 @@ describe("凭据绝不入库（含 kbDir 与 $OMO_DIR/kb 误配的场景）", ()
 			const r = await syncKb({ omoDir: omo, kbDir: omo, repo: bare, branch: "main", device: "node-nested", runner: shell, push: true });
 			expect(r.ok).toBe(true);
 			const tracked = await shell.exec(["git", "ls-files"], { cwd: omo, timeoutMs: 30_000 });
-			// KBORG-1：无头条目归并进 runbooks/README.md（仍被 track；凭据三件套依旧必须不在）
+			// KBORG-1：无头条目归并进 runbooks/README.md（仍被 track）；凭据三件套依旧必须不在
 			expect(tracked.stdout).toContain("runbooks/README.md");
+			expect(tracked.stdout).not.toContain("real-entry.md");
 			expect(tracked.stdout).not.toContain("credential.json");
 			expect(tracked.stdout).not.toContain("state.json");
 			expect(tracked.stdout).not.toContain("git-credentials");
