@@ -81,10 +81,11 @@ HOME="$H" "$H/.local/bin/omo-kb" logs 2>/dev/null | grep -q "lint=strict" && pas
 
 BODY='{"action":"opened","number":7,"pull_request":{"number":7,"base":{"ref":"main"},"head":{"sha":"'"$SHA"'"},"title":"kb: 测试"},"repository":{"full_name":"acme/kb"}}'
 SIG="$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')"
-post_webhook() { curl -sk -o /tmp/kbwb-body.json -w '%{http_code}' --max-time 15 -X POST "https://127.0.0.1:$PORT/kb/webhook" -H "X-KB-Signature: $1" -H 'Content-Type: application/json' -d "$2"; }
+# hdr$1=签名头名（Gitea 真实头为 X-Gitea-Signature）
+post_webhook() { local h="$1"; local s="$2"; local b="$3"; curl -sk -o /tmp/kbwb-body.json -w '%{http_code}' --max-time 15 -X POST "https://127.0.0.1:$PORT/kb/webhook" -H "$h: $s" -H 'Content-Type: application/json' -d "$b"; }
 
 echo "[1] strict：重复内容 ⇒ 硬拦（status failure + 评论）"
-C1="$(post_webhook "$SIG" "$BODY")"
+C1="$(post_webhook "X-Gitea-Signature" "$SIG" "$BODY")"
 [ "$C1" = "200" ] && pass "webhook 200" || fail "webhook HTTP $C1：$(head -c 120 /tmp/kbwb-body.json)"
 grep -q '"blocked":true' /tmp/kbwb-body.json && pass "重复内容被硬拦（blocked=true）" || fail "未硬拦：$(head -c 160 /tmp/kbwb-body.json)"
 [ -f "$TMP/statuses.json" ] && grep -q '"state":"failure"' "$TMP/statuses.json" && pass "status failure 已回写" || fail "未回写 failure status"
@@ -92,23 +93,26 @@ grep -q '"blocked":true' /tmp/kbwb-body.json && pass "重复内容被硬拦（bl
 [ -f "$H/.omo-kb/audit.jsonl" ] && grep -q '"event":"lint.blocked"' "$H/.omo-kb/audit.jsonl" && pass "审计 lint.blocked 落账" || fail "审计缺 lint.blocked"
 
 echo "[2] 幂等：同 body 重复投递 ⇒ 结果一致且 status 记录不翻倍"
-C2="$(post_webhook "$SIG" "$BODY")"
+C2="$(post_webhook "X-Gitea-Signature" "$SIG" "$BODY")"
 grep -q '"blocked":true' /tmp/kbwb-body.json && pass "重复投递结果一致" || fail "重复投递行为漂移"
 N1="$(grep -o '"context":"kb-lint"' "$TMP/statuses.json" | wc -l)"
 [ "$N1" -ge 2 ] && pass "status 重复回写（无副作用差异）" || fail "status 回写异常"
 
 echo "[3] 坏签名 ⇒ 401 且不回写"
 N_BEFORE="$(grep -o '"context":"kb-lint"' "$TMP/statuses.json" | wc -l)"
-C3="$(post_webhook "badbadbad" "$BODY")"
+C3="$(post_webhook "X-Gitea-Signature" "badbadbad" "$BODY")"
 [ "$C3" = "401" ] && pass "坏签名 401" || fail "坏签名应 401（$C3）"
 N_AFTER="$(grep -o '"context":"kb-lint"' "$TMP/statuses.json" | wc -l)"
 [ "$N_BEFORE" = "$N_AFTER" ] && pass "坏签名不产生 status" || fail "坏签名竟回写了 status"
+# 兼容自建头 X-KB-Signature（等价通道）
+C3B="$(post_webhook "X-KB-Signature" "$SIG" "$BODY")"
+[ "$C3B" = "200" ] && pass "兼容头 X-KB-Signature 同样可用" || fail "兼容头失效"
 
 echo "[4] warn 模式：硬违规也 success + 评论警示"
 sed -i 's/^OMO_KB_LINT_MODE=strict/OMO_KB_LINT_MODE=warn/' "$H/.omo-kb/config.env"
 HOME="$H" "$H/.local/bin/omo-kb" restart >>"$TMP/start.log" 2>&1
 for _ in $(seq 1 20); do curl -sk --max-time 2 "https://127.0.0.1:$PORT/healthz" 2>/dev/null | grep -q '"ok":true' && break; sleep 0.5; done
-C4="$(post_webhook "$SIG" "$BODY")"
+C4="$(post_webhook "X-Gitea-Signature" "$SIG" "$BODY")"
 grep -q '"blocked":false' /tmp/kbwb-body.json && pass "warn 模式不硬拦（success）" || fail "warn 模式不应硬拦"
 [ -f "$TMP/comments.json" ] && grep -q "模式：warn" "$TMP/comments.json" && pass "评论标注 warn 模式" || fail "评论未标注 warn"
 
@@ -116,7 +120,7 @@ echo "[5] lint off ⇒ 503"
 sed -i 's/^OMO_KB_LINT_MODE=warn/OMO_KB_LINT_MODE=off/' "$H/.omo-kb/config.env"
 HOME="$H" "$H/.local/bin/omo-kb" restart >>"$TMP/start.log" 2>&1
 for _ in $(seq 1 20); do curl -sk --max-time 2 "https://127.0.0.1:$PORT/healthz" 2>/dev/null | grep -q '"ok":true' && break; sleep 0.5; done
-C5="$(post_webhook "$SIG" "$BODY")"
+C5="$(post_webhook "X-Gitea-Signature" "$SIG" "$BODY")"
 [ "$C5" = "503" ] && pass "lint off ⇒ 503（门禁明确不可用）" || fail "off 应 503（$C5）"
 
 echo "结果：$FAILED 项失败"

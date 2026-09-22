@@ -167,7 +167,9 @@ if (args.check === true) {
 async function handleKbWebhook(req, ip) {
 	if (LINT_MODE === "off" || WEBHOOK_SECRET === undefined) return json(503, { error: "lint 未启用（需 --webhook-secret 且 --lint-mode 非 off）" });
 	const raw = await req.text();
-	if (!verifyHmac(WEBHOOK_SECRET, raw, req.headers.get("X-KB-Signature") ?? "")) {
+	// Gitea 原生 webhook 的签名头是 X-Gitea-Signature；X-KB-Signature 作为自建调用方的等价头保留
+	const sig = req.headers.get("X-Gitea-Signature") ?? req.headers.get("X-KB-Signature") ?? "";
+	if (!verifyHmac(WEBHOOK_SECRET, raw, sig)) {
 		audit.append({ event: "webhook.denied", ts: new Date().toISOString(), ip });
 		return json(401, { error: "签名校验失败" });
 	}

@@ -95,7 +95,7 @@ describe("organizeEntries", () => {
 
 	test("幂等：归并计划产生的活档案再次归并空条目集 ⇒ 零变更", () => {
 		const first = organizeEntries([{ name: "a.md", text: "系统: omo-kb\n主题: X\n内容。\n" }], DOMAINS, DEVICE, NOW_ISO);
-		const living = first.livingDocs[0];
+		const living = first.livingDocs[0]!;
 		// 第二轮：条目文件已被移除（模拟）⇒ 无输入
 		const second = organizeEntries([], DOMAINS, DEVICE, NOW_ISO);
 		expect(second.merges).toEqual([]);

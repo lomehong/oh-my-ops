@@ -36,13 +36,14 @@ export function parseDomainsYml(text: string): DomainsConfig {
 		if (line.trim() === "" || line.trim().startsWith("#")) continue;
 		if (!/^\s/.test(line)) section = /^([A-Za-z_]+):/.exec(line)?.[1] ?? "";
 		const item = /^-\s*(\S+)\s*$/.exec(line.trim());
-		if (item !== null) {
-			if (section === "domains") domains.push(item[1]);
-			if (section === "root_allowlist") rootAllowlist.push(item[1]);
+		const name = item?.[1];
+		if (name !== undefined) {
+			if (section === "domains") domains.push(name);
+			if (section === "root_allowlist") rootAllowlist.push(name);
 			continue;
 		}
 		const kv = /^([A-Za-z_]+):\s*(\S+)\s*$/.exec(line.trim());
-		if (kv !== null && kv[1] === "fallback") fallback = kv[2];
+		if (kv !== null && kv[1] === "fallback" && kv[2] !== undefined) fallback = kv[2];
 	}
 	return {
 		domains: domains.length > 0 ? domains : DEFAULT_DOMAINS.domains,
@@ -78,12 +79,14 @@ export function parseEntry(text: string, dateIso: string): ParsedEntry {
 	const header: Record<string, string> = {};
 	let bodyStart = 0;
 	for (let i = 0; i < lines.length; i++) {
-		const m = /^(系统|类型|主题):\s*(.*)\s*$/.exec(lines[i]);
-		if (m === null) {
+		const m = /^(系统|类型|主题):\s*(.*)\s*$/.exec(lines[i]!);
+		const key = m?.[1];
+		const value = m?.[2];
+		if (key === undefined || value === undefined) {
 			bodyStart = i;
 			break;
 		}
-		header[m[1]] = m[2].trim();
+		header[key] = value.trim();
 		bodyStart = i + 1;
 	}
 	const systemRaw = header["系统"] ?? "";
