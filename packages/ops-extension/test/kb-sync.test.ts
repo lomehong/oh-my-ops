@@ -330,10 +330,16 @@ describe("★ 已有本地提交但本轮无新改动时，也必须推送（真
 			await shell.exec(["git", "-C", seed, "push", "origin", "main"]);
 			await shell.exec(["git", "clone", remote, clone]);
 			await shell.exec(["git", "-C", clone, "config", "user.email", "t@t"]); await shell.exec(["git", "-C", clone, "config", "user.name", "t"]);
-			// 模拟「上次 push 失败的残留」：本地已提交但未推送
+			// KBORG-1 回归守卫：先让「存量」进入 origin/main 树（绝不被 organize 触碰）
+			fs.writeFileSync(path.join(clone, "legacy-main-doc.md"), "# main 存量（模拟 pull 下来的老条目）\n");
+			await shell.exec(["git", "-C", clone, "add", "legacy-main-doc.md"]);
+			await shell.exec(["git", "-C", clone, "commit", "-m", "legacy doc（模拟 main 内容）"]);
+			await shell.exec(["git", "-C", clone, "push", "origin", "main"]);
+			// 再留下「漏推」的本地提交（不在 origin/main 树 ⇒ 应被 organize 归并）
 			fs.writeFileSync(path.join(clone, "stale.md"), "stranded\n");
 			await shell.exec(["git", "-C", clone, "add", "-A"]);
 			await shell.exec(["git", "-C", clone, "commit", "-m", "stale（上次推送失败留下）"]);
+
 			// KBORG-1：手工 stale.md（无头）本轮被 organize 归并 ⇒ 产生新提交并推送（漏推回归仍被覆盖）
 			const r = await syncKb({ omoDir: root, kbDir: clone, repo: remote, branch: "main", device: "node-9", runner: shell, push: true });
 			expect(r.actions.join(" ")).toContain("归并：1 条并入域活档案");
@@ -342,6 +348,9 @@ describe("★ 已有本地提交但本轮无新改动时，也必须推送（真
 			expect(r.actions.join(" ")).toContain("push instance/node-9 ✓");
 			const stranded = await shell.exec(["git", "--git-dir", remote, "show", "instance/node-9:runbooks/README.md"]);
 			expect(stranded.stdout).toContain("stranded");
+			const tree9 = await shell.exec(["git", "--git-dir", remote, "ls-tree", "--name-only", "instance/node-9"]);
+			expect(tree9.stdout).toContain("legacy-main-doc.md"); // 存量文件原地保留（未被归并/移除）
+			expect(stranded.stdout).not.toContain("main 存量");
 		} finally {
 			fs.rmSync(root, { recursive: true, force: true });
 		}
