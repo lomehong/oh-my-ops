@@ -1,0 +1,15 @@
+id: 'WEBVERIFY-1'
+title: 'ops_web_verify：部署后浏览器真实验证工具（无头浏览器 + 断言 + 截图 + 控制台/失败请求证据）'
+state: '待执行'
+level: 'read-only(仅访问与截图，不提交表单、不改远端)'
+created: '2026-09-24T07:55:24.747Z'
+accept:
+  - '新工具 ops_web_verify：入参 url/waitFor/断言(标题·文本·选择器)/cookie 注入/截图路径；出参结构化裁决（断言逐项结果 + 控制台错误 + 页面异常 + 失败请求 + 截图路径 + 耗时）'
+  - '零依赖 CDP 客户端（Bun WebSocket），CDP 端点可配（OMO_BROWSER_CDP / 参数）；端点不可达时给出可执行的启动指引（含 el7 docker 一行命令）'
+  - '单测覆盖纯逻辑（失败请求过滤/断言评估/裁决组装/不可达指引）；探针在无浏览器环境显式 SKIP 而非静默通过'
+  - 'test:ci 全绿；随 omo 版本发布并更新适配/文档'
+events:
+  - ts: '2026-09-24T07:55:24.747Z'
+    op: 'create'
+    by: 'omp-architect'
+    note: 'ops_web_verify：部署后浏览器真实验证工具（无头浏览器 + 断言 + 截图 + 控制台/失败请求证据）'

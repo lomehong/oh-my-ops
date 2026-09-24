@@ -200,6 +200,11 @@ omo kb disable     # 停用远端同步（删除凭据；本地知识库保留�
   轮换后旧凭据**即时失效**，实例下次 `sync` 自动换用新凭据。
 - **智能体侧工具**：`ops_kb_list` / `ops_kb_search` / `ops_kb_status`（read 档）、`ops_kb_save` / `ops_kb_sync`
   （write 档，需 policy 规则 `actions` 显式含 `kb-write` / `kb-sync`）。
+  - **部署验证工具**：`ops_web_verify`（read 档）——用**无头浏览器真实访问**并验证 web 系统：导航 + 等待 SPA 渲染 +
+    断言（标题/文本/选择器）+ 控制台错误 + 失败请求 + 截图留证；受保护页面可注入 cookie 复用登录态。浏览器以 **CDP 端点**
+    接入（`OMO_BROWSER_CDP`，缺省 `http://127.0.0.1:9222`）；端点不可达时返回**可执行启动指引**（含 el7 可用的
+    `docker run` 一行命令），不静默降级。实现：零依赖 CDP 客户端（Bun 原生 WebSocket），纯逻辑与浏览器驱动分离
+    （`packages/ops-extension/src/web/{cdp,verify}.ts`）；契约探针 `scripts/probe-web-verify.sh` 在无浏览器环境显式 SKIP。
 - 设计（含 v1.27.3 实测事实与 as-built）见 [知识库同步与凭据分发设计](docs/designs/omo-kb-sync-credential-design.md)，
   落地过程见 [执行记录](docs/designs/omo-kb-sync-执行记录.md)。
 

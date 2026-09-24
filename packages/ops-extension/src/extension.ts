@@ -12,6 +12,7 @@ import { setupHooks } from "./hooks.ts";
 import { registerOpsCommands } from "./commands.ts";
 import { registerWriteTools } from "./tools/write.ts";
 import { registerKnowledgeTools } from "./tools/knowledge.ts";
+import { registerWebVerifyTools } from "./tools/web-verify.ts";
 import { setupRedact } from "./redact.ts";
 
 /**
@@ -46,6 +47,7 @@ export default function (pi: ExtensionAPI): void {
 	registerOpsCommands(pi, ctx);
 	registerWriteTools(pi, ctx, ctx.vault, approval);
 	registerKnowledgeTools(pi, ctx, approval);
+	registerWebVerifyTools(pi, ctx, approval);
 	// 模型厂商边界双向脱敏（移植 omp-redact-extension）：出站掩码 + 入站还原。
 	// best-effort：任何异常都不得阻断扩展加载（否则工具清单断言会拒绝启动）。
 	try {
