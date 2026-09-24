@@ -16,6 +16,8 @@
 | V6 | 真浏览器全链（起 Chromium + CDP）：断言全过 + 截图落盘 + 404/控制台证据齐 | `scripts/probe-web-verify.sh` | ✅ |
 | V7 | 无浏览器环境**显式 SKIP**（不得静默通过） | 探针 skip 分支 | ✅ |
 | V8 | 回归 | `npm run test:ci` 退出码 0（含新探针） | ✅ |
+| V9 | 注册适配层：名称/read 档/描述/execute 委派 | 单测（假 pi + 可链式假 zod） | ✅ |
+| V10 | 档位表全覆盖（既有守卫）：真实注册的每个 ops_ 工具都在 TIER_TABLE | `guards.test.ts` 守卫 | ✅ |
 
 ## 二、Do → 文件映射
 
@@ -42,6 +44,14 @@
 | 不用 playwright 驱动，改零依赖 CDP | agent 包是自包含发布物，引入 playwright（含浏览器与数十 MB 依赖）膨胀包体与攻击面；CDP 为浏览器自带协议，Bun 原生 WebSocket 即可 |
 | 浏览器接入以 CDP 端点而非内置启动 | 实例多为 el7（glibc 2.17 跑不了现代 Chromium）⇒ 交付"端点可配 + 不可达给可执行指引"，把部署形态留给环境（本机容器/远程集中式） |
 
+### 3.1 v0.15.1 补丁（v0.15.0 的发布缺陷）
+
+| # | 现象 | 真因 | 修复 |
+|---|---|---|---|
+| 3 | v0.15.0 中该工具**一执行即抛 INTERNAL**（`ops_web_verify 为非 read 档工具但未在 policyRequestFor 登记显式 action`） | 新工具未登记进 `TIER_TABLE`；而既有的"档位表全覆盖"守卫**抓不到**，因为它的测试夹具是**手工复刻** extension.ts 的注册序列（新工具不在夹具里） | ① 档位表登记 `ops_web_verify: READ`；② **消除漂移源**：把工具面注册序列抽为 `registerAllOpsTools`（唯一事实源），扩展入口与守卫测试共用；守卫现能拦截此类缺陷 |
+
+> 教训：**复刻式夹具会随上游漂移**——守卫与被守卫对象必须共用同一份实现，否则"有守卫"不等于"被覆盖"。
+
 ## 五、验证记录
 
 | 项 | 结果 |
@@ -50,5 +60,5 @@
 | `bash scripts/probe-web-verify.sh` | 0 项失败（真浏览器全链 + 不可达路径；本机有浏览器时实跑） |
 | `npm run test:ci` | 退出码 0 |
 | `npm run typecheck` | 0 错误 |
-| 发布 | v0.15.0（tag 与 main 一致） |
+| 发布 | v0.15.0（含缺陷）→ **v0.15.1**（档位登记 + 夹具漂移消除） |
 | 知识回灌 | `architect-knowledge/practice/evidence-collection-convergence-discipline.md`（lint PASS，已登记 practice/index.md） |

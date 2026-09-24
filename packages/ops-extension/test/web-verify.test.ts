@@ -177,7 +177,7 @@ describe("注册适配层：ops_web_verify", () => {
 		const pi = new FakePi();
 		const ctx = { authzView: standardAuthzView(new DefaultDenyPolicy([]), new StaticTokenStore([])) };
 		registerWebVerifyTools(pi as never, ctx as never, () => (async () => true) as never);
-		const def = pi.registered["ops_web_verify"];
+		const def = pi.registered["ops_web_verify"]!;
 		expect(def).toBeDefined();
 		expect(def.approval).toBe(READ);
 		expect(String(def.description)).toContain("无头浏览器");
@@ -186,7 +186,7 @@ describe("注册适配层：ops_web_verify", () => {
 			{ url: "http://127.0.0.1:1/" },
 			undefined,
 		)) as { content: { text: string }[]; details: Record<string, unknown> };
-		const verdict = JSON.parse(res.content[0].text) as { ok: boolean; notes: string[] };
+		const verdict = JSON.parse(res.content[0]!.text) as { ok: boolean; notes: string[] };
 		expect(verdict.ok).toBe(false);
 		expect(verdict.notes.join("\n")).toContain("docker run");
 	});

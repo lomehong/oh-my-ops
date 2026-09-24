@@ -2,7 +2,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { assertPlatformAtLoad } from "./platform.ts";
 import { loadConfig } from "./setup.ts";
 import { OpsContext } from "./context.ts";
-import { makeApprovalFactory } from "./approvals.ts";
+import { makeApprovalFactory, type ApprovalFn } from "./approvals.ts";
 import { registerReadOnlyTools } from "./tools/read-only.ts";
 import { registerShellTools } from "./tools/shell.ts";
 import { registerLogTools } from "./tools/log.ts";
@@ -14,6 +14,24 @@ import { registerWriteTools } from "./tools/write.ts";
 import { registerKnowledgeTools } from "./tools/knowledge.ts";
 import { registerWebVerifyTools } from "./tools/web-verify.ts";
 import { setupRedact } from "./redact.ts";
+
+/**
+ * 工具面注册序列（**唯一事实源**）：扩展入口与守卫测试（档位表全覆盖）共用同一份，
+ * 杜绝「加了工具忘了同步测试夹具」的漂移（该漂移曾让 ops_web_verify 在 v0.15.0 漏登记档位）。
+ */
+export function registerAllOpsTools(pi: ExtensionAPI, ctx: OpsContext, approval: (name: string) => ApprovalFn): void {
+	// Shell（exec）+ 日志（read）+ Process/File（read）+ Health/Vault（read）
+	registerShellTools(pi, ctx, approval);
+	registerLogTools(pi, ctx);
+	registerDockerTools(pi, ctx, approval);
+	registerK8sTools(pi, ctx, approval);
+	registerServiceTools(pi, ctx, approval);
+	registerReadOnlyTools(pi, ctx);
+	// write 档 + 知识库 + 部署验证
+	registerWriteTools(pi, ctx, ctx.vault, approval);
+	registerKnowledgeTools(pi, ctx, approval);
+	registerWebVerifyTools(pi, ctx, approval);
+}
 
 /**
  * omo 扩展入口（方案 §7.3）。
@@ -36,18 +54,10 @@ export default function (pi: ExtensionAPI): void {
 	});
 	const approval = makeApprovalFactory(ctx.targetPolicy, ctx.tokens);
 
-	// P1：注册所有工具——Shell（exec）+ 日志（read）+ Process/File（read）+ Health/Vault（read）
-	registerShellTools(pi, ctx, approval);
-	registerLogTools(pi, ctx);
-	registerDockerTools(pi, ctx, approval);
-	registerK8sTools(pi, ctx, approval);
-	registerServiceTools(pi, ctx, approval);
-	registerReadOnlyTools(pi, ctx);
+	// P1：注册所有工具（序列见 registerAllOpsTools，唯一事实源）
+	registerAllOpsTools(pi, ctx, approval);
 
 	registerOpsCommands(pi, ctx);
-	registerWriteTools(pi, ctx, ctx.vault, approval);
-	registerKnowledgeTools(pi, ctx, approval);
-	registerWebVerifyTools(pi, ctx, approval);
 	// 模型厂商边界双向脱敏（移植 omp-redact-extension）：出站掩码 + 入站还原。
 	// best-effort：任何异常都不得阻断扩展加载（否则工具清单断言会拒绝启动）。
 	try {

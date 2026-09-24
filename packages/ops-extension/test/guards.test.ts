@@ -14,11 +14,12 @@ import { makeApprovalFactory } from "../src/approvals.ts";
 import type { OpsContext } from "../src/context.ts";
 import { registerReadOnlyTools } from "../src/tools/read-only.ts";
 import { registerShellTools } from "../src/tools/shell.ts";
+import { registerAllOpsTools } from "../src/extension.ts";
 import { registerLogTools } from "../src/tools/log.ts";
 import { registerDockerTools, registerK8sTools } from "../src/tools/docker-k8s.ts";
 import { registerServiceTools } from "../src/tools/service.ts";
 import { registerWriteTools } from "../src/tools/write.ts";
-import { registerKnowledgeTools } from "../src/tools/knowledge.ts";
+
 
 // ── 桩：模拟 omp 注入面（工具注册表）──
 type RegisteredTool = { name: string; loadMode?: string; approval?: unknown; sourceInfo?: { path?: string } };
@@ -325,17 +326,10 @@ function fakeOps(): { ctx: OpsContext; approval: (name: string) => unknown } {
 	return { ctx, approval: makeApprovalFactory(policy, tokens) };
 }
 
-/** 复刻 extension.ts 的真实注册编排（工具面） */
+/** 直接调用扩展的注册序列（同一份实现，杜绝夹具漂移） */
 function registerRealTools(pi: RealFakePi): void {
 	const { ctx, approval } = fakeOps();
-	registerShellTools(pi as never, ctx, approval as never);
-	registerLogTools(pi as never, ctx);
-	registerDockerTools(pi as never, ctx, approval as never);
-	registerK8sTools(pi as never, ctx, approval as never);
-	registerServiceTools(pi as never, ctx, approval as never);
-	registerReadOnlyTools(pi as never, ctx);
-	registerWriteTools(pi as never, ctx, (ctx as unknown as { vault: never }).vault, approval as never);
-	registerKnowledgeTools(pi as never, ctx, approval as never);
+	registerAllOpsTools(pi as never, ctx as never, approval as never);
 }
 
 describe("★ 真实注册编排 × 档位表全覆盖（CI 拦截「加了工具忘了进 TIER_TABLE」）", () => {
@@ -346,6 +340,7 @@ describe("★ 真实注册编排 × 档位表全覆盖（CI 拦截「加了工�
 		// 反向保障：本批真实注册确实发生了（防桩写错导致空跑）
 		expect(names.length).toBeGreaterThan(15);
 		expect(names).toContain("ops_kb_status");
+		expect(names).toContain("ops_web_verify");
 
 		const report = checkToolRegistry(pi as never);
 		expect(report.failures).toEqual([]);
