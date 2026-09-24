@@ -35,6 +35,8 @@ export const TIER_TABLE: Readonly<Record<string, Tier | ((args: unknown) => Tier
 
 	// P15 · 知识库
 	ops_kb_list: READ,
+	// P1 · read：部署后真实浏览器验证（只访问/断言/截图，不提交表单、不改远端）
+	ops_web_verify: READ,
 	ops_kb_search: READ,
 	ops_kb_save: WRITE,
 	ops_kb_sync: WRITE,

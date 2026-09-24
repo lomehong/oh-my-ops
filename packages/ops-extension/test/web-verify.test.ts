@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { DefaultDenyPolicy, READ, StaticTokenStore } from "@ops-pi/core";
+import { standardAuthzView } from "../src/guards.ts";
+import { registerWebVerifyTools } from "../src/tools/web-verify.ts";
 import { CdpUnreachableError, resolveWsUrl } from "../src/web/cdp.ts";
 import { buildVerdict, evaluateAssertions, isNoiseRequest, pickFailedRequests, verifyPage, type CdpLike } from "../src/web/verify.ts";
 
@@ -151,5 +154,40 @@ describe("CDP 端点解析", () => {
 			expect(err instanceof CdpUnreachableError).toBe(true);
 			expect((err as CdpUnreachableError).guidance).toContain("remote-debugging-port");
 		}
+	});
+});
+
+/** 可链式假 zod：只要能被工具构建参数模式即可（不引第三方依赖） */
+function fakeZod() {
+	const chain: Record<string, unknown> = {};
+	const self = () => chain;
+	for (const m of ["describe", "optional", "array", "min", "max"]) chain[m] = self;
+	return { object: () => chain, string: () => chain, number: () => chain, boolean: () => chain, array: () => chain };
+}
+
+describe("注册适配层：ops_web_verify", () => {
+	class FakePi {
+		readonly registered: Record<string, Record<string, unknown>> = {};
+		readonly zod = fakeZod();
+		registerTool(def: Record<string, unknown>): void {
+			this.registered[String(def.name)] = def;
+		}
+	}
+	test("工具已注册、read 档、描述含'无头浏览器'，且 execute 委派到 verifyPage（不可达时给指引）", async () => {
+		const pi = new FakePi();
+		const ctx = { authzView: standardAuthzView(new DefaultDenyPolicy([]), new StaticTokenStore([])) };
+		registerWebVerifyTools(pi as never, ctx as never, () => (async () => true) as never);
+		const def = pi.registered["ops_web_verify"];
+		expect(def).toBeDefined();
+		expect(def.approval).toBe(READ);
+		expect(String(def.description)).toContain("无头浏览器");
+		const res = (await (def.execute as (a: string, b: Record<string, unknown>, c: undefined) => Promise<{ content: { text: string }[] }>)(
+			"call-1",
+			{ url: "http://127.0.0.1:1/" },
+			undefined,
+		)) as { content: { text: string }[]; details: Record<string, unknown> };
+		const verdict = JSON.parse(res.content[0].text) as { ok: boolean; notes: string[] };
+		expect(verdict.ok).toBe(false);
+		expect(verdict.notes.join("\n")).toContain("docker run");
 	});
 });
