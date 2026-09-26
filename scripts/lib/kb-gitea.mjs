@@ -9,10 +9,10 @@
  */
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import { assertSecretFilePerm } from "./secret-perm.mjs";
 
 export function readSecretFile(file, what = "秘密") {
-	const st = fs.statSync(file);
-	if ((st.mode & 0o077) !== 0) throw new Error(`${what}文件权限过宽（应 0600）：${file} 当前 ${(st.mode & 0o777).toString(8)}`);
+	assertSecretFilePerm(file, what);
 	return fs.readFileSync(file, "utf8").trim();
 }
 

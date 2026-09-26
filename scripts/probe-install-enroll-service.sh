@@ -5,14 +5,36 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INSTALLER="$REPO_ROOT/scripts/install-enroll-service.sh"
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"; pkill -f "$TMP/" 2>/dev/null || true' EXIT
+TMP="$(mktemp -d)"
+# 收尾：杀桩与已起服务（pkill 在 Windows Git Bash 不存在 ⇒ 统一 pid 文件 + 双命名空间 kill，见 lib/proc.sh）。
+# set +e 是硬要求：EXIT trap 里任何失败命令会点着 set -e，把「全绿」翻成 exit 1（真机踩到）。
+cleanup() {
+  set +e
+  for f in "$TMP/pid-stub" "${H:-}/.omo-kb/service.pid"; do
+    [ -f "$f" ] && proc_kill "$(cat "$f" 2>/dev/null)"
+  done
+  rm -rf "$TMP" 2>/dev/null || true
+  return 0
+}
+trap cleanup EXIT
 FAILED=0
 pass() { echo "  ✓ $1"; }
 fail() { echo "  ✗ $1"; FAILED=$((FAILED + 1)); }
 
+# 秘密文件权限：能力探测 + 断言（与安装器同一实现）
+. "$REPO_ROOT/scripts/lib/secret-perm.sh"
+perm_pass() { # $1=file $2=标签 —— 可表达 0600 ⇒ 严格等值；不可表达（Windows/Git Bash）⇒ 降级为存在性
+  if can_express_0600; then
+    [ "$(stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1" 2>/dev/null)" = "600" ] && pass "$2 0600" || fail "$2 权限异常（$(stat -c %a "$1" 2>/dev/null || echo ?)）"
+  else
+    [ -f "$1" ] && pass "$2 存在（本文件系统不可表达 0600 ⇒ 降级断言）" || fail "$2 缺失"
+  fi
+}
+
 echo "installer: $INSTALLER"
 [ -f "$INSTALLER" ] || { echo "✗ 缺安装器"; exit 1; }
 [ -f "$REPO_ROOT/scripts/lib/bun.sh" ] || { echo "✗ 缺共用自举库 scripts/lib/bun.sh"; exit 1; }
+[ -f "$REPO_ROOT/scripts/lib/secret-perm.sh" ] || { echo "✗ 缺共用秘密权限库 scripts/lib/secret-perm.sh"; exit 1; }
 
 PORT=$(( (RANDOM % 2000) + 18000 ))
 STUB_PORT=$(( PORT + 1 ))
@@ -39,6 +61,7 @@ console.log("STUB_READY");
 EOF
 bun "$TMP/stub.mjs" >"$TMP/stub.log" 2>&1 &
 STUB_PID=$!
+echo $! > "$TMP/pid-stub"
 for _ in $(seq 1 20); do grep -q STUB_READY "$TMP/stub.log" 2>/dev/null && break; sleep 0.3; done
 kill -0 "$STUB_PID" 2>/dev/null && pass "桩 Gitea 就绪（:$STUB_PORT）" || fail "桩 Gitea 未就绪"
 
@@ -52,10 +75,20 @@ fi
 
 echo "[2] 必填校验与凭据权限"
 printf 'pw\n' > "$TMP/pw"; chmod 644 "$TMP/pw"
-if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo acme/kb --admin-user root --admin-password-file "$TMP/pw" --self-signed 127.0.0.1 --no-start >"$TMP/wide.log" 2>&1; then
-  fail "凭据文件 0644 竟被接受"
+if can_express_0600; then
+  # POSIX：权限过宽必须硬拒
+  if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo acme/kb --admin-user root --admin-password-file "$TMP/pw" --self-signed 127.0.0.1 --no-start >"$TMP/wide.log" 2>&1; then
+    fail "凭据文件 0644 竟被接受"
+  else
+    grep -q "权限过宽" "$TMP/wide.log" && pass "凭据文件权限过宽即拒" || fail "拒绝原因不明确：$(head -2 "$TMP/wide.log" | tr '\n' ' ')"
+  fi
 else
-  grep -q "权限过宽" "$TMP/wide.log" && pass "凭据文件权限过宽即拒" || fail "拒绝原因不明确：$(head -2 "$TMP/wide.log" | tr '\n' ' ')"
+  # 不可表达 0600（Windows/Git Bash）：降级放行，但必须大声告警（不可静默）
+  if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo acme/kb --admin-user root --admin-password-file "$TMP/pw" --self-signed 127.0.0.1 --no-start >"$TMP/wide.log" 2>&1; then
+    grep -q "无法表达 0600" "$TMP/wide.log" && pass "不可表达 0600 ⇒ 降级放行且告警（POSIX 上仍硬拒）" || fail "降级却无告警（静默降级）"
+  else
+    fail "预期降级放行，实际被拒：$(tail -2 "$TMP/wide.log" | tr '\n' ' ')"
+  fi
 fi
 chmod 600 "$TMP/pw"
 if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo acme/kb --admin-user root --admin-password-file "$TMP/pw" --no-start >"$TMP/missing.log" 2>&1; then
@@ -101,12 +134,12 @@ if HOME="$H" bash "$INSTALLER" --api "http://127.0.0.1:$STUB_PORT/api/v1" --repo
 else
   fail "安装器执行失败：$(tail -5 "$TMP/install.log" | tr '\n' ' ')"
 fi
-for f in service/ops-kb-enroll-server.mjs service/ops-kb-provision.mjs service/lib/kb-gitea.mjs service/lib/kb-registry.mjs service/lib/kb-audit.mjs config.env admin.pw tls/cert.pem tls/key.pem; do
+for f in service/ops-kb-enroll-server.mjs service/ops-kb-provision.mjs service/lib/kb-gitea.mjs service/lib/kb-registry.mjs service/lib/kb-audit.mjs service/lib/secret-perm.mjs config.env admin.pw tls/cert.pem tls/key.pem; do
   [ -e "$H/.omo-kb/$f" ] && pass "布局：$f" || fail "缺文件：$f"
 done
-[ "$(stat -c %a "$H/.omo-kb/config.env")" = "600" ] && pass "config.env 0600" || fail "config.env 权限 $(stat -c %a "$H/.omo-kb/config.env" 2>/dev/null)"
-[ "$(stat -c %a "$H/.omo-kb/admin.pw")" = "600" ] && pass "admin.pw 0600" || fail "admin.pw 权限异常"
-[ "$(stat -c %a "$H/.omo-kb/tls/key.pem")" = "600" ] && pass "TLS 私钥 0600" || fail "TLS 私钥权限异常"
+perm_pass "$H/.omo-kb/config.env" "config.env"
+perm_pass "$H/.omo-kb/admin.pw" "admin.pw"
+perm_pass "$H/.omo-kb/tls/key.pem" "TLS 私钥"
 [ -x "$H/.local/bin/omo-kb" ] && pass "启动器可执行：~/.local/bin/omo-kb" || fail "启动器缺失/不可执行"
 grep -q '"ok":true' "$TMP/install.log" || grep -q "完成" "$TMP/install.log" && pass "安装输出含完成段" || fail "安装输出异常"
 grep -q "作用域自检：4/4 通过" "$TMP/install.log" && pass "令牌路径 + 4 项作用域自检通过" || fail "作用域自检未通过：$(grep -E '作用域|✗' "$TMP/install.log" | head -3 | tr '\n' ' ')"
@@ -134,7 +167,7 @@ mkdir -p "$TMP/bin"; printf '#!/bin/sh\necho "[stub omo] $*"\n' > "$TMP/bin/omo"
 if HOME="$H" bash "$FLEET" service node-a node-b >"$TMP/fleet.log" 2>&1; then pass "service 模式执行成功"; else fail "service 模式失败：$(tail -5 "$TMP/fleet.log" | tr '\n' ' ')"; fi
 grep -q "read:admin（HTTP 200）" "$TMP/fleet.log" && pass "服务侧自检真判（read:admin=200）" || fail "自检未真判：$(grep -E 'read:admin' "$TMP/fleet.log" | head -2 | tr '\n' ' ')"
 [ "$(grep -c 'instance --server' "$TMP/fleet.log")" = "2" ] && pass "逐设备打印实例命令（2 条）" || fail "实例命令条数异常"
-[ "$(stat -c %a "$H/omo-kb-enroll/node-a.code" 2>/dev/null || echo)" = "600" ] && pass "码文件 0600（$H/omo-kb-enroll/）" || fail "码文件权限异常"
+perm_pass "$H/omo-kb-enroll/node-a.code" "码文件（$H/omo-kb-enroll/）"
 [ "$(tr -d '\n' < "$H/omo-kb-enroll/node-a.code" 2>/dev/null | wc -c)" = "32" ] && pass "码长度 32（--raw 只输出码）" || fail "--raw 输出异常：$(cat "$H/omo-kb-enroll/node-a.code" 2>/dev/null | head -c 80)"
 CODE_A="$(cat "$H/omo-kb-enroll/node-a.code" 2>/dev/null)"
 if PATH="$TMP/bin:$PATH" bash "$FLEET" instance --server "https://127.0.0.1:$PORT" --code "$CODE_A" >"$TMP/fleet-inst.log" 2>&1; then pass "instance 模式执行成功"; else fail "instance 模式失败：$(tail -3 "$TMP/fleet-inst.log" | tr '\n' ' ')"; fi

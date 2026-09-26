@@ -26,6 +26,7 @@ import { registerOpsTool } from "../src/approvals.ts";
 import { loadRedactConfig, redactPaths, restoreToolInput, setupRedact } from "../src/redact.ts";
 import { OpsContext } from "../src/context.ts";
 import { registerReadOnlyTools } from "../src/tools/read-only.ts";
+import { expectSecret0600 } from "./runtime/perm-mode.ts";
 
 /**
  * 脱敏移植守卫：语义与 `omp-redact-extension.js`（移植自 dsh-redact）一致。
@@ -233,7 +234,7 @@ describe("脱敏：状态落盘与配置", () => {
 			const file = path.join(dir, "nested", "state.json");
 			const state = { version: 1 as const, maps: { sessions: { s1: { lastActive: 1, reverse: { [ph("TEL", 1)]: phone } } } } };
 			expect(saveStateSync(file, state).ok).toBe(true);
-			expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+			expectSecret0600(file);
 			expect(fs.readdirSync(path.dirname(file)).filter((f) => f.includes(".tmp-"))).toEqual([]);
 			expect(loadStateSync(file)).toEqual(state);
 			fs.writeFileSync(file, "{ broken");

@@ -17,7 +17,7 @@ if [ "${1:-}" = "--installer" ] && [ -n "${2:-}" ]; then INSTALLER="$2"; fi
 
 command -v bun >/dev/null 2>&1 || { echo "✗ 需要 bun 做模块解析断言"; exit 1; }
 
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP" 2>/dev/null || true' EXIT
 FAILED=0
 pass() { echo "  ✓ $1"; }
 fail() { echo "  ✗ $1"; FAILED=$((FAILED + 1)); }
@@ -230,10 +230,21 @@ echo "[6] 安装器：Yuyi 凭据传递（--token-file 0600 强制；--token 告
 TF="$TMP/token-600"; printf 'probe-token-from-file\n' > "$TF"; chmod 600 "$TF"
 TFW="$TMP/token-644"; printf 'x\n' > "$TFW"; chmod 644 "$TFW"
 H6="$TMP/h6"; mkdir -p "$H6"
-if HOME="$H6" bash "$PKG/scripts/install.sh" --token-file "$TFW" >"$TMP/tf-wide.log" 2>&1; then
-  fail "--token-file 权限过宽（644）竟被接受"
+. "$REPO_ROOT/scripts/lib/secret-perm.sh"
+if can_express_0600; then
+  # POSIX：权限过宽必须硬拒
+  if HOME="$H6" bash "$PKG/scripts/install.sh" --token-file "$TFW" >"$TMP/tf-wide.log" 2>&1; then
+    fail "--token-file 权限过宽（644）竟被接受"
+  else
+    grep -q "权限过宽" "$TMP/tf-wide.log" && pass "--token-file 权限过宽即拒" || fail "拒绝原因不明确：$(head -2 "$TMP/tf-wide.log" | tr '\n' ' ')"
+  fi
 else
-  grep -q "权限过宽" "$TMP/tf-wide.log" && pass "--token-file 权限过宽即拒" || fail "拒绝原因不明确：$(head -2 "$TMP/tf-wide.log" | tr '\n' ' ')"
+  # 不可表达 0600（Windows/Git Bash）：降级放行，但必须大声告警（不可静默）
+  if HOME="$H6" bash "$PKG/scripts/install.sh" --token-file "$TFW" >"$TMP/tf-wide.log" 2>&1; then
+    grep -q "无法表达 0600" "$TMP/tf-wide.log" && pass "不可表达 0600 ⇒ 降级放行且告警（POSIX 上仍硬拒）" || fail "降级却无告警（静默降级）"
+  else
+    fail "预期降级放行，实际被拒：$(tail -2 "$TMP/tf-wide.log" | tr '\n' ' ')"
+  fi
 fi
 if HOME="$H6" bash "$PKG/scripts/install.sh" --token-file "$TF" --name probe-tf >"$TMP/tf-ok.log" 2>&1; then
   if grep -q '"token": "probe-token-from-file"' "$H6/.yuyi/agent.json"; then pass "0600 令牌文件生效（写入 agent.json）"; else fail "令牌未落盘：$(cat "$H6/.yuyi/agent.json" 2>/dev/null | head -c 120)"; fi

@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { enroll } from "../src/kb-enroll.ts";
 import { kbCredentialPath, kbGitCredentialsPath, loadKbCredential } from "../src/kb-credential.ts";
+import { expectSecret0600 } from "./runtime/perm-mode.ts";
 
 /**
  * P3 端到端：一次性码签发（供给 CLI）→ enroll 服务（真子进程，真 HTTP）→ 客户端兑换落盘。
@@ -118,8 +119,8 @@ describe("P3 · 凭据自注册端到端（服务真 HTTP + 客户端真兑换�
 			expect(cred?.kind).toBe("password");
 			expect(cred?.username).toBe("omo-bot-node-1");
 			expect(cred?.repo).toBe(`http://127.0.0.1:${gitea.port}/acme/kb`);
-			expect(fs.statSync(kbCredentialPath(omo)).mode & 0o777).toBe(0o600);
-			expect(fs.statSync(kbGitCredentialsPath(omo)).mode & 0o777).toBe(0o600);
+			expectSecret0600(kbCredentialPath(omo));
+			expectSecret0600(kbGitCredentialsPath(omo));
 			const storeLine = fs.readFileSync(kbGitCredentialsPath(omo), "utf8");
 			expect(storeLine).toContain(`omo-bot-node-1:${cred?.secret}@127.0.0.1`);
 

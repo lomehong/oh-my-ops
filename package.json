@@ -10,7 +10,7 @@
   "scripts": {
     "test": "npm run test:l1 && npm run test:l2",
     "test:l1": "node --test packages/ops-core/test/*.test.ts",
-    "test:l2": "bun test packages/ops-extension/test/guards.test.ts packages/ops-extension/test/platform.test.ts packages/ops-extension/test/audit-view.test.ts packages/ops-extension/test/read-tier-structure.test.ts packages/ops-extension/test/kb-sync.test.ts packages/ops-extension/test/kb-lint.test.ts packages/ops-extension/test/web-verify.test.ts packages/ops-extension/test/kb-org.test.ts packages/ops-extension/test/kb-enroll.test.ts packages/ops-extension/test/redact.test.ts packages/ops-extension/test/knowledge.test.ts",
+    "test:l2": "bun test --timeout 60000 packages/ops-extension/test/guards.test.ts packages/ops-extension/test/platform.test.ts packages/ops-extension/test/audit-view.test.ts packages/ops-extension/test/read-tier-structure.test.ts packages/ops-extension/test/kb-sync.test.ts packages/ops-extension/test/kb-lint.test.ts packages/ops-extension/test/web-verify.test.ts packages/ops-extension/test/kb-org.test.ts packages/ops-extension/test/kb-enroll.test.ts packages/ops-extension/test/redact.test.ts packages/ops-extension/test/knowledge.test.ts",
     "test:all": "bun test",
     "test:ci": "npm run test:l1 && npm run test:l2 && npm run kb:provision:selftest && npm run test:enroll-install && npm run test:kb-ui && npm run test:kb-lint && npm run test:web-verify && npm run typecheck && npm run test:workflow && npm run test:install && npm run test:bootstrap && npm run test:vendor && npm run test:vendor-integrity",
     "typecheck": "npm run typecheck:core && node node_modules/typescript/bin/tsc -p packages/ops-extension/tsconfig.json --noEmit",

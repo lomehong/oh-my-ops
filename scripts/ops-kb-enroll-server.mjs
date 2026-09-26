@@ -130,31 +130,40 @@ try {
 	process.exit(1);
 }
 
-/* ── --check 预检模式：Gitea 可达 + 登记表可读 + （如配 TLS）证书可用 ⇒ 退出 ──
-   /ui 在线改配置保存时自动跑（失败不重启、自动回滚 .bak）；运维也可手动执行验证配置。 */
+/* ── 预检：Gitea 可达 + 登记表可读 + （如配 TLS）证书可用
+   --check 模式与 /ui 在线改配置共用同一实现（防止两条路径漂移）；返回结构化结果，调用方各自决定措辞。 */
+async function preflight(cfg) {
+	try {
+		await fetch(cfg.api, { signal: AbortSignal.timeout(5000) }); // 任何 HTTP 应答=可达（Gitea 对匿名常 403/404，也算通）
+	} catch (err) {
+		return { ok: false, detail: `API 不可达 ${cfg.api}（${String(err?.cause?.code ?? err?.message ?? err)}）` };
+	}
+	try {
+		loadRegistry(cfg.registryFile);
+	} catch (err) {
+		return { ok: false, detail: `登记表不可读 ${cfg.registryFile}（${String(err?.message ?? err)}）` };
+	}
+	if (cfg.tlsCert !== undefined && cfg.tlsKey !== undefined) {
+		try {
+			const probe = Bun.serve({
+				hostname: "127.0.0.1",
+				port: 0,
+				tls: { cert: Bun.file(cfg.tlsCert), key: Bun.file(cfg.tlsKey) },
+				fetch: () => json(200, { ok: true }),
+			});
+			probe.stop(true);
+		} catch (err) {
+			return { ok: false, detail: `监听/证书不可用（${String(err?.message ?? err)}）` };
+		}
+	}
+	return { ok: true };
+}
+
+/* ── --check 预检模式：运维可手动执行验证配置 ⇒ 退出 */
 if (args.check === true) {
-	try {
-		await fetch(args.api, { signal: AbortSignal.timeout(5000) }); // 任何 HTTP 应答=可达（Gitea 对匿名常 403/404，也算通）
-	} catch (err) {
-		console.error(`CHECK FAIL: API 不可达 ${args.api}（${String(err?.cause?.code ?? err?.message ?? err)}）`);
-		process.exit(1);
-	}
-	try {
-		loadRegistry(registryFile);
-	} catch (err) {
-		console.error(`CHECK FAIL: 登记表不可读 ${registryFile}（${String(err?.message ?? err)}）`);
-		process.exit(1);
-	}
-	try {
-		const probe = Bun.serve({
-			hostname: "127.0.0.1",
-			port: 0,
-			...(useTls ? { tls: { cert: Bun.file(args["tls-cert"]), key: Bun.file(args["tls-key"]) } } : {}),
-			fetch: () => json(200, { ok: true }),
-		});
-		probe.stop(true);
-	} catch (err) {
-		console.error(`CHECK FAIL: 监听/证书不可用（${String(err?.message ?? err)}）`);
+	const verdict = await preflight({ api: args.api, registryFile, tlsCert: args["tls-cert"], tlsKey: args["tls-key"] });
+	if (!verdict.ok) {
+		console.error(`CHECK FAIL: ${verdict.detail}`);
 		process.exit(1);
 	}
 	console.log(`CHECK OK repo=${args.repo} api=${args.api} port=${port} registry=${registryFile} ui=${UI_ON ? "on" : "off"}`);
@@ -353,24 +362,32 @@ async function handleUiConfigPost(req, ip, actor) {
 		return json(400, { error: "校验失败", errors: verdict.errors });
 	}
 	writeConfigEnvAtomic(configPath, renderConfigEnv(parsed, strValues));
-	// 预检：新配置起临时服务自证（Gitea 可达/登记表可读/证书可用）；失败 ⇒ 回滚 .bak，绝不重启
-	// 继承 successorArgs（管理员凭据等未被 --config 覆盖的原始参数），否则无凭据起不来必假失败
-	const check = Bun.spawn([...successorArgs(), "--check"], { stdout: "pipe", stderr: "pipe" });
-	const [out, err] = await Promise.all([new Response(check.stdout).text(), new Response(check.stderr).text()]);
-	const checkCodeExit = await check.exited;
-	if (checkCodeExit !== 0) {
+	// 预检走**进程内**同名实现（不再 spawn 一个 --check 子进程）：bun 拉起 bun 子进程在 Windows 上要
+	// 同步阻塞约 3 秒（真机实测 3.2s），会把正在服务的事件循环卡住——而预检本就不需要第二个进程。
+	const merged = { ...parsed.values, ...strValues };
+	const verdictPre = await preflight({
+		api: merged.OMO_KB_API ?? args.api,
+		registryFile: merged.OMO_KB_REGISTRY ?? registryFile,
+		tlsCert: merged.OMO_KB_TLS_CERT ?? args["tls-cert"],
+		tlsKey: merged.OMO_KB_TLS_KEY ?? args["tls-key"],
+	});
+	if (!verdictPre.ok) {
 		restoreConfigBackup(configPath);
-		const detail = `${out}${err}`.trim().slice(-400);
+		const detail = `CHECK FAIL: ${verdictPre.detail}`;
 		audit.append({ event: "ui.config.preflight_failed", ts: new Date().toISOString(), actor, detail, ip });
 		return json(400, { error: "预检失败，已回滚配置，服务未重启", detail });
 	}
 	audit.append({ event: "ui.config.updated", ts: new Date().toISOString(), actor, changed: Object.keys(strValues), ip });
-	Bun.spawn(successorArgs(), { stdin: "ignore", stdout: "inherit", stderr: "inherit", env: { ...process.env, OMO_KB_BIND_RETRY_MS: "5000" } }).unref();
+	// 重启接力。两条 Windows 真机实测约束（详见执行记录 CIPORT-1）：
+	//   1) **先放掉监听**再拉接班进程——旧进程还占着端口时，新进程只会绑失败（TLS 连接回收更慢）；
+	//   2) 接班进程必须 detached——父进程退出会带走「直接 spawn」的子进程，服务会静默消失、pid 文件停在旧值。
+	// 顺序：先返回响应（连接要活着）→ 300ms 后在计时器里停监听、拉接班、退出。
 	setTimeout(() => {
 		try {
 			server.stop(true);
 		} catch { /* 已停 */ }
-		process.exit(0);
+		Bun.spawn(successorArgs(), { stdin: "ignore", stdout: "inherit", stderr: "inherit", detached: true, env: { ...process.env, OMO_KB_BIND_RETRY_MS: "20000" } }).unref();
+		setTimeout(() => process.exit(0), 200);
 	}, 300);
 	return json(200, { ok: true, restarting: true, detail: "配置已写入并通过预检，服务正在切换（<1s 窗口）" });
 }

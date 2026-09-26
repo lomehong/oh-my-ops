@@ -74,9 +74,12 @@ if [ "$MODE" = "service" ]; then
   [ -f "$TOKEN_FILE" ] || die "找不到管理员令牌 $TOKEN_FILE"
 
   # 实例要按「证书 SAN」连（自签证书只对 SAN 内的地址有效）
-  SAN="$(openssl x509 -in "$OMO_KB_TLS_CERT" -noout -text 2>/dev/null | sed -n 's/.*IP Address:\([0-9.]*\).*/\1/p' | head -1)"
-  [ -n "$SAN" ] || SAN="$(openssl x509 -in "$OMO_KB_TLS_CERT" -noout -text 2>/dev/null | sed -n 's/.*DNS:\([^,]*\).*/\1/p' | head -1)"
-  [ -n "$SAN" ] || SAN="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  SAN="$(openssl x509 -in "$OMO_KB_TLS_CERT" -noout -text 2>/dev/null | sed -n 's/.*IP Address:\([0-9.]*\).*/\1/p' | head -1 || true)"
+  [ -n "$SAN" ] || SAN="$(openssl x509 -in "$OMO_KB_TLS_CERT" -noout -text 2>/dev/null | sed -n 's/.*DNS:\([^,]*\).*/\1/p' | head -1 || true)"
+  # 兜底取本机 IP：`hostname -I` 只有 GNU 有（Windows Git Bash / macOS / BSD 都没有），叠加 pipefail 会**静默退出**；
+  # 服务机必有 bun（安装器硬依赖），用它读首个非回环 IPv4
+  [ -n "$SAN" ] || SAN="$(bun -e 'import os from "node:os"; for (const l of Object.values(os.networkInterfaces()).flat()) { if (l && l.family === "IPv4" && !l.internal) { console.log(l.address); break; } }' 2>/dev/null || true)"
+  [ -n "$SAN" ] || die "证书里取不到 SAN、本机也读不到 IP：请用 OMO_KB_SERVER=https://<地址>:<端口> 显式指定"
   SERVER="${OMO_KB_SERVER:-https://${SAN}:${OMO_KB_PORT}}"
 
   echo "═══ 服务侧自检（$OMO_KB_API）═══"

@@ -4,14 +4,17 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO_ROOT/scripts/lib/proc.sh"
 TMP="$(mktemp -d)"
 CHROME_PID=""; SRV_PID=""
 cleanup() {
-  [ -n "$SRV_PID" ] && kill "$SRV_PID" 2>/dev/null || true
-  [ -n "$CHROME_PID" ] && kill "$CHROME_PID" 2>/dev/null || true
+  set +e                    # EXIT trap 里任何失败命令会点着 set -e，把「全绿」翻成 exit 1（见 lib/proc.sh）
+  proc_kill "$SRV_PID"
+  proc_kill "$CHROME_PID"
   wait 2>/dev/null || true
   sleep 0.3                    # 等 chrome 落盘 profile 后再删（否则 rm 报 Directory not empty）
   rm -rf "$TMP" 2>/dev/null || true
+  return 0
 }
 trap cleanup EXIT
 FAILED=0

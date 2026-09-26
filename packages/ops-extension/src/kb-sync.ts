@@ -131,9 +131,12 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 	const env: Record<string, string> = { GIT_TERMINAL_PROMPT: "0" };
 	// 凭据注入：`-c credential.helper=store` + **私有 HOME**（store 读 $HOME/.git-credentials，0600）。
 	// 实测反例：`store --file=<path>` 形态不被本版 git 采纳；且秘密绝不进 argv/远端 URL（远端 URL 存在 .git/config，Agent 可读）。
+	// `credential.helper=`（空值）先重置继承来的 helper 链：否则 `-c credential.helper=store` 只是**追加**，
+	// 系统级 helper（Windows 默认装 Git Credential Manager）排在前、先被调用 ⇒ 挂起数十秒并可能返回该机器
+	// 开发者的真实凭据（2026-09-26 真机实测：57s + 返回本地账号密码）。POSIX 上无此坑，属"任何设备可用"必要条件。
 	const prefix: string[] = [];
 	if (opts.gitCredentialFile !== undefined) {
-		prefix.push("-c", "credential.helper=store");
+		prefix.push("-c", "credential.helper=", "-c", "credential.helper=store");
 		env.HOME = opts.omoHome ?? path.join(opts.omoDir, "home");
 	}
 	const g = new GitCompat(opts.runner, opts.kbDir, caps, env, prefix);

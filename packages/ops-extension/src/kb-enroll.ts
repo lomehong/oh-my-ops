@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 import {
 	ensureGitCredentialsFile,
@@ -70,9 +71,40 @@ export async function parseEnrollArgs(argv: string[], env: NodeJS.ProcessEnv = p
 }
 
 /** 读兑换码文件（0600 强制；码本身是秘密，与令牌同级对待） */
+let permProbeCache: boolean | undefined;
+/** 本文件系统能否表达 0600（Windows/Git Bash 不能；与 scripts/lib/secret-perm.mjs 同策略） */
+async function canExpress0600(): Promise<boolean> {
+	if (permProbeCache !== undefined) return permProbeCache;
+	let dir: string | undefined;
+	try {
+		dir = await fs.mkdtemp(path.join(os.tmpdir(), "omo-perm-"));
+		const f = path.join(dir, "f");
+		await fs.writeFile(f, "x", { mode: 0o600 });
+		await fs.chmod(f, 0o600);
+		const m = (await fs.stat(f)).mode & 0o777;
+		permProbeCache = m === 0o600 || m === 0o400;
+	} catch {
+		permProbeCache = false;
+	} finally {
+		if (dir !== undefined) await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+	}
+	return permProbeCache;
+}
+
+let permWarned = false;
+
 export async function readCodeFile(file: string): Promise<string> {
 	const st = await fs.stat(file);
-	if ((st.mode & 0o077) !== 0) throw new Error(`兑换码文件权限过宽（应 0600）：${file} 当前 ${(st.mode & 0o777).toString(8)}`);
+	if ((st.mode & 0o077) !== 0) {
+		if (await canExpress0600()) {
+			throw new Error(`兑换码文件权限过宽（应 0600）：${file} 当前 ${(st.mode & 0o777).toString(8)}`);
+		}
+		if (!permWarned) {
+			permWarned = true;
+			process.stderr.write(`  ⚠ 本文件系统无法表达 0600（Windows/Git Bash 已知短板）：兑换码文件 ${file} 实际权限不受约束\n`);
+			process.stderr.write(`  ⚠ 已降级放行；POSIX 主机上同一检查仍会硬拦。请确保该文件所在目录仅本账号可读。\n`);
+		}
+	}
 	return (await fs.readFile(file, "utf8")).trim();
 }
 

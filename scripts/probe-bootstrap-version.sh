@@ -14,60 +14,63 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BOOT="$REPO_ROOT/scripts/bootstrap.sh"
 if [ "${1:-}" = "--bootstrap" ] && [ -n "${2:-}" ]; then BOOT="$2"; fi
-command -v python3 >/dev/null 2>&1 || { echo "✗ 需要 python3 起假代理"; exit 1; }
+command -v bun >/dev/null 2>&1 || { echo "✗ 需要 bun 起假代理（测试链统一依赖 bun；不依赖 python3 —— Windows 上 python3 常是 Microsoft Store 别名桩：存在但不可用）"; exit 1; }
 
-TMP="$(mktemp -d)"; trap 'for f in "$TMP"/pid-*; do [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null; done; rm -rf "$TMP"' EXIT
+. "$REPO_ROOT/scripts/lib/proc.sh"
+TMP="$(mktemp -d)"
+# 收尾：杀假代理（pkill 在 Windows Git Bash 不存在 ⇒ pid 文件 + 双命名空间 kill，见 lib/proc.sh）。
+# set +e 是硬要求：EXIT trap 里任何失败命令会点着 set -e，把「全绿」翻成 exit 1（真机踩到）。
+cleanup() {
+  set +e
+  for f in "$TMP"/pid-*; do
+    [ -f "$f" ] && proc_kill "$(cat "$f" 2>/dev/null)"
+  done
+  rm -rf "$TMP" 2>/dev/null || true
+  return 0
+}
+trap cleanup EXIT
 FAILED=0
 pass() { echo "  ✓ $1"; }
 fail() { echo "  ✗ $1"; FAILED=$((FAILED + 1)); }
 
-# ── 假代理：模拟「200 直返、无重定向」的镜像，以及「302 资产重定向」两种形态
-cat > "$TMP/proxy.py" <<'PY'
-import http.server, socketserver, sys, json
-MODE = sys.argv[1]          # page | redirect
-PORT = int(sys.argv[2])
-TAG = sys.argv[3]           # 例 v0.9.1
-class H(http.server.BaseHTTPRequestHandler):
-    protocol_version = "HTTP/1.0"      # 关闭 keep-alive：单请求即关，避免阻塞后续断言
-    def log_message(self, *a): pass
-    def _p(self): return self.path
-    def do_HEAD(self): self._send(head=True)
-    def do_GET(self): self._send(head=False)
-    def _send(self, head):
-        p = self._p()
-        if p.endswith("/releases/latest/download/install.sh"):
-            if MODE == "redirect":
-                self.send_response(302); self.send_header("Location", f"https://github.com/x/y/releases/download/{TAG}/install.sh")
-            else:
-                self.send_response(200)
-            self.send_header("Content-Length", "0"); self.end_headers(); return
-        if p.endswith("/releases/latest"):
-            body = (f'<html><a href="/lomehong/oh-my-ops/releases/tag/{TAG}">Latest</a></html>').encode()
-            self.send_response(200); self.send_header("Content-Type", "text/html"); self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            if not head: self.wfile.write(body)
-            return
-        self.send_response(404); self.send_header("Content-Length", "0"); self.end_headers()
-class S(socketserver.ThreadingTCPServer):
-    allow_reuse_address = True
-    daemon_threads = True
-with S(("127.0.0.1", PORT), H) as s:
-    s.serve_forever()
-PY
+# ── 假代理：模拟「200 直返、无重定向」的镜像，以及「302 资产重定向」两种形态（bun 桩，与 probe-kb-* 同款）
+cat > "$TMP/proxy.mjs" <<'JS'
+const mode = process.argv[2];              // page | redirect
+const port = Number(process.argv[3]);
+const tag = process.argv[4];               // 例 v0.9.1
+Bun.serve({
+  hostname: "127.0.0.1",
+  port,
+  fetch(req) {
+    const p = new URL(req.url).pathname;
+    if (p.endsWith("/releases/latest/download/install.sh")) {
+      // 策略① 判据：302 的 Location 带 /download/<tag>/；page 模式则 200 无 Location
+      if (mode === "redirect") return new Response(null, { status: 302, headers: { Location: `https://github.com/x/y/releases/download/${tag}/install.sh` } });
+      return new Response(null, { status: 200 });
+    }
+    if (p.endsWith("/releases/latest")) {
+      // 策略② 判据：200 页面内含 /releases/tag/<tag>
+      const body = `<html><a href="/lomehong/oh-my-ops/releases/tag/${tag}">Latest</a></html>`;
+      return new Response(body, { status: 200, headers: { "Content-Type": "text/html" } });
+    }
+    return new Response(null, { status: 404 });
+  },
+});
+console.log("PROXY_READY");
+JS
 
-start_proxy() { # $1=mode $2=tag → 打印端口（pid 落盘，供父 shell 终止）
+start_proxy() { # $1=mode $2=tag → 打印端口（pid 落盘，供 trap/stop 终止；不用 pkill —— Windows Git Bash 无此命令）
   local mode="$1" tag="$2" port=$(( 20000 + RANDOM % 20000 ))
-  python3 "$TMP/proxy.py" "$mode" "$port" "$tag" >"$TMP/proxy-$mode.log" 2>&1 &
+  bun "$TMP/proxy.mjs" "$mode" "$port" "$tag" >"$TMP/proxy-$mode.log" 2>&1 &
   echo $! > "$TMP/pid-$mode"
   for _ in $(seq 1 40); do
-    (exec 3<>/dev/tcp/127.0.0.1/"$port") 2>/dev/null && { exec 3<&- 3>&-; echo "$port"; return 0; }
+    grep -q PROXY_READY "$TMP/proxy-$mode.log" 2>/dev/null && { echo "$port"; return 0; }
     sleep 0.1
   done
   echo ""; return 1
 }
 stop_proxy() { # $1=mode
-  [ -f "$TMP/pid-$1" ] && kill "$(cat "$TMP/pid-$1")" 2>/dev/null || true
-  rm -f "$TMP/pid-$1"
+  if [ -f "$TMP/pid-$1" ]; then proc_kill "$(cat "$TMP/pid-$1" 2>/dev/null)"; rm -f "$TMP/pid-$1"; fi
 }
 run_resolve() { # $1=env 前缀参数…；输出最后一行
   local out
@@ -90,7 +93,7 @@ P2="$(start_proxy redirect v0.9.2)" || fail "假代理未起来"
 if [ -n "$P2" ]; then
 	OUT2="$(run_resolve OMO_MIRROR="http://127.0.0.1:$P2")"
 	[ "$OUT2" = "v0.9.2" ] && pass "解析出 v0.9.2（资产 Location 命中）" || fail "解析异常：$OUT2"
-	stop_proxy page
+	stop_proxy redirect
 fi
 
 echo "[3] OMO_VERSION 指定版本时不做解析（绕行路径仍可用）"

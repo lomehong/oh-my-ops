@@ -37,6 +37,8 @@ set -euo pipefail
 
 REPO_SLUG="lomehong/oh-my-ops"
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+# 秘密文件权限：能力探测 + 断言（POSIX 硬拦；无法表达 0600 的文件系统降级并告警）
+. "$SELF_DIR/lib/secret-perm.sh"
 DIR="${OMO_KB_DIR:-$HOME/.omo-kb}"
 API="" REPO="" ADMIN_USER="" ADMIN_PW_FILE="" ADMIN_TOKEN_FILE=""
 TEAM="" PERMISSION="write" GRANT="team" HOST="0.0.0.0" PORT="8787"
@@ -80,6 +82,12 @@ ok()   { echo "  ✓ $1"; }
 info() { echo "    $1"; }
 die()  { echo "✗ $1" >&2; exit 1; }
 
+# 落盘路径取「双端可读」形态（Windows/Git Bash 下为 C:/…，而非 /tmp/…）：
+# MSYS 的 argv 路径转换只发生在 bash 拉起原生程序时；bun/node **从配置文件里读到的** /tmp/… 会被原生
+# Windows 解析成 <盘符>:\tmp\…（真机踩到：/ui 改配置的预检 --check 读证书 ENOENT，配置回滚）。C:/… 在
+# MSYS bash（tail/rm/[ -f ]）与原生程序下都直接可用；POSIX 上 cygpath 不存在，原样返回。
+native_path() { [ -n "${1:-}" ] || return 0; if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; else printf '%s' "$1"; fi; }
+
 # ── 守卫：启动器会把 HOME 重定向到 <私有域>/home；在那个环境里跑安装器会错位（真机踩过）
 case "${HOME:-}" in
   */".omo/home") die "检测到 HOME 已被启动器重定向（$HOME）——请在真实家目录下运行：HOME=/home/<用户> bash $0 …" ;;
@@ -94,9 +102,44 @@ if [ "$UNINSTALL" = true ]; then
     systemctl_cmd daemon-reload >/dev/null 2>&1 || true
     ok "已停止并移除单元 $UNIT_PATH"
   fi
-  pkill -f "$SERVICE_DIR/ops-kb-enroll-server.mjs" 2>/dev/null && ok "已停止残留进程" || true
+  # 残留进程：pid 文件里的号可能是 MSYS pid（启动器写的 $!）也可能是原生 Windows pid（服务自写 --pid-file），
+  # 两套命名空间互不认账 ⇒ kill 与 taskkill 都试；判「已停」以端口不再应答为准。
+  # （pkill/pgrep 在 Windows Git Bash 不存在，不能依赖；详见 2026-09-26 真机复现）
+  stop_residual() {
+    local pid killed=false port="$PORT"
+    if [ -f "$DIR/config.env" ]; then
+      port="$(sed -n 's/^OMO_KB_PORT=//p' "$DIR/config.env" | head -1)"
+      [ -n "$port" ] || port="$PORT"
+    fi
+    pid="$(cat "$DIR/service.pid" 2>/dev/null || true)"
+    if [ -n "$pid" ]; then
+      kill "$pid" 2>/dev/null && killed=true || true
+      if command -v taskkill >/dev/null 2>&1 && command -v tasklist >/dev/null 2>&1; then
+        # 防 PID 复用误杀：仅当该 PID 的镜像名确为 bun 时才强杀
+        if tasklist //FI "PID eq $pid" //FO CSV //NH 2>/dev/null | grep -qi bun; then
+          taskkill //F //PID "$pid" >/dev/null 2>&1 && killed=true || true
+        fi
+      fi
+    fi
+    for _ in $(seq 1 15); do
+      curl -sk --max-time 1 "https://127.0.0.1:$port/healthz" >/dev/null 2>&1 || break
+      sleep 0.3
+    done
+    if curl -sk --max-time 1 "https://127.0.0.1:$port/healthz" >/dev/null 2>&1; then
+      info "端口 $port 仍在应答（PID ${pid:-未知}）——请手动排查：netstat -ano | grep :$port"
+    elif [ "$killed" = true ]; then ok "已停止残留进程（PID $pid）"
+    else info "无残留进程（$port 已静默）"; fi
+  }
+  stop_residual
   rm -f "$LAUNCHER"; ok "已移除启动器 $LAUNCHER"
-  if [ "$PURGE" = true ]; then rm -rf "$DIR"; ok "已删除私有域 $DIR（含登记表与审计）"; else info "私有域保留：$DIR（登记表/审计/证书仍在；--purge 可一并删除）"; fi
+  if [ "$PURGE" = true ]; then
+    rm -rf "$DIR" 2>/dev/null || true
+    if [ -e "$DIR" ]; then sleep 1; rm -rf "$DIR" 2>/dev/null || true; fi
+    if [ -e "$DIR" ]; then
+      die "私有域删除失败（仍有进程占用目录）：$DIR —— 结束占用进程后重跑本命令"
+    fi
+    ok "已删除私有域 $DIR（含登记表与审计）"
+  else info "私有域保留：$DIR（登记表/审计/证书仍在；--purge 可一并删除）"; fi
   exit 0
 fi
 
@@ -109,8 +152,7 @@ fi
 for f in "$ADMIN_TOKEN_FILE" "$ADMIN_PW_FILE" "$TLS_KEY"; do
   if [ -n "$f" ]; then
     [ -f "$f" ] || die "文件不存在：$f"
-    perm="$(stat -c %a "$f" 2>/dev/null || stat -f %Lp "$f" 2>/dev/null || echo unknown)"
-    case "$perm" in 600|400) ;; *) die "权限过宽（应 0600）：$f 当前 $perm —— 修复：chmod 600 $f 后重跑本条命令" ;; esac
+    check_secret_perm "$f" "凭据" "重跑本条命令" || exit 1
   fi
 done
 
@@ -132,7 +174,7 @@ for cand in "$SELF_DIR" "$SELF_DIR/.." "$SELF_DIR/../scripts"; do
 done
 if [ -n "$FILE_BASE" ]; then
   cp "$FILE_BASE/ops-kb-enroll-server.mjs" "$FILE_BASE/ops-kb-provision.mjs" "$SERVICE_DIR/"
-  cp "$FILE_BASE/lib/kb-gitea.mjs" "$FILE_BASE/lib/kb-registry.mjs" "$FILE_BASE/lib/kb-audit.mjs" "$FILE_BASE/lib/kb-auth.mjs" "$FILE_BASE/lib/kb-ui-config.mjs" "$FILE_BASE/lib/kb-lint.mjs" "$SERVICE_DIR/lib/"
+  cp "$FILE_BASE/lib/kb-gitea.mjs" "$FILE_BASE/lib/kb-registry.mjs" "$FILE_BASE/lib/kb-audit.mjs" "$FILE_BASE/lib/kb-auth.mjs" "$FILE_BASE/lib/kb-ui-config.mjs" "$FILE_BASE/lib/kb-lint.mjs" "$FILE_BASE/lib/secret-perm.mjs" "$SERVICE_DIR/lib/"
   mkdir -p "$SERVICE_DIR/ui"
   cp "$FILE_BASE/ui/index.html" "$SERVICE_DIR/ui/index.html"
   ok "服务文件取自本机包（$FILE_BASE）"
@@ -147,6 +189,7 @@ else
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-audit.mjs" -o "$SERVICE_DIR/lib/kb-audit.mjs" \
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-auth.mjs" -o "$SERVICE_DIR/lib/kb-auth.mjs" \
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-lint.mjs" -o "$SERVICE_DIR/lib/kb-lint.mjs" \
+       && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/secret-perm.mjs" -o "$SERVICE_DIR/lib/secret-perm.mjs" \
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-ui-config.mjs" -o "$SERVICE_DIR/lib/kb-ui-config.mjs" \
        && { mkdir -p "$SERVICE_DIR/ui" && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/ui/index.html" -o "$SERVICE_DIR/ui/index.html"; }; then
       ok "服务文件已下载（$src）"; fetched=true; break
@@ -172,8 +215,14 @@ else
     command -v openssl >/dev/null 2>&1 || die "无 openssl，无法自签：请提供 --tls-cert/--tls-key"
     # --self-signed auto：取本机首个 IP（真机踩到：把模板里的 <本机IP> 原样粘进来）
     if [ "$SELF_SIGNED" = "auto" ]; then
-      SELF_SIGNED="$(hostname -I 2>/dev/null | awk '{print $1}')"
-      [ -n "$SELF_SIGNED" ] || die "--self-signed auto 取不到本机 IP：请显式给 IP 或域名"
+      # 取 IP 的机制必须跨平台且失败可诊断：`hostname -I` 只有 GNU 有（Windows Git Bash / macOS / BSD 都没有），
+      # 叠加 `set -o pipefail` 会让赋值整体失败 ⇒ **安装器无声退出**（2026-09-26 真机复现：日志停在上一步、无 ✗ 无 die）。
+      # bun 是安装器的硬依赖（步骤 1 已确保在 PATH），读网卡最稳；读不到再退 GNU hostname。
+      SELF_SIGNED="$(bun -e 'import os from "node:os"; for (const l of Object.values(os.networkInterfaces()).flat()) { if (l && l.family === "IPv4" && !l.internal) { console.log(l.address); break; } }' 2>/dev/null || true)"
+      if [ -z "$SELF_SIGNED" ] && command -v hostname >/dev/null 2>&1; then
+        SELF_SIGNED="$((hostname -I 2>/dev/null || true) | awk '{print $1}' || true)"
+      fi
+      [ -n "$SELF_SIGNED" ] || die "--self-signed auto 取不到本机 IP：请显式给 IP 或域名（如 --self-signed 10.0.0.12）"
       ok "自动选定本机 IP 作为证书 SAN：$SELF_SIGNED"
     fi
     # SAN 形态校验：必须是 IP 或域名；尖括号/空格/斜杠等模板残留直接拦下
@@ -214,6 +263,7 @@ FP="$(openssl x509 -in "$DIR/tls/cert.pem" -noout -fingerprint -sha256 2>/dev/nu
 [ -n "$TEAM" ] || TEAM="omo-kb-$(printf '%s' "$REPO" | awk -F/ '{print $NF}')"
 cat > "$DIR/config.env" <<EOF
 # omo-kb 服务配置（由安装器生成；0600）。改后 omo-kb restart 生效。
+# 路径值请用原生形式（C:/… 或 /home/…）；Windows 上写 MSYS 形式（/tmp/…）原生程序会解析失败。
 OMO_KB_API=$API
 OMO_KB_REPO=$REPO
 OMO_KB_TEAM=$TEAM
@@ -223,11 +273,11 @@ OMO_KB_HOST=$HOST
 OMO_KB_PORT=$PORT
 OMO_KB_ADMIN_MODE=$ADMIN_MODE
 OMO_KB_ADMIN_USER=$ADMIN_USER
-OMO_KB_TLS_CERT=$DIR/tls/cert.pem
-OMO_KB_TLS_KEY=$DIR/tls/key.pem
-OMO_KB_REGISTRY=$DIR/registry.json
-OMO_KB_AUDIT=$DIR/audit.jsonl
-OMO_KB_LOG=$DIR/logs/service.log
+OMO_KB_TLS_CERT=$(native_path "$DIR/tls/cert.pem")
+OMO_KB_TLS_KEY=$(native_path "$DIR/tls/key.pem")
+OMO_KB_REGISTRY=$(native_path "$DIR/registry.json")
+OMO_KB_AUDIT=$(native_path "$DIR/audit.jsonl")
+OMO_KB_LOG=$(native_path "$DIR/logs/service.log")
 # 管理后台（/ui）：默认关。开启前先把本服务接入 yufu 网关（认证+TLS 由 yufu 负责），
 # 服务只认网关注入的身份头（真机实测定为 X-Auth-Username（值=username）；如网关行为不同可改）。
 OMO_KB_UI=off
@@ -303,6 +353,14 @@ UNIT_PATH="$HOME/.config/systemd/user/$UNIT"
 SYS=(); [ "$UNIT_PATH" = "/etc/systemd/system/$UNIT" ] && SYS=(sudo)
 have_systemd() { command -v systemctl >/dev/null 2>&1; }
 svc() { if [ "$UNIT_PATH" = "/etc/systemd/system/$UNIT" ]; then sudo systemctl "$@"; else systemctl --user "$@"; fi; }
+# pid 文件里可能是 MSYS pid（start 写的 $!）或原生 Windows pid（服务自写 --pid-file）：kill -0 看不到原生 pid，
+# 需 tasklist 兜底（防 PID 复用误判：镜像名须为 bun）。POSIX 上 tasklist 不存在，kill -0 即可。
+pid_alive() { # $1=pid
+  [ -n "${1:-}" ] || return 1
+  kill -0 "$1" 2>/dev/null && return 0
+  command -v tasklist >/dev/null 2>&1 && tasklist //FI "PID eq $1" //FO CSV //NH 2>/dev/null | grep -qi bun && return 0
+  return 1
+}
 cmd="${1:-status}"; shift || true
 case "$cmd" in
   version) echo "omo-kb service launcher (dir=$DIR)" ;;
@@ -312,9 +370,9 @@ case "$cmd" in
     echo "  监听：https://$OMO_KB_HOST:$OMO_KB_PORT（仓库 $OMO_KB_REPO）"
     if have_systemd && systemctl --user list-unit-files "$UNIT" >/dev/null 2>&1; then svc status --no-pager -l | head -12 || true; fi
     pid="$(cat "$DIR/service.pid" 2>/dev/null || true)"
-    if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+    if ! pid_alive "$pid"; then
       pid="$(command -v pgrep >/dev/null 2>&1 && pgrep -f "$DIR/service/ops-kb-enroll-server.mjs" | head -1 || true)"
-      [ -n "$pid" ] && echo "$pid" > "$DIR/service.pid"
+      if pid_alive "$pid"; then echo "$pid" > "$DIR/service.pid"; else pid=""; fi
     fi
     [ -n "$pid" ] && echo "  进程：✓ PID $pid" || echo "  进程：✗ 未运行（omo-kb start 启动）"
     echo -n "  健康："; curl -sk --max-time 8 "https://127.0.0.1:$OMO_KB_PORT/healthz" || echo "（不可达）"; echo
@@ -337,10 +395,10 @@ case "$cmd" in
     mypid="$(cat "$DIR/service.pid" 2>/dev/null || true)"
     for _ in $(seq 1 24); do
       # 必须「我们拉起的进程活着」且健康检查通过——否则可能是端口被别的实例占用（真机踩到：误判为启动成功）
-      if kill -0 "$mypid" 2>/dev/null && curl -sk --max-time 2 "https://127.0.0.1:$OMO_KB_PORT/healthz" 2>/dev/null | grep -q '"ok":true'; then
+      if pid_alive "$mypid" && curl -sk --max-time 2 "https://127.0.0.1:$OMO_KB_PORT/healthz" 2>/dev/null | grep -q '"ok":true'; then
         echo "已启动（nohup，PID $mypid，日志 $OMO_KB_LOG）"; exit 0
       fi
-      if ! kill -0 "$mypid" 2>/dev/null; then
+      if ! pid_alive "$mypid"; then
         echo "⚠ 拉起的进程已退出（PID $mypid）——常见：端口 $OMO_KB_PORT 被占用 / 证书 / 管理员凭据。最后几行日志："
         tail -3 "$OMO_KB_LOG" 2>/dev/null | sed 's/^/    /'
         exit 1
@@ -351,20 +409,29 @@ case "$cmd" in
     exit 0 ;;
   stop)
     if have_systemd && [ -f "$UNIT_PATH" ]; then svc stop "$UNIT" && echo "已停止（systemd）"; exit 0; fi
-    stopped=false
-    pid="$(cat "$DIR/service.pid" 2>/dev/null || true)"
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then kill "$pid" 2>/dev/null && stopped=true; fi
-    if [ "$stopped" = false ] && command -v pgrep >/dev/null 2>&1; then
-      p="$(pgrep -f "$DIR/service/ops-kb-enroll-server.mjs" | head -1 || true)"
-      [ -n "$p" ] && kill "$p" 2>/dev/null && { pid="$p"; stopped=true; }
+    # pid 文件里的号可能是 MSYS pid（本启动器写的 $!）也可能是原生 Windows pid（服务自写 --pid-file），
+    # 两套命名空间互不认账 ⇒ kill 与 taskkill 都试；判「已停」以端口不再应答为准（pkill/pgrep 在 Git Bash 不存在）
+    pid="$(cat "$DIR/service.pid" 2>/dev/null || true)"; killed=false
+    if [ -n "$pid" ]; then
+      kill "$pid" 2>/dev/null && killed=true || true
+      if command -v taskkill >/dev/null 2>&1 && command -v tasklist >/dev/null 2>&1; then
+        # 防 PID 复用误杀：仅当该 PID 的镜像名确为 bun 时才强杀
+        if tasklist //FI "PID eq $pid" //FO CSV //NH 2>/dev/null | grep -qi bun; then
+          taskkill //F //PID "$pid" >/dev/null 2>&1 && killed=true || true
+        fi
+      fi
     fi
     rm -f "$DIR/service.pid"
-    if [ "$stopped" = true ]; then
-      for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.3; done
-      kill -0 "$pid" 2>/dev/null && { kill -9 "$pid" 2>/dev/null || true; echo "已强制停止 PID $pid"; } || echo "已停止"
-    else
-      echo "（未在运行）"
-    fi ;;
+    up=true
+    for _ in $(seq 1 15); do
+      curl -sk --max-time 1 "https://127.0.0.1:$OMO_KB_PORT/healthz" >/dev/null 2>&1 || { up=false; break; }
+      sleep 0.3
+    done
+    if [ "$up" = true ]; then
+      echo "⚠ 端口 $OMO_KB_PORT 仍在应答（PID ${pid:-未知}）：未能停掉进程，请手动排查 netstat -ano | grep :$OMO_KB_PORT"
+      exit 1
+    fi
+    [ "$killed" = true ] && echo "已停止（PID $pid）" || echo "（未在运行）" ;;
   restart) "$0" stop || true; "$0" start ;;
   logs) tail -n "${1:-100}" "$OMO_KB_LOG" ;;
   cert) echo "证书指纹（SHA256，实例侧可用 --allow-insecure-tls 或加入信任库）："; openssl x509 -in "$OMO_KB_TLS_CERT" -noout -fingerprint -sha256 -dates ;;

@@ -21,6 +21,9 @@ ok()   { echo "  ✓ $1"; }
 warn() { echo "  ⚠ $1"; }
 bad()  { echo "  ✗ $1"; FAIL=1; }
 
+# 秘密文件权限：能力探测（与安装器/脚本同一实现；随包在 lib/ 下；单文件运行则退回严格等值）
+if [ -f "$(dirname "$0")/lib/secret-perm.sh" ]; then . "$(dirname "$0")/lib/secret-perm.sh"; fi
+
 echo "═══ omo 知识库体检 ═══"
 echo "  私有域：$DIR"
 echo
@@ -39,7 +42,12 @@ if [ -f "$CRED" ]; then
   REPO="$(sed -n 's/.*"repo"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CRED" | head -1)"
   USER_="$(sed -n 's/.*"username"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CRED" | head -1)"
   KIND="$(sed -n 's/.*"kind"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CRED" | head -1)"
-  [ "$PERM" = "600" ] && ok "凭据：$USER_（$KIND）@ $REPO  [0600]" || bad "凭据文件权限异常：$PERM（应为 600）"
+  if command -v can_express_0600 >/dev/null 2>&1 && ! can_express_0600; then
+    # Windows/Git Bash 无法表达 0600 ⇒ 不做假红（仍提示实况）
+    warn "凭据：$USER_（$KIND）@ $REPO  [权限 $PERM；本文件系统不可表达 0600]"
+  else
+    [ "$PERM" = "600" ] && ok "凭据：$USER_（$KIND）@ $REPO  [0600]" || bad "凭据文件权限异常：$PERM（应为 600）"
+  fi
   [ -f "$DIR/home/.git-credentials" ] && ok "git store 凭据文件存在（0600）" || warn "git store 凭据文件缺失（下次 sync 会自动重建）"
 else
   warn "凭据：未配置（本地模式）——启用远端同步需 enroll 或 Owner 发放凭据"

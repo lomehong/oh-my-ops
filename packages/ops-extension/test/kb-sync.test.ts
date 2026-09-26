@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { ShellExec } from "@ops-pi/core";
 import { syncKb, instanceBranchFor } from "../src/kb-sync.ts";
 import { daysUntilExpiry, kbCredentialPath, kbGitCredentialsPath, loadKbCredential, omoHomeDir, redactUrl, saveGitCredentialsFile, saveKbCredential, saveKbState, secretPrefix, KbCredentialError, ensureGitCredentialsFile, credentialAgeDays, rotationHint } from "../src/kb-credential.ts";
+import { expectSecret0600 } from "./runtime/perm-mode.ts";
 
 /**
  * OMO-KB-SYNC P1 守卫：分支纪律 + 凭据文件（真 git、file:// 裸仓，无网络）。
@@ -172,8 +173,8 @@ describe("kb-credential：凭据落盘与展示纪律", () => {
 			await saveGitCredentialsFile(dir, cred);
 			const loaded = await loadKbCredential(dir);
 			expect(loaded?.username).toBe("omo-bot");
-			expect(fs.statSync(kbCredentialPath(dir)).mode & 0o777).toBe(0o600);
-			expect(fs.statSync(kbGitCredentialsPath(dir)).mode & 0o777).toBe(0o600);
+			expectSecret0600(kbCredentialPath(dir));
+			expectSecret0600(kbGitCredentialsPath(dir));
 			// git store 格式：scheme://user:token@host（供 credential.helper=store --file 读取）
 			expect(fs.readFileSync(kbGitCredentialsPath(dir), "utf8").trim()).toBe("https://omo-bot:abcdef1234567890@twin.hzins.com");
 			expect(secretPrefix("abcdef1234567890")).toBe("abcdef12…");
@@ -228,9 +229,9 @@ describe("凭据注入机制（真机实测口径）：credential.helper=store +
 			const cred = { repo: "https://twin.hzins.com/git/hzins-ops/ops-kb", username: "omo-bot", secret: "TOKEN-VALUE-1234", kind: "token" as const, createdAt: new Date().toISOString() };
 			const file = await saveGitCredentialsFile(omo, cred);
 			expect(file).toBe(path.join(omo, "home", ".git-credentials"));
-			expect(fs.statSync(file).mode & 0o777).toBe(0o600);
-			// 与 syncKb 完全同款：-c credential.helper=store + HOME=私有 HOME
-			const r = await shell.exec(["git", "-c", "credential.helper=store", "credential", "fill"], {
+			expectSecret0600(file);
+			// 与 syncKb 完全同款：helper 链先重置再挂 store（否则系统级 helper 先跑：挂起 + 可能返回本机真实凭据）+ HOME=私有 HOME
+			const r = await shell.exec(["git", "-c", "credential.helper=", "-c", "credential.helper=store", "credential", "fill"], {
 				cwd: omo,
 				env: { HOME: omoHomeDir(omo), GIT_TERMINAL_PROMPT: "0" },
 				stdin: "protocol=https\nhost=twin.hzins.com\n\n",
@@ -298,7 +299,7 @@ describe("凭据轮换后 git store 文件必须刷新（真机教训：旧密�
 			const line = fs.readFileSync(kbGitCredentialsPath(omo), "utf8");
 			expect(line).toContain("bot:pw-v2@git.example.com");
 			expect(line).not.toContain("pw-v1");
-			expect(fs.statSync(kbGitCredentialsPath(omo)).mode & 0o777).toBe(0o600);
+			expectSecret0600(kbGitCredentialsPath(omo));
 		} finally {
 			fs.rmSync(omo, { recursive: true, force: true });
 		}

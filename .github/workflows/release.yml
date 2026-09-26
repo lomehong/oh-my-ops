@@ -25,7 +25,8 @@ jobs:
       - name: 安装依赖
         run: npm install --ignore-scripts
 
-      # 三步与 package.json 的 test:l1 / test:l2 / typecheck:core 同源（本地 pre-push 跑同一组脚本），
+      # 三步与 package.json 的 test:l1 / test:l2 / typecheck:core 同源；
+      # 本地 pre-push 跑的是全量 test:ci（13 步，含探针/安装/发布完整性），CI 只跑这核心三步，
       # 避免 "本地 bun 过、CI node 不过" 的 runner 分裂（v0.8.0 首发即因此失败）
       - name: L1 测试
         run: npm run test:l1
@@ -93,7 +94,8 @@ jobs:
                    "scripts/omo-kb-fleet.sh" "scripts/ui/index.html" "scripts/lib/kb-auth.mjs" "scripts/lib/kb-ui-config.mjs" \
                    "scripts/probe-kb-ui-render.mjs" "scripts/probe-kb-lint.sh" \
                    "scripts/lib/bun.sh" "scripts/lib/kb-audit.mjs" \
-                   "scripts/lib/kb-gitea.mjs" "scripts/lib/kb-registry.mjs" \
+                   "scripts/lib/kb-gitea.mjs" "scripts/lib/kb-registry.mjs" "scripts/lib/secret-perm.sh" \
+                   "scripts/lib/secret-perm.mjs" "scripts/lib/proc.sh" \
                    "packages/ops-extension/src/kb-cli.ts" "packages/ops-extension/src/kb-sync.ts" \
                    "packages/ops-extension/src/kb-credential.ts" "packages/ops-extension/src/kb-enroll.ts" \
                    "packages/ops-extension/src/redact.ts" "packages/ops-core/src/redact.ts" \
@@ -125,9 +127,9 @@ jobs:
           cp scripts/omo-kb-fleet.sh "/tmp/${PKG}/"
           mkdir -p "/tmp/${PKG}/ui"
           cp scripts/ui/index.html "/tmp/${PKG}/ui/index.html"
-          cp scripts/lib/kb-gitea.mjs scripts/lib/kb-registry.mjs scripts/lib/kb-audit.mjs scripts/lib/kb-auth.mjs scripts/lib/kb-ui-config.mjs scripts/lib/kb-lint.mjs scripts/lib/bun.sh "/tmp/${PKG}/lib/"
+          cp scripts/lib/kb-gitea.mjs scripts/lib/kb-registry.mjs scripts/lib/kb-audit.mjs scripts/lib/kb-auth.mjs scripts/lib/kb-ui-config.mjs scripts/lib/kb-lint.mjs scripts/lib/secret-perm.mjs scripts/lib/bun.sh "/tmp/${PKG}/lib/"
           # 清单断言：服务包缺任一关键文件即红（服务零外部依赖，lib/ 必须齐全）
-          for f in install.sh ops-kb-enroll-server.mjs ops-kb-provision.mjs omo-kb-fleet.sh ui/index.html lib/kb-gitea.mjs lib/kb-registry.mjs lib/kb-audit.mjs lib/kb-auth.mjs lib/kb-ui-config.mjs lib/kb-lint.mjs lib/bun.sh; do
+          for f in install.sh ops-kb-enroll-server.mjs ops-kb-provision.mjs omo-kb-fleet.sh ui/index.html lib/kb-gitea.mjs lib/kb-registry.mjs lib/kb-audit.mjs lib/kb-auth.mjs lib/kb-ui-config.mjs lib/kb-lint.mjs lib/secret-perm.mjs lib/bun.sh; do
             [ -e "/tmp/${PKG}/${f}" ] || { echo "✗ 服务包缺文件：${f}"; exit 1; }
           done
           # 零依赖自检：服务在无 monorepo 的目录下也必须能加载（真机曾 Cannot find module）

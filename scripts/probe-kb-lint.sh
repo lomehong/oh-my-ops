@@ -6,8 +6,19 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INSTALLER="$REPO_ROOT/scripts/install-enroll-service.sh"
+. "$REPO_ROOT/scripts/lib/proc.sh"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"; pkill -f "$TMP/" 2>/dev/null || true' EXIT
+# 收尾：杀桩与已起服务（pkill 在 Windows Git Bash 不存在 ⇒ 统一 pid 文件 + 双命名空间 kill，见 lib/proc.sh）。
+# set +e 是硬要求：EXIT trap 里任何失败命令会点着 set -e，把「全绿」翻成 exit 1（真机踩到）。
+cleanup() {
+  set +e
+  for f in "$TMP/pid-stub" "${H:-}/.omo-kb/service.pid"; do
+    [ -f "$f" ] && proc_kill "$(cat "$f" 2>/dev/null)"
+  done
+  rm -rf "$TMP" 2>/dev/null || true
+  return 0
+}
+trap cleanup EXIT
 FAILED=0
 pass() { echo "  ✓ $1"; }
 fail() { echo "  ✗ $1"; FAILED=$((FAILED + 1)); }
@@ -21,8 +32,13 @@ SHA="abc123def456sha"
 echo "installer: $INSTALLER"
 
 # ── 桩 Gitea：记录 statuses/comments；按固定路径供 PR files/contents/domains.yml ──
+# 桩是**原生进程**（bun.exe）：脚本里写死的 MSYS 路径 /tmp/... 在 Windows 上会被当成本地盘路径（C:\tmp\...）而落空，
+# 故把输出目录经 argv 传成原生路径（cygpath -w；Linux 无 cygpath 则原样传）。
+TMP_NATIVE="$(cygpath -w "$TMP" 2>/dev/null || printf '%s' "$TMP")"
 cat > "$TMP/stub.mjs" <<EOF
 import * as fs from "node:fs";
+import * as path from "node:path";
+const OUT = process.argv[2];
 const statuses = []; const comments = [];
 Bun.serve({ port: $STUB_PORT, async fetch(req) {
   const u = new URL(req.url);
@@ -30,12 +46,12 @@ Bun.serve({ port: $STUB_PORT, async fetch(req) {
   const b64 = (t) => Buffer.from(t, "utf8").toString("base64");
   if (u.pathname.endsWith("/statuses/$SHA") && req.method === "POST") {
     statuses.push(await req.json());
-    fs.writeFileSync("$TMP/statuses.json", JSON.stringify(statuses));
+    fs.writeFileSync(path.join(OUT, "statuses.json"), JSON.stringify(statuses));
     return json({ ok: true }, 201);
   }
   if (u.pathname.endsWith("/issues/7/comments") && req.method === "POST") {
     comments.push(await req.json());
-    fs.writeFileSync("$TMP/comments.json", JSON.stringify(comments));
+    fs.writeFileSync(path.join(OUT, "comments.json"), JSON.stringify(comments));
     return json({ ok: true }, 201);
   }
   if (u.pathname.endsWith("/pulls/7/files")) {
@@ -60,7 +76,8 @@ Bun.serve({ port: $STUB_PORT, async fetch(req) {
 } });
 console.log("STUB_READY");
 EOF
-bun "$TMP/stub.mjs" >"$TMP/stub.log" 2>&1 &
+bun "$TMP/stub.mjs" "$TMP_NATIVE" >"$TMP/stub.log" 2>&1 &
+echo $! > "$TMP/pid-stub"
 for _ in $(seq 1 20); do grep -q STUB_READY "$TMP/stub.log" 2>/dev/null && break; sleep 0.2; done
 
 printf 'token good-token\n' > "$TMP/good.token"; chmod 600 "$TMP/good.token"
@@ -95,14 +112,14 @@ grep -q '"blocked":true' /tmp/kbwb-body.json && pass "重复内容被硬拦（bl
 echo "[2] 幂等：同 body 重复投递 ⇒ 结果一致且 status 记录不翻倍"
 C2="$(post_webhook "X-Gitea-Signature" "$SIG" "$BODY")"
 grep -q '"blocked":true' /tmp/kbwb-body.json && pass "重复投递结果一致" || fail "重复投递行为漂移"
-N1="$(grep -o '"context":"kb-lint"' "$TMP/statuses.json" | wc -l)"
+N1="$(grep -o '"context":"kb-lint"' "$TMP/statuses.json" 2>/dev/null | wc -l || true)"
 [ "$N1" -ge 2 ] && pass "status 重复回写（无副作用差异）" || fail "status 回写异常"
 
 echo "[3] 坏签名 ⇒ 401 且不回写"
-N_BEFORE="$(grep -o '"context":"kb-lint"' "$TMP/statuses.json" | wc -l)"
+N_BEFORE="$(grep -o '"context":"kb-lint"' "$TMP/statuses.json" 2>/dev/null | wc -l || true)"
 C3="$(post_webhook "X-Gitea-Signature" "badbadbad" "$BODY")"
 [ "$C3" = "401" ] && pass "坏签名 401" || fail "坏签名应 401（$C3）"
-N_AFTER="$(grep -o '"context":"kb-lint"' "$TMP/statuses.json" | wc -l)"
+N_AFTER="$(grep -o '"context":"kb-lint"' "$TMP/statuses.json" 2>/dev/null | wc -l || true)"
 [ "$N_BEFORE" = "$N_AFTER" ] && pass "坏签名不产生 status" || fail "坏签名竟回写了 status"
 # 兼容自建头 X-KB-Signature（等价通道）
 C3B="$(post_webhook "X-KB-Signature" "$SIG" "$BODY")"

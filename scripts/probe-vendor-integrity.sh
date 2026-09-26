@@ -62,7 +62,7 @@ else
 fi
 
 echo "[3] 负例自证：回滚 D1（回信目标 → 会话别名）后探针必须变红"
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP" 2>/dev/null || true' EXIT
 cp "$ADAPTER" "$TMP/regressed.js"
 # 上游 0.1.0 原形态（D1）：to: { target: from.name ?? from.sessionID }
 PAT_OLD='to: { device: origMsg.from.device, target: origMsg.from.sessionID ?? origMsg.from.name },'

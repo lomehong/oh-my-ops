@@ -5,9 +5,23 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# 统一为原生形式（C:/…）：bun/node 是原生程序，MSYS 形式（/e/…）进不了它们的模块解析——
+# 经 npm 跑时 PWD 恰好是原生形式所以「碰巧能过」，直接 `bash scripts/probe-kb-ui.sh` 就炸（真机踩到）。
+command -v cygpath >/dev/null 2>&1 && REPO_ROOT="$(cygpath -m "$REPO_ROOT")"
 INSTALLER="$REPO_ROOT/scripts/install-enroll-service.sh"
+. "$REPO_ROOT/scripts/lib/proc.sh"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"; pkill -f "$TMP/" 2>/dev/null || true' EXIT
+# 收尾：杀桩与已起服务（pkill 在 Windows Git Bash 不存在 ⇒ 统一 pid 文件 + 双命名空间 kill，见 lib/proc.sh）。
+# set +e 是硬要求：EXIT trap 里任何失败命令会点着 set -e，把「全绿」翻成 exit 1（真机踩到）。
+cleanup() {
+  set +e
+  for f in "$TMP/pid-stub" "${H:-}/.omo-kb/service.pid"; do
+    [ -f "$f" ] && proc_kill "$(cat "$f" 2>/dev/null)"
+  done
+  rm -rf "$TMP" 2>/dev/null || true
+  return 0
+}
+trap cleanup EXIT
 FAILED=0
 pass() { echo "  ✓ $1"; }
 fail() { echo "  ✗ $1"; FAILED=$((FAILED + 1)); }
@@ -38,6 +52,7 @@ Bun.serve({ port: $STUB_PORT, fetch(req) {
 console.log("STUB_READY");
 EOF
 bun "$TMP/stub.mjs" >"$TMP/stub.log" 2>&1 &
+echo $! > "$TMP/pid-stub"
 for _ in $(seq 1 20); do grep -q STUB_READY "$TMP/stub.log" 2>/dev/null && break; sleep 0.2; done
 
 printf 'token good-token\n' > "$TMP/good.token"; chmod 600 "$TMP/good.token"
@@ -46,29 +61,40 @@ echo "[0] 配置库单测（kb-ui-config.mjs）"
 bun -e '
 import { validateValues, parseConfigEnv, renderConfigEnv, writeConfigEnvAtomic, maskConfigForUi, readConfigEnv } from "'"$REPO_ROOT"'/scripts/lib/kb-ui-config.mjs";
 import * as fs from "node:fs";
+import * as os from "node:os";
 const A = (c, m) => { if (!c) { console.error("  ✗ " + m); process.exit(1); } console.log("  ✓ " + m); };
 A(validateValues({ OMO_KB_REPO: "bad repo" }).ok === false, "坏 repo 被拒");
 A(validateValues({ OMO_KB_ADMIN_TOKEN_FILE: "/x" }).ok === false, "非白名单键整单拒绝");
 A(validateValues({ OMO_KB_REPO: "acme/kb", OMO_KB_PORT: "8787", OMO_KB_UI: "on" }).ok === true, "合法值通过");
-const f = fs.mkdtempSync("/tmp/kbui-") + "/config.env";
+// 临时目录走 os.tmpdir()：字面量 "/tmp" 是**当前盘符**下的 \tmp（Windows 上未必存在，真机踩到）
+const f = fs.mkdtempSync(os.tmpdir() + "/kbui-") + "/config.env";
 fs.writeFileSync(f, "# 注释保留\nOMO_KB_REPO=acme/kb\nOMO_KB_TEAM=old\n");
 const parsed = readConfigEnv(f);
 const out = renderConfigEnv(parsed, { OMO_KB_TEAM: "new", OMO_KB_UI: "on" });
 A(out.includes("# 注释保留") && out.includes("OMO_KB_TEAM=new") && out.includes("OMO_KB_UI=on"), "渲染保留注释/原地替换/追加");
 writeConfigEnvAtomic(f, out);
-A((fs.statSync(f).mode & 0o777) === 0o600 && fs.existsSync(f + ".bak"), "原子写 0600 + .bak");
+const can0600 = (() => { try { const d = fs.mkdtempSync(fs.realpathSync(os.tmpdir()) + "/omo-perm-"); const t = d + "/f"; fs.writeFileSync(t, "x", { mode: 0o600 }); fs.chmodSync(t, 0o600); const m = fs.statSync(t).mode & 0o777; fs.rmSync(d, { recursive: true, force: true }); return m === 0o600 || m === 0o400; } catch { return false; } })();
+A(can0600 ? ((fs.statSync(f).mode & 0o777) === 0o600 && fs.existsSync(f + ".bak")) : fs.existsSync(f + ".bak"), can0600 ? "原子写 0600 + .bak" : "原子写 0600（本文件系统不可表达 ⇒ 降级：断言 .bak 与可读）");
 A(maskConfigForUi({ OMO_KB_ADMIN_TOKEN_FILE: "/x/t" }).OMO_KB_ADMIN_TOKEN_FILE === "（已配置，不回显）", "凭据键掩码");
 fs.rmSync(f, { force: true });
 '
 
 echo "[0b] 页面 JS 语法 + 渲染真执行（headless fixture）"
-python3 - "$REPO_ROOT/scripts/ui/index.html" <<'PYX'
-import re, sys
-h = open(sys.argv[1], encoding="utf-8").read()
-js = re.search(r"<script>\n(.*)\n</script>", h, re.S).group(1)
-open("/tmp/kbui-page-check.mjs", "w", encoding="utf-8").write(js)
-PYX
-bun build /tmp/kbui-page-check.mjs --target=bun --outfile /dev/null >/dev/null 2>&1 && pass "页面 JS 解析通过（防语法错整页废）" || fail "页面 JS 解析失败（语法错误）"
+cat > "$TMP/extract-page.mjs" <<'JS'
+import * as fs from "node:fs";
+const [page, out] = [process.argv[2], process.argv[3]];
+const m = /<script>\n([\s\S]*)\n<\/script>/.exec(fs.readFileSync(page, "utf8"));
+if (m === null) { console.error("页面未找到 <script> 块"); process.exit(2); }
+fs.writeFileSync(out, m[1]);
+JS
+# 提取用 bun（不依赖 python3 —— Windows 上 python3 常是 Microsoft Store 别名桩：存在但不可用）
+if bun "$TMP/extract-page.mjs" "$REPO_ROOT/scripts/ui/index.html" "$TMP/kbui-page-check.mjs" >"$TMP/extract.log" 2>&1; then
+  pass "页面 JS 已提取（bun）"
+else
+  fail "页面 JS 提取失败：$(tail -1 "$TMP/extract.log" | tr '\n' ' ')"
+fi
+# 产物写进 $TMP（勿用 /dev/null：Windows 上 bun 会把它落成 CWD 的 `nul` 实体文件，污染仓库根——真机踩到）
+bun build "$TMP/kbui-page-check.mjs" --target=bun --outfile "$TMP/kbui-page-check.out.mjs" >/dev/null 2>&1 && pass "页面 JS 解析通过（防语法错整页废）" || fail "页面 JS 解析失败（语法错误）"
 if bun "$REPO_ROOT/scripts/probe-kb-ui-render.mjs" "$REPO_ROOT/scripts/ui/index.html" >"$TMP/render.log" 2>&1; then
   grep -q "渲染验收：" "$TMP/render.log" && pass "渲染真执行全过（$(grep -o '渲染验收：[0-9]*/[0-9]*' "$TMP/render.log")）" || fail "渲染脚本输出异常"
 else
@@ -109,7 +135,7 @@ echo "$STATE" | grep -q '"actor":"tester"' && pass "actor=身份头值" || fail 
 
 echo "[4] 页面签码 → 真实兑换闭环"
 CODE_RES="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/code" -H "$HDR" -H 'Content-Type: application/json' -d '{"device":"probe-node","ttlMin":5}')"
-CODE="$(printf '%s' "$CODE_RES" | grep -o '"code":"[A-Za-z0-9_-]\{32\}"' | cut -d'"' -f4)"
+CODE="$(printf '%s' "$CODE_RES" | grep -o '"code":"[A-Za-z0-9_-]\{32\}"' 2>/dev/null | cut -d'"' -f4 || true)"
 [ -n "$CODE" ] && pass "签码成功（32 位，一次性返回）" || fail "签码失败：$(printf '%s' "$CODE_RES" | head -c 160)"
 grep -q '"probe-node"' "$H/.omo-kb/registry.json" && pass "登记表落码记录" || fail "registry 无码记录"
 grep -q '"event":"ui.code.issued"' "$H/.omo-kb/audit.jsonl" && pass "审计 ui.code.issued" || fail "审计缺签码事件"
@@ -129,10 +155,10 @@ STATE_OK="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/state" -H "$HD
 echo "$STATE_OK" | grep -q '"probe-node"' && pass "恢复后登记表数据回来（对照）" || fail "恢复后仍空"
 
 echo "[5] 配置校验失败：硬停不写盘"
-OLD_PID="$(echo "$STATE" | grep -o '"pid":[0-9]*' | cut -d: -f2)"
+OLD_PID="$(echo "$STATE" 2>/dev/null | grep -o '"pid":[0-9]*' | cut -d: -f2 || true)"
 CFG_BAD="$(curl -sk --max-time 5 "https://127.0.0.1:$PORT/ui/api/config" -H "$HDR" -H 'Content-Type: application/json' -d '{"values":{"OMO_KB_REPO":"bad repo!!"}}')"
 echo "$CFG_BAD" | grep -q '"校验失败"' && pass "坏值被 400 拒绝" || fail "坏值未被拒：$(printf '%s' "$CFG_BAD" | head -c 120)"
-NEW_PID="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/state" -H "$HDR" | grep -o '"pid":[0-9]*' | cut -d: -f2)"
+NEW_PID="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/state" -H "$HDR" 2>/dev/null | grep -o '"pid":[0-9]*' | cut -d: -f2 || true)"
 [ "$OLD_PID" = "$NEW_PID" ] && pass "进程未重启（PID $OLD_PID）" || fail "坏值竟触发了重启"
 grep -q "^OMO_KB_REPO=acme/kb" "$H/.omo-kb/config.env" && pass "config.env 未被改写" || fail "config.env 被污染"
 
@@ -141,11 +167,12 @@ W8="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "https://127.0.0.1:$P
 [ "$W8" = "400" ] && pass "凭据键混入 ⇒ 400 整单拒绝" || fail "非白名单未拒（$W8）"
 
 echo "[7] 合法改配 → 预检 → 自动重启生效"
-curl -sk --max-time 10 "https://127.0.0.1:$PORT/ui/api/config" -H "$HDR" -H 'Content-Type: application/json' -d '{"values":{"OMO_KB_TEAM":"new-team"}}' | grep -q '"restarting":true' && pass "保存通过预检并触发切换" || fail "合法保存未触发重启"
+RESP7="$(curl -sk --max-time 20 "https://127.0.0.1:$PORT/ui/api/config" -H "$HDR" -H 'Content-Type: application/json' -d '{"values":{"OMO_KB_TEAM":"new-team"}}')"
+echo "$RESP7" | grep -q '"restarting":true' && pass "保存通过预检并触发切换" || fail "合法保存未触发重启：$(printf '%s' "$RESP7" | head -c 700)"
 sleep 2
 for _ in $(seq 1 20); do curl -sk --max-time 2 "https://127.0.0.1:$PORT/healthz" 2>/dev/null | grep -q '"ok":true' && break; sleep 0.5; done
 STATE2="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/state" -H "$HDR")"
-NEW_PID2="$(echo "$STATE2" | grep -o '"pid":[0-9]*' | cut -d: -f2)"
+NEW_PID2="$(echo "$STATE2" 2>/dev/null | grep -o '"pid":[0-9]*' | cut -d: -f2 || true)"
 [ -n "$NEW_PID2" ] && [ "$NEW_PID2" != "$OLD_PID" ] && pass "服务已切换到新进程（PID $NEW_PID2）" || fail "PID 未变化（$OLD_PID → $NEW_PID2）"
 echo "$STATE2" | grep -q '"OMO_KB_TEAM":"new-team"' && pass "新配置值回读生效" || fail "新值未生效"
 [ "$(cat "$H/.omo-kb/service.pid")" = "$NEW_PID2" ] && pass "pid 文件指向新进程（stop 不断链）" || fail "pid 文件未更新"

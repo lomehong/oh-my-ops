@@ -118,11 +118,13 @@ describe("SshPool", () => {
 });
 
 describe("SshPool host key 策略（缺陷 5：文档承诺 TOFU，实现此前无任何 host key 选项）", () => {
+	// argv 里的受管路径由 path.join 生成（win32 为反斜杠）⇒ 比较前归一化分隔符
+	const posix = (s: string): string => s.replaceAll("\\", "/");
 	it("支持 accept-new（OpenSSH ≥7.6）→ StrictHostKeyChecking=accept-new + 受管 known_hosts", () => {
 		const pool = new SshPool({}, new GateRunner(), "/tmp/cp-hk-a", true);
 		const wrapped = pool.wrap("web-01", ["uptime"]);
 		assert.ok(wrapped.includes("StrictHostKeyChecking=accept-new"), "应带 accept-new");
-		assert.ok(wrapped.some((o) => o === "UserKnownHostsFile=/tmp/cp-hk-a/known_hosts"), "应指向受管 known_hosts");
+		assert.ok(wrapped.some((o) => posix(o) === "UserKnownHostsFile=/tmp/cp-hk-a/known_hosts"), "应指向受管 known_hosts");
 		assert.deepStrictEqual(pool.hostKeyPolicy().mode, "accept-new");
 	});
 
@@ -130,7 +132,7 @@ describe("SshPool host key 策略（缺陷 5：文档承诺 TOFU，实现此前�
 		const pool = new SshPool({}, new GateRunner(), "/tmp/cp-hk-b", false);
 		const wrapped = pool.wrap("web-01", ["uptime"]);
 		assert.ok(wrapped.includes("StrictHostKeyChecking=no"), "应退化为 no");
-		assert.ok(wrapped.some((o) => o === "UserKnownHostsFile=/tmp/cp-hk-b/known_hosts"));
+		assert.ok(wrapped.some((o) => posix(o) === "UserKnownHostsFile=/tmp/cp-hk-b/known_hosts"));
 		assert.deepStrictEqual(pool.hostKeyPolicy().mode, "no+managed-known-hosts");
 	});
 

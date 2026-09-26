@@ -32,9 +32,12 @@
  */
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { readAdminAuth, makeApi, defaultTeam, randomPassword, credentialJson, repoWebPath, sha1, ensureUser as libEnsureUser, grantAccess as libGrantAccess, revokeAccess as libRevokeAccess, scramblePassword, verifyBotCredential } from "./lib/kb-gitea.mjs";
 import { loadRegistry, saveRegistry, issueCode, CODE_OPS } from "./lib/kb-registry.mjs";
+import { canExpress0600 } from "./lib/secret-perm.mjs";
 
 const USAGE = `用法见脚本头注释。典型：
   node scripts/ops-kb-provision.mjs create --api https://twin.hzins.com/git/api/v1 \\
@@ -286,7 +289,7 @@ async function selftest() {
 		},
 	});
 	const base = `http://127.0.0.1:${server.port}/api/v1`;
-	const dir = fs.mkdtempSync(path.join(process.env.TMPDIR ?? "/tmp", "ops-kb-provision-"));
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ops-kb-provision-"));
 	const tokenFile = path.join(dir, "admin.token");
 	fs.writeFileSync(tokenFile, "SELFTEST-ADMIN-TOKEN\n", { mode: 0o600 });
 	const reg = path.join(dir, "registry.json");
@@ -294,7 +297,7 @@ async function selftest() {
 	const common = ["--api", base, "--admin-token-file", tokenFile, "--repo", "acme/kb", "--device", "node-1", "--registry", reg];
 	const checks = [];
 	const run = async (argv) => {
-		const r = Bun.spawn({ cmd: [process.execPath, new URL(import.meta.url).pathname, ...argv], stdout: "pipe", stderr: "pipe" });
+		const r = Bun.spawn({ cmd: [process.execPath, fileURLToPath(import.meta.url), ...argv], stdout: "pipe", stderr: "pipe" });
 		const [out, err] = await Promise.all([new Response(r.stdout).text(), new Response(r.stderr).text()]);
 		return { code: await r.exited, out, err };
 	};
@@ -304,7 +307,7 @@ async function selftest() {
 		checks.push(["调用序：建号 → 查团队 → 建团队 → 挂仓库 → 加成员 → 自证", seen.join("|").includes("POST /api/v1/admin/users|GET /api/v1/orgs/acme/teams/search|POST /api/v1/orgs/acme/teams|PUT /api/v1/teams/7/repos/acme/kb|PUT /api/v1/teams/7/members/omo-bot|GET /api/v1/repos/acme/kb"), seen.join("|")]);
 		const cred = JSON.parse(fs.readFileSync(deliver, "utf8"));
 		checks.push(["交付：kind=password + 仓库地址由 API 前缀推导", cred.kind === "password" && cred.repo === `http://127.0.0.1:${server.port}/acme/kb` && cred.secret.length > 20, JSON.stringify({ ...cred, secret: "***" })]);
-		checks.push(["交付文件 0600", (fs.statSync(deliver).mode & 0o777) === 0o600, (fs.statSync(deliver).mode & 0o777).toString(8)]);
+		checks.push([`交付文件 0600${canExpress0600() ? "" : "（本文件系统不可表达 ⇒ 降级：断言存在）"}`, canExpress0600() ? (fs.statSync(deliver).mode & 0o777) === 0o600 : fs.existsSync(deliver), (fs.statSync(deliver).mode & 0o777).toString(8)]);
 		const r1 = JSON.parse(fs.readFileSync(reg, "utf8"));
 		checks.push(["登记无秘密本体、只有 sha1", r1.entries.length === 1 && !JSON.stringify(r1).includes(cred.secret), JSON.stringify(r1)]);
 		const ro = await run(["rotate", ...common, "--login", "omo-bot", "--deliver", deliver, "--apply"]);
@@ -316,8 +319,22 @@ async function selftest() {
 		checks.push(["默认 dry-run：不建号、不落交付", dry.code === 0 && !fs.existsSync(path.join(dir, "d2.json")), dry.out]);
 		const wide = path.join(dir, "wide.token");
 		fs.writeFileSync(wide, "X\n", { mode: 0o644 });
-		const w = await run(["create", "--api", base, "--admin-token-file", wide, "--repo", "acme/kb", "--device", "n", "--login", "x", "--apply"]);
-		checks.push(["管理员令牌文件权限过宽即拒", w.code !== 0 && w.err.includes("权限过宽"), w.err]);
+		// --registry/--deliver 必须显式给临时路径：POSIX 上本条在权限校验处早拒（永不落盘），
+		// 但不可表达 0600 的平台会降级放行并一路跑到落盘，默认名会落进 CWD（真机教训：仓库根被写入
+		// n-credential.json / ops-kb-registry.json）
+		const wideDeliver = path.join(dir, "wide-cred.json");
+		const w = await run(["create", "--api", base, "--admin-token-file", wide, "--repo", "acme/kb", "--device", "n", "--login", "x", "--registry", path.join(dir, "wide-registry.json"), "--deliver", wideDeliver, "--apply"]);
+		checks.push([
+			canExpress0600() ? "管理员令牌文件权限过宽即拒" : "管理员令牌文件权限过宽 ⇒ 降级放行但必须告警（不可静默）",
+			canExpress0600() ? w.code !== 0 && w.err.includes("权限过宽") : w.code === 0 && w.err.includes("无法表达 0600"),
+			w.err || w.out,
+		]);
+		const strays = ["n-credential.json", "ops-kb-registry.json"].filter((f) => fs.existsSync(path.join(process.cwd(), f)));
+		checks.push([
+			"降级路径产物只落临时目录、不污染 CWD",
+			strays.length === 0 && (canExpress0600() || fs.existsSync(wideDeliver)),
+			`CWD 散落: ${strays.join(", ") || "无"}；临时交付: ${fs.existsSync(wideDeliver) ? "有" : "无（POSIX 早拒，符合预期）"}`,
+		]);
 		const basic = await run(["create", "--api", base, "--admin-user", "root", "--admin-password-file", tokenFile, "--repo", "acme/kb", "--device", "node-2", "--login", "omo-bot-3", "--registry", reg, "--deliver", path.join(dir, "d3.json"), "--apply"]);
 		checks.push(["支持基本认证（账号+密码）路径", basic.code === 0, basic.out + basic.err]);
 		const code = await run(["code", "--op", "enroll", "--device", "node-9", "--ttl", "30", "--registry", reg]);
@@ -343,7 +360,7 @@ async function selftest() {
 	return ok ? 0 : 1;
 }
 
-const isMain = process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
+const isMain = process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 if (isMain) {
 	const args = parseArgs(process.argv.slice(2));
 	const cmd = args._[0];

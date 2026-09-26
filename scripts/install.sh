@@ -22,6 +22,8 @@ set -euo pipefail
 
 # 共用自举库（与 kb-enroll 服务安装器同一份实现）
 . "$(cd "$(dirname "$0")" && pwd)/lib/bun.sh"
+# 秘密文件权限：能力探测 + 断言（POSIX 硬拦；无法表达 0600 的文件系统降级并告警）
+. "$(cd "$(dirname "$0")" && pwd)/lib/secret-perm.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REAL_HOME="$HOME"
@@ -80,12 +82,8 @@ while [[ $# -gt 0 ]]; do
     --token-file)
       TF="$2"
       [ -f "$TF" ] || { echo "✗ --token-file 不存在：$TF"; exit 1; }
-      TF_PERM="$(stat -c %a "$TF" 2>/dev/null || stat -f %Lp "$TF" 2>/dev/null || echo unknown)"
       # 权限过宽时直接给出修复命令（真机：gitea CLI 生成的令牌常为 644）
-      case "$TF_PERM" in
-        600|400) ;;
-        *) echo "✗ 令牌文件权限过宽（应 0600）：$TF 当前 $TF_PERM —— 修复：chmod 600 $TF 后重跑"; exit 1 ;;
-      esac
+      check_secret_perm "$TF" "令牌" "重跑" || exit 1
       TOKEN="$(tr -d '\n' < "$TF")"
       [ -n "$TOKEN" ] || { echo "✗ 令牌文件为空：$TF"; exit 1; }
       echo "  ✓ 已从 0600 文件读取 Yuyi token（$TF）"
