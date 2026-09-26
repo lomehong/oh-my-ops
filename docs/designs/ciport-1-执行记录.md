@@ -123,6 +123,7 @@
 | 真实缺陷：配置切换交接 | `scripts/ops-kb-enroll-server.mjs:135,368-392,497` |
 | 服务包清单/打包 + 新库入包 | `.github/workflows/release.yml:95-96,127-130`（secret-perm.sh/.mjs、proc.sh） |
 | 口径对齐（钩子/工作流/README） | `.githooks/pre-push:2-4,14`；`.github/workflows/release.yml:28-29`；`README.md:335,337` |
+| 打包门路径修复 + 守卫（追记 §5.7） | `.github/workflows/release.yml:112-115`（清单引用改 `$GITHUB_WORKSPACE` 绝对路径 + 读空即红）；`scripts/probe-workflow-yaml.sh:44-55`（`cd` 后仓库相对路径守卫） |
 
 ## 五、对照自检（实际输出）
 
@@ -191,7 +192,7 @@ mjs 侧（`secret-perm.mjs`，供 kb-gitea / ops-kb-provision / kb-enroll 的同
 
 ### 5.5 tag/发布门与口径对齐
 
-- `on: push: tags: ["v*"]`（`release.yml:3-5`）原样；打包 job 的三处闸门（清单断言 `:95-96`、打包前探针、包内指纹抽验）原样；新增 `secret-perm.sh/.mjs`、`proc.sh` 入清单与打包（服务包零依赖自检仍过）。
+- `on: push: tags: ["v*"]`（`release.yml:3-5`）原样；打包 job 的三处闸门（清单断言 `:95-96`、打包前探针、包内指纹抽验）在本轮改动中原样（**包内指纹抽验的路径缺陷与修复见 §5.7**）；新增 `secret-perm.sh/.mjs`、`proc.sh` 入清单与打包（服务包零依赖自检仍过）。
 - `npm run test:workflow` 绿（`release.yml 结构检查通过`）。
 - 口径漂移消除：`README.md:337`（test:ci=3 步 → 13 步）、`:335`（l2 文件清单）、`.githooks/pre-push:2-4`、`release.yml:28-29` 四处口径统一为「本地 13 步 / CI test job 只跑 l1+l2+typecheck:core」。
 
@@ -199,6 +200,17 @@ mjs 侧（`secret-perm.mjs`，供 kb-gitea / ops-kb-provision / kb-enroll 的同
 
 - 跑后无残留 bun 服务进程（`tasklist`/`taskkill` 双命名空间核查）；临时目录可删（`rm -rf` 不再被句柄挡住）。
 - 仓库根无污染件（`--outfile /dev/null` 的 `nul` 已修；`n-credential.json`/`ops-kb-registry.json` 曾误判为实验遗留——实为 selftest 降级路径写出的污染件，见 §六-8，已修复并加断言）。
+
+### 5.7 v0.16.0 首发 CI 实况与打包门修复（追记 2026-09-26 23:2x–）
+
+- **CI 首次真跑（run #90，<https://github.com/lomehong/oh-my-ops/actions/runs/36251780672>）**：test job **✅ 全步过**（L1、L2、typecheck:core —— POSIX 严格分支首次真机绿）；打包发布 job **❌ 于「打部署包」**，其后「打 kb-enroll 服务包」「发布 Release」均 skipped ⇒ **无 Release 产物**。job 日志端点需鉴权（本机未登录，403），故以 step 结论 + 本机逐字复现定位。
+- **根因（本机逐字复现，非推测）**：`cd /tmp`（`release.yml:110`）之后 `LISTED="$(awk '{print $1}' vendor/yuyi-omp-extension.sha256 | head -1)"` 仍按**仓库相对路径**读清单 ⇒ `awk: fatal: cannot open file 'vendor/yuyi-omp-extension.sha256'`、`LISTED` 空 ⇒ 抽验判「不符」⇒ `✗ 发布包内适配器 sha256 与清单不符：ec25ec8e929014ca… ≠ …`、exit 1。复现中 `IN_PKG` 与清单**逐字相同**（`ec25ec8e929014ca209ab616b3b7cb8fc1c354f3b305014eda323815a82d3751`）——**红的是路径引用，不是产物**。该抽验块由 OMOVENDOR-1（`2f19113`）引入，v0.15.1 早于它，故为「发布门首次真跑」暴露。
+- **最小修复**：清单改以 `$GITHUB_WORKSPACE/vendor/…` 绝对路径引用（与同步骤 `mv … "$GITHUB_WORKSPACE/"` 同源），并加「读空即红」`✗ 读不到 vendor 适配器清单：…`（清单存在但为空/不可读时给精确原因；缺文件仍由打包清单断言先红）。
+- **修复后本机复现（verbatim）**：从 `release.yml` 逐字抽取两步 run 块（`/e/tmp/pkgrepro/extract.mjs`，禁手抄）在 scratch 工作区（`git archive HEAD` 展开 + `GITHUB_WORKSPACE` 指向 scratch，不触碰仓库根）执行 ⇒ `打部署包` **exit 0**（产出 `oh-my-ops-v0.16.0.tar.gz{,.sha256}`、`install.sh` 落 scratch 根）、`打 kb-enroll 服务包` **exit 0**（含 CIPORT-1 新增 `secret-perm.mjs` 清单项与 `bun -e` 零依赖自检）；包内指纹与清单两行逐字相同。
+- **新行未死代码自证（变异）**：scratch 内把清单截为 0 字节 ⇒ `✗ 读不到 vendor 适配器清单：…`、exit 1；复原 ⇒ exit 0、产物齐（`oh-my-ops-v0.16.0.tar.gz` 318 862 B）。
+- **修复后全链复跑（本机）**：ci-run6 23:31:22–23:47:31（`START_EPOCH=1790436682`/`END_EPOCH=1790437651`，969s），`TEST_CI_EXIT=0`、✗=0；13 步全跑（自检 14/14、`✓ .github/workflows/release.yml 结构检查通过`（新守卫在内）、vendor-integrity 15/0 含负例红证、web-verify 本机 SKIP 照旧）。
+- **结构守卫（新，红→绿自证）**：`scripts/probe-workflow-yaml.sh` 增「run 块内 `cd` 之后的仓库相对路径必须以 `$GITHUB_WORKSPACE` 打底」。**红证**：对 `HEAD:.github/workflows/release.yml`（修前副本，`/e/tmp/wfguard/`）跑 ⇒ 精确命中 `LISTED="$(awk … vendor/yuyi-omp-extension.sha256 …)"`、exit 1；**绿证**：对修后工作树 ⇒ `✓ .github/workflows/release.yml 结构检查通过`、`结果：全绿`（`npm run test:workflow` exit 0）。
+- **边界（诚实登记）**：本机复现以合成 `dist/omp-single` 充当品牌断言对象；真实二进制由 CI 构建（run #90 步骤 6「构建 omp 单文件运行时」success、步骤 7 vendor 探针 success，且品牌断言自 OMOBRAND-1 起在 v0.15.1 真跑通过）⇒ 未跑通的分支不在品牌断言。
 
 ## 六、真实缺陷登记（产品侧，影响面）
 
@@ -215,19 +227,24 @@ mjs 侧（`secret-perm.mjs`，供 kb-gitea / ops-kb-provision / kb-enroll 的同
 
 ## 七、未兑现 / 待真机
 
-- **release.yml 三处闸门只在打 tag 时真跑**：本地已做逐字模拟 + `test:workflow` 结构守卫（先例：OMOVENDOR-1 §3.4）。
+- **release.yml 三处闸门已在首次真跑中兑现**：run #90 中「vendor 适配器回归探针」步骤 ✅；「打部署包」❌ 暴露抽验块的路径缺陷（详见 §5.7），已最小修复 + 结构守卫红/绿自证，**待授权后提交并重发**；「打 kb-enroll 服务包」在 run #90 被跳过（前序红），修复后已在本机逐字复现为绿。
 - **POSIX 严格分支未在 Linux 真机复跑**：本机以「强制置位」负例自证（§5.4）；Linux 侧建议下一次 CI/真机顺带实证（预期：`can_express_0600=true` ⇒ 严格断言照跑）。
 - **test:install / enroll-install 的 Linux 语义未复跑**：本机全绿，但 0600 严格段按定义只能在 POSIX 上真正生效。
 - **test:web-verify 本机 SKIP**（无 Chrome）：有 Chrome 的机器照跑，未实证。
 - **`test:l2` 的 60000ms 预算**：本机最慢单项 10.4s；更慢的磁盘/冷缓存机器是否够用未验证。
-- **提交/推送/tag**：2026-09-26 获明确授权（先完成 #4/#5 严格对，再提交 CIPORT-1 → 推 main → 打 tag 触发 release CI）；本行落笔时严格对已收口（§5.2 #4/#5、§5.3），提交/推送/CI 为紧随其后的收口动作，结果留档于台账 `docs/tasks/CIPORT-1.yaml`。
+- **提交/推送/tag（已执行，供事后对账）**：提交 `b61f264`（30 文件，+887/−175）→ 推 main（22:36:41–22:51:41，pre-push 全链通过；远端 API 确证 `refs/heads/main` = `b61f264`）→ tag `v0.16.0` **首推失败**：本地门全绿但推送阶段瞬时报 `RPC failed; curl 35 schannel: failed to receive handshake`（22:51:59–23:07:17，tag 未落地，API 404 确证、CI 未触发）→ **重推成功**（23:08:09–23:23:42，仍走门）⇒ Release CI run #90 触发：<https://github.com/lomehong/oh-my-ops/actions/runs/36251780672>。
+- **run #90 结果（已观测）**：test job ✅ / 打包发布 job ❌ 于「打部署包」⇒ **v0.16.0 未产出 Release**。根因 = 抽验块 `cd /tmp` 后的相对路径读清单（§5.7）；修复（清单改 `$GITHUB_WORKSPACE` 绝对路径 + 读空即红）与结构守卫见 §5.7，随本次修复提交入库。
+- **重发路径（主人 2026-09-26 决定）**：**删除远端 tag `v0.16.0` 并在修复提交上重打同名 tag**（保持版本号 v0.16.0）。属改写已发布引用，已获明示授权。执行顺序：提交修复 + 记录 → 推 main（过 pre-push 全链门）→ 删远端 tag 并重打/重推 → CI 复跑核验（Release 5 产物）。
 
 ## 八、可回源性
 
 | 基准 | 来源 | 说明 |
 |---|---|---|
 | 枚举红基线 | `/e/tmp/ciport-enum/`（13 份 log + SUMMARY） | 本机临时证据，未入库；每步命令即 `npm run <step>` |
-| 全链绿日志 | `/e/tmp/ci-run1.log`…`ci-run5.log` | 同上；含 START/END_EPOCH；#4/#5 为修后冻结严格对（起点=终点=`74f3b320…`） |
+| 全链绿日志 | `/e/tmp/ci-run1.log`…`ci-run6.log` | 同上；含 START/END_EPOCH；#4/#5 为修后冻结严格对（起点=终点=`74f3b320…`）；ci-run6 为打包门修复 + 新守卫的复跑（23:31:22–23:47:31，`TEST_CI_EXIT=0`、✗=0） |
 | 关键单步 | `npm run test:l1 / test:l2 / test:install / test:bootstrap / test:kb-ui / test:kb-lint / test:enroll-install / typecheck / test:workflow` | 均可独立重跑 |
-| 收口动作 | 提交 / 推 main / tag / CI 观测 | 见 `git log` 与台账 `docs/tasks/CIPORT-1.yaml`（report 态） |
+| 打包两步逐字复现 | `/e/tmp/pkgrepro/`（`extract.mjs` + `run-steps.sh` + `step-pkg.sh`/`step-kb.sh` + ws 产物） | 从 `release.yml` 逐字抽 step（禁手抄）；scratch 工作区（`GITHUB_WORKSPACE` 指向 scratch），不触碰仓库根 |
+| 守卫红/绿证 | `/e/tmp/wfguard/`（修前 release.yml 副本）+ 仓库工作树 | 红证对修前文件（命中 `LISTED…vendor/…`，exit 1）；绿证 `npm run test:workflow`（结果：全绿） |
+| CI 首次真跑 | <https://github.com/lomehong/oh-my-ops/actions/runs/36251780672>（run #90） | test job ✅ / 打包 ❌ 于「打部署包」（job 日志端点需鉴权，403）；结论取自 jobs/steps API |
+| 收口动作 | 提交 / 推 main / tag / CI 观测 | 见 `git log` 与台账 `docs/tasks/CIPORT-1.yaml`（report 态）；打包门修复为工作树改动（§5.7、§七末） |
 | 先例记录 | `docs/designs/omovendor-1-执行记录.md`、`docs/designs/web-verify-执行记录.md` | 防线与真机教训的写法参照 |

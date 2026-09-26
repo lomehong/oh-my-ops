@@ -110,7 +110,9 @@ jobs:
           cd /tmp
           tar czf "${PKG}.tar.gz" "${PKG}"
           # 发布包抽验（OMOVENDOR-1）：包内适配器指纹必须与清单一致（防打包期替换/夹带；与安装器闸门同判据）
-          LISTED="$(awk '{print $1}' vendor/yuyi-omp-extension.sha256 | head -1)"
+          # 清单须以 $GITHUB_WORKSPACE 绝对路径引用：此处 CWD 已是 /tmp，相对路径会读空致误红（v0.16.0 首发）
+          LISTED="$(awk '{print $1}' "$GITHUB_WORKSPACE/vendor/yuyi-omp-extension.sha256" | head -1)"
+          [ -n "$LISTED" ] || { echo "✗ 读不到 vendor 适配器清单：$GITHUB_WORKSPACE/vendor/yuyi-omp-extension.sha256"; exit 1; }
           IN_PKG="$(tar -xzOf "${PKG}.tar.gz" "${PKG}/vendor/yuyi-omp-extension.js" | sha256sum | awk '{print $1}')"
           [ "$IN_PKG" = "$LISTED" ] || { echo "✗ 发布包内适配器 sha256 与清单不符：${IN_PKG:0:16}… ≠ ${LISTED:0:16}…"; exit 1; }
           sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"

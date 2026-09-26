@@ -41,6 +41,20 @@ for f in .github/workflows/*.yml .github/workflows/*.yaml; do
     fi
   done
 
+  # ★ run 块内 `cd` 之后的仓库相对路径必须以 $GITHUB_WORKSPACE 打底
+  #   真机踩到（v0.16.0 首发）：打部署包在 `cd /tmp` 之后读 vendor/yuyi-omp-extension.sha256
+  #   ⇒ LISTED 读空 ⇒ 指纹抽验误判「不符」⇒ 打包红、Release 未发布（清单本身没问题）。
+  for r in /tmp/omo-wf-runs.*; do
+    [ -e "$r" ] || continue
+    cdn="$(grep -nE '(^|[^[:alnum:]_$])cd[[:space:]]+' "$r" | head -1 | cut -d: -f1)"
+    [ -n "$cdn" ] || continue
+    bad="$(tail -n +"$cdn" "$r" | grep -nE '(^|[^/[:alnum:]_.$-])(scripts|vendor|packages|types|docs|bin|dist)/|(^|[^/[:alnum:]_.$-])README\.md' || true)"
+    if [ -n "$bad" ]; then
+      echo "  ✗ $f：cd 之后的仓库相对路径（CWD 已离开仓库根，须以 \$GITHUB_WORKSPACE 打底）——$(echo "$bad" | head -1 | cut -d: -f2- | sed 's/^[[:space:]]*//')"
+      fail=$((fail+1))
+    fi
+  done
+
   [ "$fail" -eq 0 ] && echo "  ✓ $f 结构检查通过"
 done
 [ "$fail" -eq 0 ] && echo "结果：全绿" || { echo "结果：$fail 项失败"; exit 1; }
