@@ -91,6 +91,40 @@ mkdir -p "$(dirname "$RD1")"; printf '// legacy\n' > "$RD1"
 install_into "$H1" redact-legacy >/dev/null 2>&1 || fail "重装失败（见 $TMP/install-redact-legacy.log）"
 [ -f "$RD1" ] && fail "旧版本遗留的 vendor JS 未被清理" || pass "旧版本遗留的 vendor JS 已清理（升级收口）"
 
+echo "[4c] Yuyi 适配器完整性闸门（OMOVENDOR-1）：安装前校验 + 篡改即中止"
+# 动机：适配器是 vendor 拷贝、历史上以「整文件同步」更新 ⇒ 本仓回信修复（D1-D5）会被静默回退。
+# 清单 vendor/yuyi-omp-extension.sha256 是判据；指纹不符必须在**落盘前**中止。
+sha_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'; else shasum -a 256 "$1" | awk '{print $1}'; fi; }
+AD_BASE="$REPO_ROOT/vendor/yuyi-omp-extension.js"
+YUYI_DST1="$H1/.omo/extensions/yuyi-omp-extension.js"
+[ -f "$PKG/vendor/yuyi-omp-extension.sha256" ] && pass "发布布局含完整性清单" || fail "发布布局缺 vendor/yuyi-omp-extension.sha256"
+[ -f "$PKG/vendor/yuyi-omp-extension.PROVENANCE.md" ] && pass "发布布局含溯源件" || fail "发布布局缺 vendor/yuyi-omp-extension.PROVENANCE.md"
+if [ -f "$YUYI_DST1" ] && [ "$(sha_of "$YUYI_DST1")" = "$(sha_of "$AD_BASE")" ]; then
+	pass "适配器落点存在且与仓库基准一致"
+else
+	fail "适配器落点缺失或与基准不符（落点 $YUYI_DST1）"
+fi
+cp "$PKG/vendor/yuyi-omp-extension.js" "$TMP/yuyi.bak"
+printf '\n// tamper: 模拟未经审查的同步覆盖\n' >> "$PKG/vendor/yuyi-omp-extension.js"   # 任何字节改动都该被拦
+HT="$TMP/ht"; mkdir -p "$HT"
+if HOME="$HT" bash "$PKG/scripts/install.sh" --token probe-token --name probe-dev >"$TMP/install-tampered.log" 2>&1; then
+	fail "适配器指纹不符竟安装成功（闸门失效）"
+else
+	if grep -qE "完整性校验失败|完整性基准" "$TMP/install-tampered.log"; then pass "指纹不符即中止并明确报错"; else fail "拒绝原因不明确：$(tail -2 "$TMP/install-tampered.log" | tr '\n' ' ')"; fi
+	[ -f "$HT/.omo/extensions/yuyi-omp-extension.js" ] && fail "校验失败仍落盘了适配器" || pass "校验失败不落盘适配器"
+fi
+cp "$TMP/yuyi.bak" "$PKG/vendor/yuyi-omp-extension.js"   # 复位（后续段落继续用 $PKG）
+[ "$(sha_of "$PKG/vendor/yuyi-omp-extension.js")" = "$(sha_of "$AD_BASE")" ] && pass "篡改负例后已复位" || fail "复位失败，后续断言不可信"
+# 清单缺失 = 无基准可比 ⇒ 必须同样拒装（fail-closed，不允许「无清单就放行」）
+mv "$PKG/vendor/yuyi-omp-extension.sha256" "$TMP/yuyi.sha256.bak"
+HN="$TMP/hn"; mkdir -p "$HN"
+if HOME="$HN" bash "$PKG/scripts/install.sh" --token probe-token --name probe-dev >"$TMP/install-nomanifest.log" 2>&1; then
+	fail "清单缺失竟安装成功（可被「删清单」绕过闸门）"
+else
+	grep -q "完整性基准" "$TMP/install-nomanifest.log" && pass "清单缺失即拒并说明原因" || fail "拒绝原因不明确：$(tail -2 "$TMP/install-nomanifest.log" | tr '\n' ' ')"
+fi
+mv "$TMP/yuyi.sha256.bak" "$PKG/vendor/yuyi-omp-extension.sha256"
+
 echo "[5] KB 同步（OMO-KB-SYNC P1）：模块部署 + 启动器子命令"
 EXT2="$H2/.omo/extensions/ops-pi"
 for f in kb-cli.ts kb-sync.ts kb-credential.ts kb-enroll.ts; do

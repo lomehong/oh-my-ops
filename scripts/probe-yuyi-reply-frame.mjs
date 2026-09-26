@@ -20,10 +20,12 @@
 import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const argIdx = process.argv.indexOf("--bundle");
-const BUNDLE = argIdx > 0 ? process.argv[argIdx + 1] : new URL("../vendor/yuyi-omp-extension.js", import.meta.url).pathname;
+// 默认落点必须走 fileURLToPath：URL.pathname 在 Windows 上是 "/E:/…"，
+// 再经 pathToFileURL 会拼成 "E:\E:\…" ⇒ ERR_MODULE_NOT_FOUND（2026-09-26 实测）
+const BUNDLE = argIdx > 0 ? process.argv[argIdx + 1] : fileURLToPath(new URL("../vendor/yuyi-omp-extension.js", import.meta.url));
 const STATE_DIR = mkdtempSync(join(tmpdir(), "yuyi-probe-"));
 const LOG_FILE = join(STATE_DIR, "omp-plugin.log");
 

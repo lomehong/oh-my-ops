@@ -47,6 +47,10 @@ jobs:
         with:
           bun-version: 1.4.2   # 构建 omp-single 运行时（与测试/安装器锁版一致）
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22      # vendor 回归探针（node 夹具）用；与测试 job 同版本
+
       - name: 提取版本号
         id: ver
         run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
@@ -54,6 +58,12 @@ jobs:
       # 自包含运行时：pin 18.1.18 → embedded-addon → 品牌 patch → bun compile 单文件（方案 §A.3）
       - name: 构建 omp 单文件运行时
         run: bash scripts/build-omp-runtime.sh
+
+      # vendor 回归闸门（OMOVENDOR-1）：适配器回信修复（D1-D5）是 vendor 拷贝，上游「整文件同步」会静默回退。
+      # 探针红 = 本次发布含回退版适配器 ⇒ 直接停止发布（发布包是发给对端装机的，静默回退=生产通讯失效）。
+      # 这里直呼脚本（不走 npm script）：发布闸门不随 package.json 的改写而漂移。
+      - name: vendor 适配器回归探针（回信帧 + close 码语义）
+        run: node scripts/probe-yuyi-reply-frame.mjs
 
       # 打包结构 = git 仓库结构（install.sh 依赖相对路径 packages/…）+ 自包含运行时 omp-single
       - name: 打部署包
@@ -77,6 +87,7 @@ jobs:
           grep -q 'update|upgrade)' scripts/install.sh || { echo "✗ 启动器缺 update|upgrade 拦截"; exit 1; }
           grep -qa 'OMO_APP_NAME' dist/omp-single || { echo "✗ 二进制未见品牌 patch 痕迹（OMO_APP_NAME）"; exit 1; }
           for f in "scripts/install.sh" "scripts/bootstrap.sh" "omp-single" "README.md" "packages/ops-extension/src/index.ts" \
+                   "vendor/yuyi-omp-extension.js" "vendor/yuyi-omp-extension.sha256" "vendor/yuyi-omp-extension.PROVENANCE.md" \
                    "scripts/ops-kb-provision.mjs" "scripts/ops-kb-enroll-server.mjs" \
                    "scripts/install-enroll-service.sh" "scripts/probe-install-enroll-service.sh" "scripts/omo-kb-doctor.sh" \
                    "scripts/omo-kb-fleet.sh" "scripts/ui/index.html" "scripts/lib/kb-auth.mjs" "scripts/lib/kb-ui-config.mjs" \
@@ -96,6 +107,10 @@ jobs:
 
           cd /tmp
           tar czf "${PKG}.tar.gz" "${PKG}"
+          # 发布包抽验（OMOVENDOR-1）：包内适配器指纹必须与清单一致（防打包期替换/夹带；与安装器闸门同判据）
+          LISTED="$(awk '{print $1}' vendor/yuyi-omp-extension.sha256 | head -1)"
+          IN_PKG="$(tar -xzOf "${PKG}.tar.gz" "${PKG}/vendor/yuyi-omp-extension.js" | sha256sum | awk '{print $1}')"
+          [ "$IN_PKG" = "$LISTED" ] || { echo "✗ 发布包内适配器 sha256 与清单不符：${IN_PKG:0:16}… ≠ ${LISTED:0:16}…"; exit 1; }
           sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
           mv "${PKG}.tar.gz" "${PKG}.tar.gz.sha256" "$GITHUB_WORKSPACE/"
 

@@ -47,7 +47,15 @@ else
 fi
 YUYI_DIR="$REAL_HOME/.yuyi"
 YUYI_SRC="$REPO_ROOT/vendor/yuyi-omp-extension.js"
+YUYI_SUM="$REPO_ROOT/vendor/yuyi-omp-extension.sha256"
 REDACT_SRC="$REPO_ROOT/vendor/omp-redact-extension.js"
+
+# sha256 取值（自包含：目标机可能没有 node/python；Linux 用 coreutils，macOS 用 shasum）
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}';
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}';
+  else return 1; fi
+}
 
 # 取 JSON 字符串字段的纯 bash 实现（自包含：目标机可能没有 node/python）
 json_str() { # $1=键名  $2=json文件 → 打印值（无则空）
@@ -175,7 +183,21 @@ echo '{"name":"ops-pi","private":true,"type":"module","dependencies":{"@ops-pi/c
 echo "  ✓ $EXT_DIR/ops-pi（自包含，含 ops-core）"
 
 if [ -f "$YUYI_SRC" ]; then
-  cp "$YUYI_SRC" "$EXT_DIR/yuyi-omp-extension.js"; echo "  ✓ Yuyi 适配器已部署"
+  # 完整性闸门（OMOVENDOR-1）：适配器是上游构建拷贝，历史上以「整文件同步」更新 ⇒ 本仓回信修复（D1-D5）
+  # 会被静默覆盖。清单 vendor/yuyi-omp-extension.sha256 是判据；**落盘前**校验，不符即中止（拒绝安装未校验件）。
+  if [ ! -f "$YUYI_SUM" ]; then
+    echo "✗ 缺少 vendor/yuyi-omp-extension.sha256——适配器无完整性基准，拒绝安装"
+    echo "  （上游同步后必须「diff 审查 → 探针绿 → 更新清单」，见 vendor/yuyi-omp-extension.PROVENANCE.md）"
+    exit 1
+  fi
+  EXPECTED="$(awk '{print $1}' "$YUYI_SUM" | head -1)"
+  ACTUAL="$(sha256_of "$YUYI_SRC" || true)"
+  if [ -z "$ACTUAL" ] || [ "$ACTUAL" != "$EXPECTED" ]; then
+    echo "✗ Yuyi 适配器完整性校验失败：${ACTUAL:-无 sha256 工具可比对} ≠ 清单 ${EXPECTED:0:16}…"
+    echo "  疑似文件损坏，或被未经审查的上游同步覆盖（会静默回退回信修复）——拒绝安装"
+    exit 1
+  fi
+  cp "$YUYI_SRC" "$EXT_DIR/yuyi-omp-extension.js"; echo "  ✓ Yuyi 适配器已部署（sha256 校验通过）"
 else
   echo "  ⚠ vendor/yuyi-omp-extension.js 不存在——跨 Agent 通讯不可用"
 fi
