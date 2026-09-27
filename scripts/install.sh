@@ -53,9 +53,10 @@ YUYI_SUM="$REPO_ROOT/vendor/yuyi-omp-extension.sha256"
 REDACT_SRC="$REPO_ROOT/vendor/omp-redact-extension.js"
 
 # sha256 取值（自包含：目标机可能没有 node/python；Linux 用 coreutils，macOS 用 shasum）
+# 剥离 coreutils 转义前缀：文件名含 `\`（Windows 形态路径）时 GNU 会给哈希加 `\`，与清单（纯十六进制）比对必然误判；摘要不含 `\`，剥离恒安全
 sha256_of() {
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}';
-  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}';
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}' | sed 's/^\\//';
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}' | sed 's/^\\//';
   else return 1; fi
 }
 

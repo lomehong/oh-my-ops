@@ -25,12 +25,13 @@ PROV="vendor/yuyi-omp-extension.PROVENANCE.md"
 UPSTREAM_MD5="393e21ba0700a4d5e3008fc80cc65b1b"
 
 # sha256 取值：master 用 sha256sum，Git Bash/macOS 回退 shasum -a 256
+# 剥离 coreutils 转义前缀：文件名含 `\`（Windows 形态路径）时 GNU 会给哈希加 `\`，与清单比对必然误判；摘要不含 `\`，剥离恒安全
 sha256_of() {
-	if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}';
-	else shasum -a 256 "$1" | awk '{print $1}'; fi
+	if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}' | sed 's/^\\//';
+	else shasum -a 256 "$1" | awk '{print $1}' | sed 's/^\\//'; fi
 }
 md5_of() {
-	if command -v md5sum >/dev/null 2>&1; then md5sum "$1" | awk '{print $1}';
+	if command -v md5sum >/dev/null 2>&1; then md5sum "$1" | awk '{print $1}' | sed 's/^\\//';
 	else md5 -q "$1" 2>/dev/null || openssl md5 "$1" | awk '{print $NF}'; fi
 }
 
@@ -48,6 +49,11 @@ if [ -f "$MANIFEST" ]; then
 else
 	fail "清单缺失：$MANIFEST（安装闸门失去判据）"
 	ACTUAL="$(sha256_of "$ADAPTER")"
+fi
+# 形态无关性自证（CIPORT-2）：强制构造 Windows 形态路径，同一文件两形态必须同摘要（仅 MSYS 可构造）
+if command -v cygpath >/dev/null 2>&1; then
+	WSHA="$(sha256_of "$(cygpath -w "$(pwd)/$ADAPTER")")"; USHA="$(sha256_of "$(cygpath -u "$(pwd)/$ADAPTER")")"
+	if [ -n "$WSHA" ] && [ "$WSHA" = "$USHA" ]; then pass "哈希读取与路径形态无关（Windows 形态 ≡ POSIX 形态）"; else fail "哈希读取受路径形态影响（coreutils 转义前缀未剥离？W=$WSHA U=$USHA）"; fi
 fi
 
 echo "[2] 溯源一致：$PROV"

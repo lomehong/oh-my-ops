@@ -94,7 +94,9 @@ install_into "$H1" redact-legacy >/dev/null 2>&1 || fail "重装失败（见 $TM
 echo "[4c] Yuyi 适配器完整性闸门（OMOVENDOR-1）：安装前校验 + 篡改即中止"
 # 动机：适配器是 vendor 拷贝、历史上以「整文件同步」更新 ⇒ 本仓回信修复（D1-D5）会被静默回退。
 # 清单 vendor/yuyi-omp-extension.sha256 是判据；指纹不符必须在**落盘前**中止。
-sha_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'; else shasum -a 256 "$1" | awk '{print $1}'; fi; }
+# 哈希读取剥离 coreutils 转义前缀：文件名含 `\`（Windows 形态 REPO_ROOT）时 GNU sha256sum 会给哈希加 `\` 前缀，
+# 与 POSIX 形态（/tmp 落点）比对必然误判——真机链内假红（CIPORT-2）。摘要为十六进制不含 `\`，剥离恒安全。
+sha_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}' | sed 's/^\\//'; else shasum -a 256 "$1" | awk '{print $1}' | sed 's/^\\//'; fi; }
 AD_BASE="$REPO_ROOT/vendor/yuyi-omp-extension.js"
 YUYI_DST1="$H1/.omo/extensions/yuyi-omp-extension.js"
 [ -f "$PKG/vendor/yuyi-omp-extension.sha256" ] && pass "发布布局含完整性清单" || fail "发布布局缺 vendor/yuyi-omp-extension.sha256"
@@ -103,6 +105,11 @@ if [ -f "$YUYI_DST1" ] && [ "$(sha_of "$YUYI_DST1")" = "$(sha_of "$AD_BASE")" ];
 	pass "适配器落点存在且与仓库基准一致"
 else
 	fail "适配器落点缺失或与基准不符（落点 $YUYI_DST1）"
+fi
+# 形态无关性自证（CIPORT-2）：强制构造 Windows 形态路径，同一文件两形态必须同摘要——POSIX 形态下也能抓住转义前缀回归（仅 MSYS 可构造）
+if command -v cygpath >/dev/null 2>&1; then
+	WSUM="$(sha_of "$(cygpath -w "$AD_BASE")")"; USUM="$(sha_of "$(cygpath -u "$AD_BASE")")"
+	if [ -n "$WSUM" ] && [ "$WSUM" = "$USUM" ]; then pass "哈希读取与路径形态无关（Windows 形态 ≡ POSIX 形态）"; else fail "哈希读取受路径形态影响（coreutils 转义前缀未剥离？W=$WSUM U=$USUM）"; fi
 fi
 cp "$PKG/vendor/yuyi-omp-extension.js" "$TMP/yuyi.bak"
 printf '\n// tamper: 模拟未经审查的同步覆盖\n' >> "$PKG/vendor/yuyi-omp-extension.js"   # 任何字节改动都该被拦
