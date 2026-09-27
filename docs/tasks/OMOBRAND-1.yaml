@@ -44,7 +44,7 @@ branch: 'feature/OMOBRAND-1-fix'
 report:
   summary: '品牌面残留修复完成并发版（自报）：P3① 启动器 update|upgrade 安全通道（拦截上游自更新，护住 pin 与全局命名空间）；P3③ 品牌 patch --require-hits 构建期 fail-loud + CI 品牌面断言；P2 文案品牌化 5 处。v0.7.1 已发布（CI 绿）且制品级核验通过（包内三处修复实测在案）。未兑现：logstash-124 重装后的现场复验（Update 提示消失/文案为 omo）；P3②（二进制内 update 实体与 settings 描述）主人拍板另议。自报 ≠ 完成，待主人确认'
   evidence:
-    - 'v0.7.1 制品核验（下载实测）：install.sh: '236 update|upgrade)、hooks.ts omo：×4、omp-single 在包'''
+    - 'v0.7.1 制品核验（下载实测）：install.sh:236 update|upgrade)、hooks.ts omo：×4、omp-single 在包'
     - '本地：npm test 182/0 fail、typecheck 0 错、build --require-hits 七面全过'
   pending:
     - '主人 confirm；logstash-124 重装 v0.7.1 现场复验；P3② 加固取舍'

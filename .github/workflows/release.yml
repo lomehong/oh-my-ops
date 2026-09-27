@@ -26,7 +26,7 @@ jobs:
         run: npm install --ignore-scripts
 
       # 三步与 package.json 的 test:l1 / test:l2 / typecheck:core 同源；
-      # 本地 pre-push 跑的是全量 test:ci（13 步，含探针/安装/发布完整性），CI 只跑这核心三步，
+      # 本地 pre-push 跑的是全量 test:ci（15 步，含探针/安装/发布完整性/台账校验），CI 只跑这核心三步，
       # 避免 "本地 bun 过、CI node 不过" 的 runner 分裂（v0.8.0 首发即因此失败）
       - name: L1 测试
         run: npm run test:l1

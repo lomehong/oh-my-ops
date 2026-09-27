@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pre-push：本地全量预跑 test:ci（13 步，含 l1/l2/typecheck 及安装与探针共 13 步）；
+# pre-push：本地全量预跑 test:ci（15 步，含 l1/l2/typecheck 及安装与探针/台账校验共 15 步）；
 # CI 的 test job 只跑其中 test:l1 / test:l2 / typecheck:core 三步（同一组脚本，防 runner 分裂），
 # 其余步骤（探针/安装/发布完整性）只在本地与 release.yml 的发布校验里跑——本地更严，不漏。
 # 启用：npm run hooks:install   跳过一次：OMO_SKIP_HOOKS=1 git push
@@ -11,5 +11,5 @@ if [ "${OMO_SKIP_HOOKS:-}" = "1" ]; then
 fi
 
 cd "$(git rev-parse --show-toplevel)"
-echo "pre-push: npm run test:ci（本地全量 13 步；CI test job 为其中 l1/l2/typecheck 三步）"
+echo "pre-push: npm run test:ci（本地全量 15 步；CI test job 为其中 l1/l2/typecheck 三步）"
 npm run test:ci

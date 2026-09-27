@@ -36,7 +36,7 @@ branch: 'feature/OPSAUDIT-2-design'
 report:
   summary: '技术方案草稿落 docs/designs/ops-audit-command-design.md（分支 feature/OPSAUDIT-2-design）：六维度+五问齐备，architect_design 插件自检 60/60；复用面 registerCommand/ui.notify/getBranch/appendEntry，新建面仅 audit-view.ts 三纯函数；T1–T5 按定案口径内嵌，决策门无命中。待独立评审 + 主人确认（自报 ≠ 完成）'
   evidence:
-    - 'xd: '//architect_design 自检 60/60（全维度 10 分）'''
+    - 'xd://architect_design 自检 60/60（全维度 10 分）'
     - 'docs/designs/ops-audit-command-design.md @3edfd0a：六维度+五问齐备（architect_design 插件自检 60/60）'
     - 'dsh 独立评审结论（直答）：通过 60/60，8 条准则全过；非阻断 a/b/c 已登记处置'
   pending:

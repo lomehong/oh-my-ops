@@ -4,7 +4,7 @@ state: '已落定'
 level: 'data-plane(改变 4 实例的合流语义；分期 warn→strict 降低切换风险)'
 created: '2026-09-21T09:43:42.286Z'
 accept:
-  - 'sync --push 按「系统: 'X」头机械归并进 <X>/README.md 活档案（幂等：归并后移除条目文件）；无头/未知域兜底 runbooks 并在报告警示'''
+  - 'sync --push 按「系统: X」头机械归并进 <X>/README.md 活档案（幂等：归并后移除条目文件）；无头/未知域兜底 runbooks 并在报告警示'
   - 'kb 服务新增 /kb/webhook（HMAC 校验）+ lint：路径白名单/文件名/元数据一致性硬拦，相似度 >0.9 硬拦、0.5~0.9 PR 评论警示；status 回写 kb-lint'
   - 'domains.yml 入库（域白名单唯一事实源），lint 模式 warn→strict 可配置（存量过渡）'
   - '渲染/契约/回归探针全绿；旧实例（未升级 sync）走 warn 模式不阻塞合流'
@@ -38,10 +38,10 @@ report:
   summary: 'KBORG-1 实现完成并随 v0.14.2 发布：①sync --push 机械归并——判据为「不在 origin/main 树中」（真机验收 .122 抓到原判据缺陷后修正：存量 33 篇由此获得机械保证不动）；②kb 服务 /kb/webhook 合流期门禁（HMAC + 结构硬拦 + 小节级相似度 >0.9 拦/0.5~0.9 警 + status 回写，模式 off|warn|strict 缺省 warn）；③domains.yml 契约 + 安装器/清单/探针接线。存量 33 篇按 Owner 决定不迁移。'
   evidence:
     - 'kb-org.test 11 ✓ · kb-lint.test 7 ✓ · kb-sync.test 18 ✓（含新增回归：main 树存量原地保留、漏推内容进活档案、integrate 基底保留）'
-    - 'npm run test: 'ci 退出码 0；.122 真机端到端：32 条归并行为实证（并由此发现范围缺陷驱动本修复）'''
+    - 'npm run test:ci 退出码 0；.122 真机端到端：32 条归并行为实证（并由此发现范围缺陷驱动本修复）'
     - 'docs/designs/kb-knowledge-org-设计.md（自检 60/60、评审 60/60）；v0.14.2 资产已核验'
   pending:
-    - 'Owner 侧一次性设置：Gitea main 分支保护（须 PR + 须 status kb-lint）+ webhook 指向 https: '//<服务机>:8787/kb/webhook（密钥=config.env OMO_KB_WEBHOOK_SECRET）'''
+    - 'Owner 侧一次性设置：Gitea main 分支保护（须 PR + 须 status kb-lint）+ webhook 指向 https://<服务机>:8787/kb/webhook（密钥=config.env OMO_KB_WEBHOOK_SECRET）'
     - 'warn→strict 切换时机由 Owner 观察期后拍板；相似度阈值 0.9/0.5 待真机调参'
     - '.122 实例分支修复（误归并态）待按新语义重推；实例侧归并行为需实例升级 omo 后生效'
   at: '2026-09-22T02:16:21.845Z'

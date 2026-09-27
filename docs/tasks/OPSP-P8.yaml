@@ -30,7 +30,7 @@ report:
   summary: 'P8 Write 档 + Vault 加密存储——实现完成，运行时验收 3/3 通过'
   evidence:
     - 'core/vault.ts：CredentialVault（AES-256-GCM + scrypt 派生，原子落盘 0600，GCM 完整性防篡改）'
-    - 'ops_vault_store / ops_file_write 注册进 write 档（TIER_TABLE: 'WRITE → needsOwnerAuth 恒真）'''
+    - 'ops_vault_store / ops_file_write 注册进 write 档（TIER_TABLE: WRITE → needsOwnerAuth 恒真）'
     - 'ops_file_write：本地写入 + mode 权限 + 远程诚实拒绝（远程写留后续版本）'
     - 'ops_vault_list 升级：解锁态回真实 key 清单（仅名不回文）'
     - 'vault 解锁：session_start + 工具内惰性解锁双路径，口令仅来自 OPS_VAULT_PASSPHRASE 环境变量（§7.7）'

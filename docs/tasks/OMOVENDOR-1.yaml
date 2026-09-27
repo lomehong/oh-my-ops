@@ -4,7 +4,7 @@ state: '待确认'
 level: 'L1'
 created: '2026-09-26T07:50:12.795Z'
 accept:
-  - '回归防线：scripts/probe-yuyi-reply-frame.mjs 纳入 test: 'ci（与 pre-push、CI 同源），新增直跑入口（建议 npm run test:vendor）；全绿 exit 0、连跑 2 次稳定（约 31-40s，成本在证据中注明）'''
+  - '回归防线：scripts/probe-yuyi-reply-frame.mjs 纳入 test:ci（与 pre-push、CI 同源），新增直跑入口（建议 npm run test:vendor）；全绿 exit 0、连跑 2 次稳定（约 31-40s，成本在证据中注明）'
   - '负例自证：将 vendor 副本回信目标临时改回会话别名（模拟上游整文件同步回退）时探针必须变红，实测输出留档（对齐 OMOBRIDGE-2 红基线 3 通过 / 11 失败）'
   - '安装防线：install.sh 对适配器落盘做完整性校验（与仓库内基准比对），不符即中止并明确报错；scripts/probe-install-ops-core.sh 增补「适配器落点存在且一致」断言及篡改负例（现状 71-89 行只查 skills 与 redact，不查适配器 JS）'
   - '溯源清单：vendor/ 新增适配器溯源件（来源 /dist/omp.js 0.1.0 与基准 md5 393e21ba…、本仓补丁 D1-D5 逐条、当前文件 sha256、同步规程「diff 审查 → 探针绿 → 更新清单」）；清单更新为 vendor 变更合并的前置条件'

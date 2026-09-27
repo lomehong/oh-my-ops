@@ -30,7 +30,7 @@ branch: 'feature/OPSP-P1-mvp-read-tools'
 report:
   summary: 'P1 MVP：只读工具集 + 安全三层 + 审计——运行时验收 5/5 通过'
   evidence:
-    - 'L1 node: 'test 62/62 + bun:test 28/28（tsc 0 errors）'''
+    - 'L1 node:test 62/62 + bun:test 28/28（tsc 0 errors）'
     - '运行时安全验收 04-security-acceptance.sh：A1/②/①-b/③/⑤ 全部 ✅'
     - 'A1：ops_health_check read 档在 write 模式非交互自动执行'
     - '② 内容硬拒：rm -rf / 在 yolo 下被拦（模式无关）'

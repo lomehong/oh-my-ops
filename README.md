@@ -334,9 +334,10 @@ npm test                    # L1（node --test）+ L2（bun test 指定文件）
 npm run test:l1             # 仅 L1：packages/ops-core/test/*.test.ts —— 必须用 node:test 编写
 npm run test:l2             # 仅 L2：guards/platform/audit-view/kb-* 等 11 个文件（bun test，见 package.json 的 test:l2）
 npm run test:all            # 全量 bun test（含 Windows 上已知的平台性失败）
-npm run test:ci             # 本地全量 13 步：l1 + l2 + kb 自检/探针 + 安装器 + 发布完整性（CI 的 test job 只跑其中 l1/l2/typecheck 三步）
+npm run test:ci             # 本地全量 15 步：l1 + l2 + 台账校验 + kb 自检/探针 + 安装器 + 发布完整性（CI 的 test job 只跑其中 l1/l2/typecheck 三步）
 npm run typecheck           # tsc strict（core + extension）
-npm run ledger:selftest     # 任务台账自检
+npm run ledger:selftest     # 任务台账自检（解析往返 + 状态机 + 不变量）
+npm run ledger:validate     # 台账校验（结构 + 文本规范性；已并入 test:ci）
 npm run hooks:install       # 启用 .githooks/pre-push：推送前本地跑 test:ci（OMO_SKIP_HOOKS=1 可跳过）
 
 # 运行时验收（omp 真机）

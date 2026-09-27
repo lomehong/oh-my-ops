@@ -7,7 +7,7 @@ accept:
   - '探测统一包 try/catch（spawn 失败视作不可用）；v1 改用 `command -v docker-compose` 存在性探测（不执行本体）'
   - '「两者皆无」分支可达并输出平台分支建议（≥19.03 建议 v2 插件；<19.03 明说无插件机制、建议 v1 单文件）'
   - 'docker --version 解析健壮（18.09.6 / 24.0.7 等版式；v 前缀可选）'
-  - '守卫：v1 spawn 抛错仍落到建议分支（新例）；全缺/v1 回退/v2 可用三例保持；npm run test: 'ci 全绿'''
+  - '守卫：v1 spawn 抛错仍落到建议分支（新例）；全缺/v1 回退/v2 可用三例保持；npm run test:ci 全绿'
 events:
   - ts: '2026-09-16T09:07:28.784Z'
     op: 'create'
@@ -31,7 +31,7 @@ report:
   evidence:
     - '红（对端 v0.9.4 实测）：[EXEC_FAILED] 命令执行失败：docker-compose（异常穿透，未进建议分支）'
     - '绿：bun test read-tier-structure.test.ts → 13 pass（新增 ThrowOnComposeRunner 例：v1 spawn 抛错仍落建议分支，且全程不再直接执行 docker-compose 探测）'
-    - 'npm run test: 'ci 全绿（L2 59 pass ×4 文件）'''
+    - 'npm run test:ci 全绿（L2 59 pass ×4 文件）'
     - '旁证：CI 早期无 ps 容器同样得 [EXEC_FAILED] 命令执行失败：ps → 证实「二进制缺失=抛错」，故可选依赖探测必须 try/catch 或存在性探测'
   pending:
     - '真机复验：对端升级 v0.9.5 后复验（v2/v1 皆缺 → 应见「无 CLI 插件机制 + 建议装 v1 单文件」；装上 v1 后应自动回退执行）'

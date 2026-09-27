@@ -7,7 +7,7 @@ accept:
   - 'SshPool：探测 OpenSSH 能力（ssh -G 探 accept-new）→ ≥7.6 用 accept-new，否则退化 no；两种情形均配受管 UserKnownHostsFile=<controlDir>/known_hosts'
   - '注释与实现对平（SshConfig/类文档）+ hostKeyPolicy() 可观测 + 调用方 options 可覆盖（首值生效次序）'
   - 'PathGuard 机密根用 realUserHome()（os.userInfo().homedir）取真实 home，.ssh 纳入 secret；HOME 重定向下 ops_file_ls 对真实 ~/.ssh 必须被拒'
-  - '守卫：ssh.test.ts 3 例（accept-new / 退化 / 覆盖次序）+ read-tier-structure.test.ts 真实 home 机密根 1 例；npm run test: 'ci 全绿'''
+  - '守卫：ssh.test.ts 3 例（accept-new / 退化 / 覆盖次序）+ read-tier-structure.test.ts 真实 home 机密根 1 例；npm run test:ci 全绿'
 events:
   - ts: '2026-09-16T07:36:22.059Z'
     op: 'create'
@@ -31,7 +31,7 @@ report:
   evidence:
     - '红：旧 ssh.ts 实现中 StrictHostKeyChecking/UserKnownHostsFile 0 处（唯一命中是 options 注释示例）；HOME 重定向下 os.homedir() 塌缩实测 true、getpwuid 真实 home=/home/pi（真实 .ssh 漏出）'
     - '绿：node --test ssh.test.ts → 10 pass（+3 例：accept-new / el7 退化 / caller 覆盖次序）；bun test read-tier-structure.test.ts → 6 pass（+1 例：真实 ~/.ssh 被拒）'
-    - 'npm run test: 'ci 全绿；typecheck 首轮暴露缺 execFileSync 导入已修'''
+    - 'npm run test:ci 全绿；typecheck 首轮暴露缺 execFileSync 导入已修'
   pending:
     - '真机复验：el7（OpenSSH 7.4）首连行为与受管 known_hosts 落盘路径（我方无 el7 目标机）'
     - '未实现（登记）：首连后 ssh-keyscan 指纹入审计（受管 known_hosts 已提供记录语义，属增强项）'

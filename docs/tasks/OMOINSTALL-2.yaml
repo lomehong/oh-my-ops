@@ -41,7 +41,7 @@ report:
   summary: 'H3/H4 探针双 ✅（报告 docs/reports/omo-install-probes.md）+ 技术方案草稿落 docs/designs/omo-install-selfcontained-design.md：xd://architect_design 自检 60/60。方案要点：构建管线（pin 18.1.18 sha256 → embedded-addon 生成 → 品牌 patch → bun compile 单文件）；安装器 ~/.omo 私有域（HOME 重定向隔离，H4 实证）；bun 自动装锁 1.4.x；vlatest semver 校验；自愈废除、升级/卸载显式化。待确认 C1（471MB vs 瘦身 ~290MB）C2（PATH 指引口径）不阻塞。待实现评审+主人确认（自报 ≠ 完成）'
   evidence:
     - 'docs/reports/omo-install-probes.md：H3 omp-single 471MB --version=omp/18.1.18 + 扩展全链路行为一致；H4 fakehome 全量落点 + 真实 ~/.omp 零写入'
-    - 'xd: '//architect_design 自检 60/60（全维度 10 分）'''
+    - 'xd://architect_design 自检 60/60（全维度 10 分）'
   pending:
     - 'C1 体积取舍（主人可改默认全嵌）；实现评审路由（按既定偏好投 dsh）；主人确认落定'
   at: '2026-09-14T07:23:34.271Z'

@@ -24,7 +24,7 @@
  *   node scripts/task-ledger.mjs confirm --id <任务号> --confirmed-by <主人标识> --confirmed-via <确认来源引用> [--note <备注>]
  *   node scripts/task-ledger.mjs list    [--state <状态>] [--root <目标项目>]
  *   node scripts/task-ledger.mjs archive --id <任务号> [--force]
- *   node scripts/task-ledger.mjs --validate [--root <目标项目>]
+ *   node scripts/task-ledger.mjs --validate [--root <目标项目>]   # 校验全部台账：结构 + 文本规范性（emit∘parse 恒等）
  *   node scripts/task-ledger.mjs --selftest
  */
 import * as fs from "node:fs";
@@ -72,7 +72,7 @@ function scalar(v) {
 	return q(v); // 全部标量按字符串写，读取侧无需类型推断
 }
 
-/** 只解析本脚本 emit 的子集：单引号标量、`[]`、`- ` 列表、`- k: 'v'` 列表项、缩进嵌套 */
+/** 只解析本脚本 emit 的子集：单引号标量、`[]`、`- ` 列表、`- k: 'v'` 列表项（k 为裸键；列表项以 `'` 开头即字符串）、缩进嵌套 */
 function parse(text) {
 	const raw = text.split("\n").filter((l) => l.trim() !== "" && !l.trimStart().startsWith("#"));
 	let i = 0;
@@ -83,7 +83,9 @@ function parse(text) {
 			const arr = [];
 			while (i < raw.length && indentOf(raw[i]) === indent && raw[i].trimStart().startsWith("- ")) {
 				const rest = raw[i].trimStart().slice(2);
-				const kv = rest.match(/^([^:]+):\s*(.*)$/);
+				// 以 ' 开头一律按字符串解析（emit 契约：字符串必带引号、映射键为裸标识符）；
+				// 否则含 ASCII 冒号的字符串（test:ci / 21:32:48 / URL）会被误判为 `- k: v` 映射，回写时改写引号
+				const kv = rest.startsWith("'") ? null : rest.match(/^([^:]+):\s*(.*)$/);
 				if (kv) {
 					const map = {};
 					map[kv[1].trim()] = kv[2] === "[]" ? [] : parseScalar(kv[2]);
@@ -294,18 +296,22 @@ function cmdValidate({ flags }) {
 	const root = flags.root ?? process.cwd();
 	const dir = tasksDir(root);
 	if (!fs.existsSync(dir)) { console.log("✓ 无台账，视为通过"); return; }
-	let errors = 0;
+	let errors = 0, count = 0;
 	for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".yaml"))) {
 		const p = path.join(dir, f);
 		try {
-			const t = parse(fs.readFileSync(p, "utf8"));
+			const text = fs.readFileSync(p, "utf8");
+			const t = parse(text);
 			if (!t.id || !t.state || !STATES.includes(t.state)) throw new Error(`缺少 id 或 state 非法：${t.state}`);
 			if (t.state === "已落定" && (!t.confirmedBy || !t.confirmedVia)) throw new Error("已落定但缺 confirmedBy/confirmedVia");
 			if (!Array.isArray(t.events) || t.events.length === 0) throw new Error("缺少 events 留痕");
+			// 文本规范性：mangle 文本仍可解析（结构校验会漏），但与工具重写输出不一致
+			if (emit(t) !== text) throw new Error("文本非规范（≠ 工具重写输出；疑似旧版工具改写或手工编辑）");
+			count++;
 		} catch (e) { console.error(`✗ ${f}: ${e.message}`); errors++; }
 	}
-	if (errors > 0) fail(`结构校验失败 ${errors} 项`);
-	console.log("✓ 台账结构校验通过");
+	if (errors > 0) fail(`台账校验失败 ${errors} 项`);
+	console.log(`✓ 台账校验通过（结构 + 文本规范性，共 ${count} 个）`);
 }
 
 // ───────────────────────── 自检（写入/解析往返 + 状态机 + 不变量）
@@ -318,6 +324,23 @@ function selftest() {
 		const sample = { id: "T-1", title: "含 ' 单引号 与 中文", state: "待执行", accept: ["a", "b'c"], events: [{ ts: "t", op: "create", by: "x", note: "n" }] };
 		check("YAML 往返", JSON.stringify(parse(emit(sample))) === JSON.stringify(sample));
 		check("空数组往返", JSON.stringify(parse(emit({ a: [], b: ["x"] })).a) === "[]");
+		// 1b) 含 ASCII 冒号的字符串必须按字符串往返（真机事故：`test:ci` / `21:32:48` / URL 被误判为 `- k: v` 映射，回写时改写引号）
+		const colonSample = { id: "T-1b", title: "含 ASCII 冒号", state: "待执行", accept: ["npm run test:ci 全绿（21:32:48）", "https://github.com/lomehong/oh-my-ops/pull/1"], events: [{ ts: "t", op: "create", by: "x", note: "run #2 21:34:15" }] };
+		check("含冒号字符串往返（脚本名/时间/URL）", JSON.stringify(parse(emit(colonSample))) === JSON.stringify(colonSample));
+		// 1c) 校验闸门必须拦住「文本被打回原形」的台账：mangle 后仍可解析（仅结构校验会漏），但文本 ≠ 工具重写输出
+		const badRoot = fs.mkdtempSync(path.join(tmp, "bad-"));
+		fs.mkdirSync(path.join(badRoot, "docs", "tasks"), { recursive: true });
+		fs.writeFileSync(
+			path.join(badRoot, "docs", "tasks", "BAD.yaml"),
+			"id: 'BAD'\nstate: '执行中'\naccept:\n  - 'npm run test: 'ci'''\nevents:\n  - ts: 't'\n    op: 'claim'\n    by: 'x'\n    note: 'n'\n",
+			"utf8",
+		);
+		let threwBad = false;
+		const e0 = process.exit, g0 = console.error;
+		process.exit = () => { throw new Error("exit"); }; console.error = () => {};
+		try { cmdValidate({ flags: { root: badRoot } }); } catch { threwBad = true; }
+		process.exit = e0; console.error = g0;
+		check("非规范台账被校验拒绝（文本 mangle 但结构可解析）", threwBad);
 		// 2) 状态机非法跳步
 		const t = { id: "T-2", state: "待执行", events: [] };
 		let threw = false;
