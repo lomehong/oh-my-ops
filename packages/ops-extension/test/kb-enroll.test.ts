@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -159,7 +160,17 @@ describe("P3 · 凭据自注册端到端（服务真 HTTP + 客户端真兑换�
 			const { code: c2 } = await issueCode(dir, ["--op", "enroll", "--device", "node-1"]);
 			await expect(enroll({ server: svc.base, code: c2, device: "other-node", allowInsecureHttp: true }, omo)).rejects.toThrow(/不匹配/);
 
-			const { code: c3 } = await issueCode(dir, ["--op", "enroll", "--device", "node-1", "--ttl", "0"]);
+			// 过期码 fixture：把登记表里该码的 expiresAt 直接回拨 60 秒，而不用 `--ttl 0`。
+			// 0 毫秒边距隐含「签发进程与判定进程的 Date.now() 读数一致」的假设，而 Windows 上实测可差
+			// 160–262ms（签发读到的「现在」晚于随后判定读到的「现在」⇒ 0 毫秒码被当作未过期放行；
+			// 40 次压力复现 2 次）。回拨 60 秒使边距远大于任何观测偏差，断言才确定。
+			const { code: c3 } = await issueCode(dir, ["--op", "enroll", "--device", "node-1"]);
+			const regFile = path.join(dir, "registry.json");
+			const reg = JSON.parse(fs.readFileSync(regFile, "utf8")) as { codes: Array<{ sha256: string; expiresAt: string }> };
+			const entry = reg.codes.find((c) => c.sha256 === createHash("sha256").update(c3).digest("hex"));
+			if (entry === undefined) throw new Error("登记表未找到刚签发的码（过期 fixture 构造失败）");
+			entry.expiresAt = new Date(Date.now() - 60_000).toISOString();
+			fs.writeFileSync(regFile, `${JSON.stringify(reg, null, 2)}\n`);
 			await expect(enroll({ server: svc.base, code: c3, device: "node-1", allowInsecureHttp: true }, omo)).rejects.toThrow(/已过期/);
 
 			// 契约（设计 §七）：码无效 → 401
