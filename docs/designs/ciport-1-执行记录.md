@@ -248,5 +248,5 @@ mjs 侧（`secret-perm.mjs`，供 kb-gitea / ops-kb-provision / kb-enroll 的同
 | 守卫红/绿证 | `/e/tmp/wfguard/`（修前 release.yml 副本）+ 仓库工作树 | 红证对修前文件（命中 `LISTED…vendor/…`，exit 1）；绿证 `npm run test:workflow`（结果：全绿） |
 | CI 首次真跑 | <https://github.com/lomehong/oh-my-ops/actions/runs/36251780672>（run #90） | test job ✅ / 打包 ❌ 于「打部署包」（job 日志端点需鉴权，403）；结论取自 jobs/steps API |
 | 重发 CI 真跑 | <https://github.com/lomehong/oh-my-ops/actions/runs/36255345477>（run #91，`a606729`） | test ✅ / 打包发布 ✅（打部署包、打 kb-enroll 服务包、发布 Release）；Release v0.16.0 = 5 产物 |
-| 收口动作 | 提交 / 推 main / tag 重打 / CI 观测 | 见 `git log` 与台账 `docs/tasks/CIPORT-1.yaml`（report 态）；打包门修复 = 提交 `a606729`（§5.7、§七末） |
+| 收口动作 | 提交 / 推 main / tag 重打 / CI 观测 | 见 `git log` 与台账 `docs/tasks/CIPORT-1.yaml`（已落定，会话确认 2026-09-27）；打包门修复 = 提交 `a606729`（§5.7、§七末） |
 | 先例记录 | `docs/designs/omovendor-1-执行记录.md`、`docs/designs/web-verify-执行记录.md` | 防线与真机教训的写法参照 |
