@@ -209,6 +209,7 @@ mjs 侧（`secret-perm.mjs`，供 kb-gitea / ops-kb-provision / kb-enroll 的同
 - **修复后本机复现（verbatim）**：从 `release.yml` 逐字抽取两步 run 块（`/e/tmp/pkgrepro/extract.mjs`，禁手抄）在 scratch 工作区（`git archive HEAD` 展开 + `GITHUB_WORKSPACE` 指向 scratch，不触碰仓库根）执行 ⇒ `打部署包` **exit 0**（产出 `oh-my-ops-v0.16.0.tar.gz{,.sha256}`、`install.sh` 落 scratch 根）、`打 kb-enroll 服务包` **exit 0**（含 CIPORT-1 新增 `secret-perm.mjs` 清单项与 `bun -e` 零依赖自检）；包内指纹与清单两行逐字相同。
 - **新行未死代码自证（变异）**：scratch 内把清单截为 0 字节 ⇒ `✗ 读不到 vendor 适配器清单：…`、exit 1；复原 ⇒ exit 0、产物齐（`oh-my-ops-v0.16.0.tar.gz` 318 862 B）。
 - **修复后全链复跑（本机）**：ci-run6 23:31:22–23:47:31（`START_EPOCH=1790436682`/`END_EPOCH=1790437651`，969s），`TEST_CI_EXIT=0`、✗=0；13 步全跑（自检 14/14、`✓ .github/workflows/release.yml 结构检查通过`（新守卫在内）、vendor-integrity 15/0 含负例红证、web-verify 本机 SKIP 照旧）。
+- **CI 复跑（run #91，修复提交 `a606729`）**：✅ **双 job 全绿** —— 测试 job（L1/L2/typecheck）+ 打包发布 job（构建 omp 单文件运行时、vendor 探针、**打部署包**、**打 kb-enroll 服务包**、**发布 Release** 全步过）⇒ **Release v0.16.0 产出 5 产物**（`install.sh`、`oh-my-ops-v0.16.0.tar.gz{,.sha256}`、`omo-kb-service-v0.16.0.tar.gz{,.sha256}`）。
 - **结构守卫（新，红→绿自证）**：`scripts/probe-workflow-yaml.sh` 增「run 块内 `cd` 之后的仓库相对路径必须以 `$GITHUB_WORKSPACE` 打底」。**红证**：对 `HEAD:.github/workflows/release.yml`（修前副本，`/e/tmp/wfguard/`）跑 ⇒ 精确命中 `LISTED="$(awk … vendor/yuyi-omp-extension.sha256 …)"`、exit 1；**绿证**：对修后工作树 ⇒ `✓ .github/workflows/release.yml 结构检查通过`、`结果：全绿`（`npm run test:workflow` exit 0）。
 - **边界（诚实登记）**：本机复现以合成 `dist/omp-single` 充当品牌断言对象；真实二进制由 CI 构建（run #90 步骤 6「构建 omp 单文件运行时」success、步骤 7 vendor 探针 success，且品牌断言自 OMOBRAND-1 起在 v0.15.1 真跑通过）⇒ 未跑通的分支不在品牌断言。
 
@@ -234,7 +235,7 @@ mjs 侧（`secret-perm.mjs`，供 kb-gitea / ops-kb-provision / kb-enroll 的同
 - **`test:l2` 的 60000ms 预算**：本机最慢单项 10.4s；更慢的磁盘/冷缓存机器是否够用未验证。
 - **提交/推送/tag（已执行，供事后对账）**：提交 `b61f264`（30 文件，+887/−175）→ 推 main（22:36:41–22:51:41，pre-push 全链通过；远端 API 确证 `refs/heads/main` = `b61f264`）→ tag `v0.16.0` **首推失败**：本地门全绿但推送阶段瞬时报 `RPC failed; curl 35 schannel: failed to receive handshake`（22:51:59–23:07:17，tag 未落地，API 404 确证、CI 未触发）→ **重推成功**（23:08:09–23:23:42，仍走门）⇒ Release CI run #90 触发：<https://github.com/lomehong/oh-my-ops/actions/runs/36251780672>。
 - **run #90 结果（已观测）**：test job ✅ / 打包发布 job ❌ 于「打部署包」⇒ **v0.16.0 未产出 Release**。根因 = 抽验块 `cd /tmp` 后的相对路径读清单（§5.7）；修复（清单改 `$GITHUB_WORKSPACE` 绝对路径 + 读空即红）与结构守卫见 §5.7，随本次修复提交入库。
-- **重发路径（主人 2026-09-26 决定）**：**删除远端 tag `v0.16.0` 并在修复提交上重打同名 tag**（保持版本号 v0.16.0）。属改写已发布引用，已获明示授权。执行顺序：提交修复 + 记录 → 推 main（过 pre-push 全链门）→ 删远端 tag 并重打/重推 → CI 复跑核验（Release 5 产物）。
+- **重发路径（主人 2026-09-26 决定，2026-09-27 00:0x–00:2x 已执行）**：**删除远端 tag `v0.16.0` 并在修复提交上重打同名 tag**（保持版本号 v0.16.0）。执行链：提交 `a606729`（3 文件，+39/−6）→ 推 main（23:48:16–00:05:54，pre-push 全链绿；远端 API 确证 `refs/heads/main` = `a606729`）→ 删除远端 tag（纯引用操作、无内容变更，明示 `OMO_SKIP_HOOKS=1` 跳过门；`- [deleted] v0.16.0`）→ 重推 tag（00:06:24–00:24:33，**走门**全链绿；`* [new tag] v0.16.0 -> v0.16.0`）⇒ **CI run #91 success**：<https://github.com/lomehong/oh-my-ops/actions/runs/36255345477>（测试 job ✅ / 打包发布 job ✅——打部署包、打 kb-enroll 服务包、发布 Release 全过）⇒ **Release v0.16.0 5 产物齐**（00:26:12 完成，用时 ≈1.7 min）。
 
 ## 八、可回源性
 
@@ -246,5 +247,6 @@ mjs 侧（`secret-perm.mjs`，供 kb-gitea / ops-kb-provision / kb-enroll 的同
 | 打包两步逐字复现 | `/e/tmp/pkgrepro/`（`extract.mjs` + `run-steps.sh` + `step-pkg.sh`/`step-kb.sh` + ws 产物） | 从 `release.yml` 逐字抽 step（禁手抄）；scratch 工作区（`GITHUB_WORKSPACE` 指向 scratch），不触碰仓库根 |
 | 守卫红/绿证 | `/e/tmp/wfguard/`（修前 release.yml 副本）+ 仓库工作树 | 红证对修前文件（命中 `LISTED…vendor/…`，exit 1）；绿证 `npm run test:workflow`（结果：全绿） |
 | CI 首次真跑 | <https://github.com/lomehong/oh-my-ops/actions/runs/36251780672>（run #90） | test job ✅ / 打包 ❌ 于「打部署包」（job 日志端点需鉴权，403）；结论取自 jobs/steps API |
-| 收口动作 | 提交 / 推 main / tag / CI 观测 | 见 `git log` 与台账 `docs/tasks/CIPORT-1.yaml`（report 态）；打包门修复为工作树改动（§5.7、§七末） |
+| 重发 CI 真跑 | <https://github.com/lomehong/oh-my-ops/actions/runs/36255345477>（run #91，`a606729`） | test ✅ / 打包发布 ✅（打部署包、打 kb-enroll 服务包、发布 Release）；Release v0.16.0 = 5 产物 |
+| 收口动作 | 提交 / 推 main / tag 重打 / CI 观测 | 见 `git log` 与台账 `docs/tasks/CIPORT-1.yaml`（report 态）；打包门修复 = 提交 `a606729`（§5.7、§七末） |
 | 先例记录 | `docs/designs/omovendor-1-执行记录.md`、`docs/designs/web-verify-执行记录.md` | 防线与真机教训的写法参照 |
