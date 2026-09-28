@@ -34,7 +34,9 @@ step() { printf '\n%s▸ %s%s\n' "$B" "$1" "$N"; }
 ok()   { printf '%s  ✓ %s%s\n' "$G" "$1" "$N"; }
 warn() { printf '%s  ⚠ %s%s\n' "$Y" "$1" "$N"; }
 die()  { printf '%s  ✗ %s%s\n' "$R" "$1" "$N" >&2; exit 1; }
-if ! grep -q "bootstrap-end" "$0" 2>/dev/null; then echo "  ✗ 脚本下载不完整（网络截断？）请重试" >&2; exit 1; fi
+# 完整性守卫：仅在「$0 是普通文件」时启用——`curl … | bash` 管道执行时 $0="bash"（无此文件），
+# 守卫不适用（下载完整性由下方 gzip 魔数 + sha256 校验保证）；落盘执行（install.sh 下载 bootstrap 再跑）才检查
+if [ -f "$0" ] && ! grep -q "bootstrap-end" "$0" 2>/dev/null; then echo "  ✗ 脚本下载不完整（网络截断？）请重试" >&2; exit 1; fi
 
 # ── 参数预扫描：--resolve-only（仅解析并打印版本后退出；供运维排查与回归守卫用）
 #    其余参数原样透传给 install.sh（install.sh 对未知参数忽略）

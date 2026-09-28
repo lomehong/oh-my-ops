@@ -36,7 +36,7 @@ process.env.YUYI_TOKEN = "harness-token";
 process.env.YUYI_AUTO_RESPOND = "true";
 delete process.env.YUYI_AGENT_GATE_STRICT;
 
-const PEER = { device: "PEER-DEV", sessionID: "omp_peer1", name: "PEER-DEV-omp", agentId: "peer-agent-id", ownerUsername: "hz0704027" };
+const PEER = { device: "PEER-DEV", sessionID: "omp_peer1", name: "PEER-DEV-omp", agentId: "peer-agent-id", ownerUsername: "probe-user" };
 const SELF = { device: "HARNESS-DEV", alias: "HARNESS-DEV-omp", agentId: "harness-agent-id", agentName: "harness-omp" };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -85,7 +85,7 @@ function handleOutbound(ws, frame) {
 			protocolVersion: 2,
 			agentId: SELF.agentId,
 			agentName: SELF.agentName,
-			ownerUsername: "hz0704027",
+			ownerUsername: "probe-user",
 			role: "coder",
 			features: ["inbox", "capabilities", "identity", "task", "trace"],
 		});

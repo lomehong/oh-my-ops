@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # build-mirror.sh — 构建/刷新 omo 品牌化 omp 镜像。用法：build-mirror.sh <mirror-dir> <system-pkg-dir>
-# 由 install.sh 与 omo 启动器（自愈）共用。原子构建：失败不动现有镜像。
+# ★ v3 遗留脚本（硬编码 ~/.ops-pi 布局），v4 自包含安装器/启动器**不再调用**；保留仅供考古，
+#   当前构建管线见 scripts/build-omp-runtime.sh。勿在新流程中引用。
+#
 #
 # node_modules 解析覆盖三种布局：
 #   ① npm -g     ：依赖嵌套在 pi-coding-agent/node_modules/

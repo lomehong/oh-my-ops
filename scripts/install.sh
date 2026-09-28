@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # oh-my-ops 安装脚本 v4：自包含——零前置、~/.omo 私有域、与原生 omp 零接触。
 #
-# 布局（全部在 ~/.omo，可整体删除；唯一对外痕迹 = ~/.local/bin/omo 启动器）：
-#   ~/.omo/bin/bun                ← 私有 bun（自动安装，锁 OMO_BUN_VERSION；不装系统级）
+# 布局（全部在 ~/.omo，可整体删除；对外痕迹 = ~/.local/bin/omo 启动器 + ~/.bun/bin/bun 共享位）：
+#   ~/.bun/bin/bun                ← bun（自动安装，锁 OMO_BUN_VERSION；共享标准位，不属于 omo 私有域）
 #   ~/.omo/runtime/omp-single     ← 品牌化单文件 omp（发布包内置，构建管线见 scripts/build-omp-runtime.sh）
 #   ~/.omo/extensions/ops-pi/     ← ops 扩展（含 ops-core 实体拷贝）
 #   ~/.omo/extensions/yuyi-omp-extension.js ← Yuyi 适配器
@@ -457,7 +457,8 @@ if [ -n "$TOKEN" ] && [ -d "$SKILLS_SRC" ]; then
     cp -r "$d." "$SKILLS_DST/$skill/"
     SKILLS_N=$((SKILLS_N + 1))
   done
-  chown -R pi:pi "$SKILLS_DST" 2>/dev/null || true   # 目标机以 pi 运行时为同主无操作；无此用户/非 root 时静默跳过（不阻断安装）
+  # 仅当目标机真有 pi 用户且以 root 安装时才移交属主（否则无关 pi 用户（如树莓派默认账号）会白得 skills 目录）
+  if [ "$(id -u)" = "0" ] && id pi >/dev/null 2>&1; then chown -R pi:pi "$SKILLS_DST" 2>/dev/null || true; fi
   if [ "$SKILLS_N" -eq 0 ]; then
     echo "  ⚠ vendor/yuyi-skills 为空——yuyi 配套 skills 未部署"
   else

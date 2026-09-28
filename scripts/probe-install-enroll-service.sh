@@ -6,6 +6,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INSTALLER="$REPO_ROOT/scripts/install-enroll-service.sh"
 TMP="$(mktemp -d)"
+# proc_kill 来自 lib/proc.sh（此前漏 source ⇒ cleanup 报 command not found，桩/服务进程每次跑完泄漏）
+. "$REPO_ROOT/scripts/lib/proc.sh"
 # 收尾：杀桩与已起服务（pkill 在 Windows Git Bash 不存在 ⇒ 统一 pid 文件 + 双命名空间 kill，见 lib/proc.sh）。
 # set +e 是硬要求：EXIT trap 里任何失败命令会点着 set -e，把「全绿」翻成 exit 1（真机踩到）。
 cleanup() {

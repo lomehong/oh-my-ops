@@ -13,8 +13,7 @@ for f in .github/workflows/*.yml .github/workflows/*.yaml; do
     /:[ ]*\|[ ]*$/ { block = ind; next }
     block != "" {
       if ($0 ~ /^[ ]*$/) next
-      if (ind <= block) { block = ""; next }              # 块结束
-      if (ind <= block) { print NR": 块标量内缩进不足（应为 > "block"）"; bad=1 }
+      if (ind <= block) { block = ""; next }              # 块结束（比键浅即出块；块内语法由下方 bash -n 兜底）
     }
     END { exit bad }
   ' "$f" 2>&1)" || { echo "  ✗ $f：${err:-块标量缩进异常}"; fail=$((fail+1)); }

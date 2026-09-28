@@ -161,12 +161,15 @@ KBPID="$(cat /tmp/omo-kb-sync.pid 2>/dev/null || true)"; [ -n "$KBPID" ] && kill
 # 清理本探针起的循环（不依赖 procps：纯 /proc 扫描）；否则它们会持续往共享日志写 Module not found（沙箱目录已删）
 for f in /proc/[0-9]*/cmdline; do
   [ -r "$f" ] || continue
-  p="\${f#/proc/}"; p="\${p%/cmdline}"
+  p="${f#/proc/}"; p="${p%/cmdline}"
   c="$(tr '\0' ' ' < "$f" 2>/dev/null || true)"
-  case "$c" in *kb-cli.ts*"*"*sync*|*"bun kb sync"*) kill "$p" 2>/dev/null || true ;; esac
+  # 匹配真实形态：`bun …/kb-cli.ts sync …` 或 `bun kb sync`（引号只包字面段，* 落在引号外才是通配）
+  case "$c" in
+    *"kb-cli.ts "*sync*|*"bun kb sync"*) kill "$p" 2>/dev/null || true ;;
+  esac
 done
 sleep 0.5
-LEFT=0; for f in /proc/[0-9]*/cmdline; do c="$(tr '\0' ' ' < "$f" 2>/dev/null || true)"; case "$c" in *kb-cli.ts*"*"*sync*|*"bun kb sync"*) LEFT=$((LEFT+1)) ;; esac; done
+LEFT=0; for f in /proc/[0-9]*/cmdline; do c="$(tr '\0' ' ' < "$f" 2>/dev/null || true)"; case "$c" in *"kb-cli.ts "*sync*|*"bun kb sync"*) LEFT=$((LEFT+1)) ;; esac; done
 [ "$LEFT" -eq 0 ] && pass "探针收尾：无遗留 KB 循环" || fail "探针遗留 KB 循环 $LEFT 个"
 
 echo "[5d] 旧服务识别：启动器变更后 status 必须提示重启（真机踩到：升级后旧循环仍跑旧代码）"

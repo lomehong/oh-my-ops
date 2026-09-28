@@ -32,7 +32,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { AuditLog } from "./lib/kb-audit.mjs";
 import { readAdminAuth, makeApi, defaultTeam, randomPassword, credentialJson, ensureUser, grantAccess, revokeAccess, scramblePassword, verifyBotCredential, sha1 } from "./lib/kb-gitea.mjs";
-import { checkCode, consumeCode, upsertEntry, markRevoked, REGISTRY_VERSION, loadRegistry, issueCode } from "./lib/kb-registry.mjs";
+import { checkCode, consumeCode, upsertEntry, markRevoked, REGISTRY_VERSION, loadRegistry, issueCode, sha256 } from "./lib/kb-registry.mjs";
 import { identityFromRequest, unauthorizedResponse } from "./lib/kb-auth.mjs";
 import { buildComment, lintSimilarity, lintStructure, verifyHmac } from "./lib/kb-lint.mjs";
 import { UI_CONFIG_KEYS, parseConfigEnv, readConfigEnv, validateValues, renderConfigEnv, writeConfigEnvAtomic, restoreConfigBackup, maskConfigForUi } from "./lib/kb-ui-config.mjs";
@@ -396,6 +396,10 @@ async function handleUiConfigPost(req, ip, actor) {
 const failures = new Map();
 function throttled(ip) {
 	const now = Date.now();
+	// 顺带清扫过期项：键是任意来源 IP，不清扫则随扫描/扫描器流量无界增长
+	if (failures.size > 1024) {
+		for (const [k, v] of failures) if (now - v.since > 60_000) failures.delete(k);
+	}
 	const rec = failures.get(ip) ?? { n: 0, since: now };
 	if (now - rec.since > 60_000) {
 		rec.n = 0;
@@ -405,6 +409,10 @@ function throttled(ip) {
 	failures.set(ip, rec);
 	return rec.n > 10;
 }
+
+/* ---------------- 兑换码在途去重：check 与 consume 之间存在多个 await（Gitea 调用），
+   同一码并发提交可双双通过 checkCode（TOCTOU）。在途集合在事件循环内同步判重，窗口归零。 ---------------- */
+const codesInFlight = new Set();
 
 function json(status, body) {
 	return new Response(`${JSON.stringify(body)}\n`, { status, headers: { "Content-Type": "application/json" } });
@@ -428,6 +436,11 @@ async function handleEnroll(req, ip) {
 	if (typeof code !== "string" || code === "") return json(400, { error: "缺少 code" });
 	if (typeof device !== "string" || device === "") return json(400, { error: "缺少 device" });
 
+	const codeHash = sha256(String(code));
+	if (codesInFlight.has(codeHash)) {
+		audit.append({ event: "enroll.rejected", device, reason: "in_flight", ip });
+		return json(409, { error: "兑换码正在处理中，请勿并发提交" });
+	}
 	const verdict = checkCode(registryFile, code, device);
 	if (!verdict.ok) {
 		audit.append({ event: "enroll.rejected", device, reason: verdict.reason, ip });
@@ -438,7 +451,7 @@ async function handleEnroll(req, ip) {
 		return json(401, { error: "兑换码无效" });
 	}
 	const op = verdict.entry.op;
-
+	codesInFlight.add(codeHash);
 	try {
 		const login = loginFor(device);
 		const logs = [];
@@ -484,6 +497,8 @@ async function handleEnroll(req, ip) {
 	} catch (err) {
 		audit.append({ event: "enroll.error", device, agentId, op, reason: String(err?.message ?? err), ip });
 		return json(500, { error: `服务侧失败：${String(err?.message ?? err)}` });
+	} finally {
+		codesInFlight.delete(codeHash);
 	}
 }
 
@@ -492,6 +507,12 @@ if (!useTls && args["allow-insecure-http"] !== true) {
 	process.exit(1);
 }
 if (!useTls) console.error("⚠ 明文 HTTP 模式（--allow-insecure-http）：凭据将以明文经网络传输，仅限受信链路！");
+// UI 身份是「信任头」模式（kb-auth.mjs）：头可被任意客户端伪造，安全完全依赖「服务端口仅网关可达」。
+// 非回环绑定 = 端口可能被直连 ⇒ 必须让 Owner 显式看到这个前提。
+if (UI_ON && host !== "127.0.0.1" && host !== "localhost" && host !== "::1") {
+	console.error(`⚠ UI 绑定在非回环地址（${host}）：/ui 认证信任 ${UI_IDENTITY_HEADER} 身份头（可伪造），` +
+		"必须确保该端口仅经 yufu 网关可达（防火墙/安全组限制直连），否则任何可达者均可伪造身份签发兑换码！");
+}
 
 let server;
 const bindRetryMs = Number.parseInt(process.env.OMO_KB_BIND_RETRY_MS ?? "0", 10) || 0;

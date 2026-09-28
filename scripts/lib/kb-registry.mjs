@@ -17,7 +17,10 @@ export function loadRegistry(file) {
 
 export function saveRegistry(file, reg) {
 	fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
-	fs.writeFileSync(file, `${JSON.stringify(reg, null, 2)}\n`, { mode: 0o600 });
+	// 原子写（tmp+rename）：登记表含兑换码消费状态，崩溃中途写坏会让「已用码」复活成可用码
+	const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+	fs.writeFileSync(tmp, `${JSON.stringify(reg, null, 2)}\n`, { mode: 0o600 });
+	fs.renameSync(tmp, file);
 	fs.chmodSync(file, 0o600);
 }
 

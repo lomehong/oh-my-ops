@@ -298,17 +298,19 @@ else CRED_ARGS=(--user "$ADMIN_USER:$(cat "$DIR/admin.pw")"); fi
 ORG="${REPO%%/*}"; REPO_NAME="${REPO##*/}"
 probe() { # $1=描述 $2=期望的「有权限」判定（re） $3=curl 参数…
   local desc="$1" expect="$2"; shift 2
-  local code
-  curl -sS -o /tmp/omo-kb-probe.json -w '%{http_code}' --max-time 20 "${CRED_ARGS[@]}" "$@" >/tmp/omo-kb-probe.code 2>/tmp/omo-kb-probe.err || true
-  code="$(cat /tmp/omo-kb-probe.code 2>/dev/null || echo 000)"; [ -n "$code" ] || code=000
+  local code tmpb tmpc tmpe
+  # mktemp 私有名：固定 /tmp 路径在 root 部署机上有符号链接预置/并发互踩面
+  tmpb="$(mktemp /tmp/omo-kb-probe.XXXXXX)"; tmpc="${tmpb}.code"; tmpe="${tmpb}.err"
+  curl -sS -o "$tmpb" -w '%{http_code}' --max-time 20 "${CRED_ARGS[@]}" "$@" >"$tmpc" 2>"$tmpe" || true
+  code="$(cat "$tmpc" 2>/dev/null || echo 000)"; [ -n "$code" ] || code=000
   # ① 缺权：403 且响应里带 scope 提示 ⇒ 硬失败（计入 FAIL）
-  if [ "$code" = "403" ] && grep -q "scope" /tmp/omo-kb-probe.json 2>/dev/null; then
-    printf '  ✗ %s：缺权 —— %s\n' "$desc" "$(head -c 160 /tmp/omo-kb-probe.json | tr -d '\n')"
+  if [ "$code" = "403" ] && grep -q "scope" "$tmpb" 2>/dev/null; then
+    printf '  ✗ %s：缺权 —— %s\n' "$desc" "$(head -c 160 "$tmpb" | tr -d '\n')"
     FAIL_N=$((FAIL_N + 1)); return 0
   fi
   # ② API 不可达（000）：服务必然无法工作 ⇒ 硬失败并提示连通性排查
   if [ "$code" = "000" ]; then
-    printf '  ✗ %s：**API 不可达**（%s）——%s\n' "$desc" "$API" "$(head -1 /tmp/omo-kb-probe.err 2>/dev/null | tr -d '\n')"
+    printf '  ✗ %s：**API 不可达**（%s）——%s\n' "$desc" "$API" "$(head -1 "$tmpe" 2>/dev/null | tr -d '\n')"
     FAIL_N=$((FAIL_N + 1)); return 0
   fi
   # ③ 有权限：命中预期校验失败码 ⇒ 通过
@@ -323,7 +325,7 @@ probe "read:admin（列用户）"       "200"      "$API/admin/users?limit=1"
 probe "write:admin（建用户）"      "422|400"  -X POST -H 'Content-Type: application/json' -d '{}' "$API/admin/users"
 probe "write:repository（协作者）" "404|422|400" -X PUT -H 'Content-Type: application/json' -d '{"permission":"read"}' "$API/repos/$REPO/collaborators/__omo_scope_probe__"
 probe "write:organization（团队）" "422|400"  -X POST -H 'Content-Type: application/json' -d '{}' "$API/orgs/$ORG/teams"
-rm -f /tmp/omo-kb-probe.json /tmp/omo-kb-probe.code /tmp/omo-kb-probe.err
+rm -f /tmp/omo-kb-probe.* 2>/dev/null || true
 if [ "$FAIL_N" -gt 0 ]; then
   echo
   echo "  ✗ 自检未通过（通过 $OK_N · 失败 $FAIL_N · 未判定 $WARN_N）——按上面每项的提示处理："
