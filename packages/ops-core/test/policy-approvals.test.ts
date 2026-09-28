@@ -162,6 +162,13 @@ describe("ReloadableTokenStore（mtime 重载 + 单次消费）", () => {
 		assert.equal(fresh.find(request).valid, false);
 		const parsed = JSON.parse(fs.readFileSync(oncePath, "utf8")) as { tokens: Array<{ id: string; consumedAt?: string }> };
 		assert.ok(parsed.tokens[0]!.consumedAt !== undefined, "consumedAt 应写回文件");
+		// 授权凭据文件必须保持仅 Owner 可读（写回经 tmp+rename，权限不得回落 umask 缺省 0644）；
+		// win32 的 mode 位是 Node 模拟值（chmod 仅切换只读位），权限断言仅 POSIX 有意义
+		if (process.platform !== "win32") {
+			const mode = fs.statSync(oncePath).mode & 0o777;
+			assert.equal(mode, 0o600, `令牌文件写回后权限应为 0600，实际 ${mode.toString(8)}`);
+		}
+		assert.equal(fs.readdirSync(tmpDir).filter((f) => f.endsWith(".tmp")).length, 0, "不应残留 tmp 文件");
 	});
 
 	it("scope 逐段前缀匹配：host+service 令牌覆盖该服务任意 action", () => {

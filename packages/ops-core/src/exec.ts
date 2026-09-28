@@ -6,6 +6,8 @@ export interface ExecResult {
 	stderr: string;
 	exitCode: number;
 	durationMs: number;
+	/** stdout/stderr 任一触到 maxOutputBytes 上限被截断；上游据此分支（如 FileOps 拒绝返回不完整文件） */
+	truncated?: boolean;
 }
 
 export interface ExecOptions {
@@ -41,18 +43,35 @@ export class ShellExec {
 				signal: options.signal,
 			});
 
-			let stdout = "";
-			let stderr = "";
+			// 增量字节计数封顶：旧实现每个 chunk 对累计串做全量 Buffer.byteLength（10 MiB 上限下 O(n²)）
 			let truncated = false;
-			const cap = (current: string, chunk: string) => {
-				const remaining = maxOutputBytes - Buffer.byteLength(current);
-				if (remaining <= 0) { truncated = true; return current; }
-				if (Buffer.byteLength(chunk) <= remaining) return current + chunk;
-				truncated = true;
-				return current + chunk.slice(0, remaining);
+			const makeSink = () => {
+				let text = "";
+				let bytes = 0;
+				return {
+					get text(): string {
+						return text;
+					},
+					push(chunk: Buffer): void {
+						if (bytes >= maxOutputBytes) {
+							truncated = true;
+							return;
+						}
+						if (bytes + chunk.length <= maxOutputBytes) {
+							text += chunk.toString("utf8");
+							bytes += chunk.length;
+							return;
+						}
+						text += chunk.subarray(0, maxOutputBytes - bytes).toString("utf8");
+						bytes = maxOutputBytes;
+						truncated = true;
+					},
+				};
 			};
-			child.stdout?.on("data", (chunk: Buffer) => { stdout = cap(stdout, chunk.toString("utf8")); });
-			child.stderr?.on("data", (chunk: Buffer) => { stderr = cap(stderr, chunk.toString("utf8")); });
+			const out = makeSink();
+			const errOut = makeSink();
+			child.stdout?.on("data", (chunk: Buffer) => out.push(chunk));
+			child.stderr?.on("data", (chunk: Buffer) => errOut.push(chunk));
 
 			// stdin 管道：内容一次性写入后关闭；子进程提前退出时的 EPIPE 属预期，交由 exitCode 判定
 			if (options.stdin !== undefined) {
@@ -83,14 +102,15 @@ export class ShellExec {
 				}
 				if (signalName === "SIGKILL" && code === null) {
 					reject(new OpsError("TIMEOUT", `命令超时被终止（${timeoutMs}ms）：${argv[0]}`, {
-						cause: new Error(stderr || "no stderr"),
+						cause: new Error(errOut.text || "no stderr"),
 					}));
 					return;
 				}
+				let stdoutText = out.text;
 				if (truncated) {
-					stdout += `\n…[输出超过 ${maxOutputBytes} 字节上限，已截断]`;
+					stdoutText += `\n…[输出超过 ${maxOutputBytes} 字节上限，已截断]`;
 				}
-				resolve({ stdout, stderr, exitCode: code ?? -1, durationMs });
+				resolve({ stdout: stdoutText, stderr: errOut.text, exitCode: code ?? -1, durationMs, truncated });
 			});
 		});
 	}

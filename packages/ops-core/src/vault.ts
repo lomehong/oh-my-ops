@@ -165,7 +165,9 @@ export class CredentialVault {
 			payload: payload.toString("hex"),
 		};
 		const tmp = `${this.dbPath}.tmp.${process.pid}`;
-		fs.mkdirSync(nodePath.dirname(this.dbPath), { recursive: true });
+		// 0700 私有域（与 redact.saveStateSync 同标准）；key 不可在此清零——store/remove/rekey 之后
+		// 读写仍需派生密钥，生命周期归 lock() 管
+		fs.mkdirSync(nodePath.dirname(this.dbPath), { recursive: true, mode: 0o700 });
 		fs.writeFileSync(tmp, JSON.stringify(file), { mode: 0o600 });
 		fs.renameSync(tmp, this.dbPath);
 	}

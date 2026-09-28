@@ -2,6 +2,10 @@
  * 第②层：内容级硬拒（方案 §7.4）。
  * 纯同步判定——绝不 await 人工交互（避开宿主 tool_call 30s fail-closed 上限，O6）。
  * 模式集以宿主 CRITICAL_BASH_PATTERNS（bash.ts:178-225）为下界，并补绝对路径锚点降低误报。
+ *
+ * ★ 定位是「绊线」而非防线：黑名单可被 `echo … | bash`、`env rm`、base64 等形态绕过（黑名单的本质局限），
+ *   真正的边界是 exec/write 档位授权 + 生产目标守卫。rm 模式刻意**不做命令位锚定**（与 shutdown 模式不同）：
+ *   锚定会漏掉 `sh -c "rm -rf /"` 这类引号上下文——宁误拦一句 echo 文本，不可漏放真删除。
  */
 const CRITICAL_PATTERNS: readonly RegExp[] = [
 	// 递归破坏：仅锚定绝对路径目标，避免误伤 `rm -rf ./dist` 这类合法清理

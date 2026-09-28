@@ -36,7 +36,8 @@ export class LogCollector {
 	/** 读取日志文件末尾 N 行 */
 	async tailFile(path: string, opts: { lines?: number }, execOpts: ExecOptions = {}): Promise<TailResult> {
 		const n = opts.lines ?? 100;
-		const result = await this.shell.exec(["tail", "-n", String(n), path], { timeoutMs: 15_000, ...execOpts });
+		// `--` 结束选项解析：path 以 "-" 开头时不得被 tail 当选项（选项注入）
+		const result = await this.shell.exec(["tail", "-n", String(n), "--", path], { timeoutMs: 15_000, ...execOpts });
 		if (result.exitCode !== 0 && result.stderr.includes("No such file")) {
 			return { file: path, lines: [], totalLines: 0 };
 		}
@@ -71,8 +72,10 @@ export class LogCollector {
 	async grep(pattern: string, paths: readonly string[], opts: { context?: number; maxCount?: number } = {}, execOpts: ExecOptions = {}): Promise<GrepResult> {
 		// -H 强制每条匹配都带文件名前缀：部分 grep 实现（或环境差异）在单文件路径时不加前缀，
 		// 会让下方解析锚到行内容里的 `:数字:` 产出错位数据（2026-09-16 对端实测）
-		const argv = ["grep", "-rnH", "--include=*", pattern, ...paths];
-		if (opts.maxCount !== undefined) argv.splice(3, 0, "-m", String(opts.maxCount));
+		// `--` 结束选项解析：pattern/paths 以 "-" 开头（如 "-f /etc/passwd"、"-d recurse /"）不得被当选项
+		const argv = ["grep", "-rnH", "--include=*"];
+		if (opts.maxCount !== undefined) argv.push("-m", String(opts.maxCount));
+		argv.push("--", pattern, ...paths);
 		const result = await this.shell.exec(argv, { timeoutMs: 30_000, ...execOpts });
 		const matches: GrepResult["matches"] = [];
 		// 已知路径锚定：file 必须落在给定 paths（自身或其后代）之内，否则视为不可信

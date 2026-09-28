@@ -77,6 +77,14 @@ export class FileOps {
 			const errno = cat.stderr.includes("Permission denied") ? "PERMISSION_DENIED" : "EXEC_FAILED";
 			throw new OpsError(errno, `读取失败：${path}：${cat.stderr.slice(0, 200)}`);
 		}
+		// exec 层截断标记会混在 stdout 里被当作文件内容返回（stat 与 cat 之间文件增长 / maxBytes 被调小）：
+		// 有 truncated 标志必须显式失败，调用方不得把「不完整的文件」当完整内容用
+		if (cat.truncated === true) {
+			throw new OpsError(
+				"POLICY_DENIED",
+				`读取被输出上限截断（${maxBytes} 字节）：${path}。文件可能正在增长或超出上限，请改用分段读取或外部命令。`,
+			);
+		}
 		return cat.stdout;
 	}
 

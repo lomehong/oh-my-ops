@@ -110,12 +110,14 @@ export class ReloadableTokenStore implements TokenStore {
 		const consumedAt = new Date().toISOString();
 		// ① 内存先行：本进程立即不可重放（即使写盘失败）
 		this.tokens = this.tokens.map((t) => (t.id === found.token.id ? { ...t, consumedAt } : t));
-		// ② 原子写盘：跨进程/跨会话也不可重放
+		// ② 原子写盘：跨进程/跨会话也不可重放。0600 + rename 后 chmod 兜底（rename 不改目标已有权限时
+		// 可能回落 umask 缺省 0644——授权凭据文件必须保持仅 Owner 可读）；tmp 名带随机后缀防碰撞/预置符号链接
 		try {
 			const file: TokenFile = { tokens: this.tokens };
-			const tmp = `${this.path}.tmp`;
-			fs.writeFileSync(tmp, JSON.stringify(file, null, "\t"));
+			const tmp = `${this.path}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+			fs.writeFileSync(tmp, JSON.stringify(file, null, "\t"), { mode: 0o600 });
 			fs.renameSync(tmp, this.path);
+			fs.chmodSync(this.path, 0o600);
 			this.mtimeMs = statMtimeMs(this.path);
 		} catch {
 			// 写盘失败：内存态已消费（保守侧）；Owner 可见 tmp 残留
