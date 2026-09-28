@@ -170,6 +170,19 @@ describe("onToolCall（①-b 兜底 + ② 内容硬拒，模式无关）", () =>
 		expect(decision?.reason).toEqual("[ERR_POLICY] 命中灾难性命令模式，已拒绝");
 	});
 
+	test("内容硬拒覆盖 script 字段（ops_shell_script 不得绕过灾难命令黑名单）", () => {
+		const decision = onToolCall(
+			{ toolName: "ops_shell_script", input: { script: "rm -rf /" } },
+			view(), { hasUI: false },
+		);
+		expect(decision?.block).toBe(true);
+		expect(decision?.reason).toEqual("[ERR_POLICY] 命中灾难性命令模式，已拒绝");
+		// ③ 复核同样成立（预授权宿主经 execute 直调也拦）
+		expect(() => assertAuthorized("ops_shell_script", { script: "rm -rf /" }, view())).toThrow(/灾难性命令/);
+		// 对照：非灾难内容的 script 不触发硬拒（走正常授权链）
+		expect(onToolCall({ toolName: "ops_shell_script", input: { script: "uptime" } }, view(), { hasUI: false })).toBeUndefined();
+	});
+
 	test("无人值守 + 未预授权 exec → ①-b 拒（X10 复现）", () => {
 		const decision = onToolCall(
 			{ toolName: "ops_service", input: { service: "redis", action: "restart" } },

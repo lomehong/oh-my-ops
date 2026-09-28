@@ -59,13 +59,21 @@ export class SandboxedShell implements Runner {
 	private readonly inner: Runner;
 	private readonly enabled: boolean;
 	private readonly cwd: string;
-	private readonly available: boolean;
+	private readonly availableOverride: boolean | undefined;
+	private availableMemo: boolean | undefined;
 
 	constructor(inner: Runner, options: SandboxOptions, available?: boolean) {
 		this.inner = inner;
 		this.enabled = options.enabled;
 		this.cwd = options.writableDir ?? process.cwd();
-		this.available = available ?? probeBwrap();
+		this.availableOverride = available;
+	}
+
+	/** 懒探测：bwrap 探测（spawnSync 最长 5s）不得发生在扩展加载路径（context 默认构造即触发），推迟到首次 exec */
+	private get available(): boolean {
+		if (this.availableOverride !== undefined) return this.availableOverride;
+		if (this.availableMemo === undefined) this.availableMemo = probeBwrap();
+		return this.availableMemo;
 	}
 
 	get isActive(): boolean {

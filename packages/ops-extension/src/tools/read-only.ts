@@ -61,7 +61,11 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			const ops = ctx.forHost(typeof p.host === "string" ? p.host : undefined);
 			// 机密根不可读（模型凭据/SSH 私钥/vault/令牌）：read 档自动放行不覆盖此边界（仅本机）
 			if (ops.host === undefined) ctx.pathGuard.assertReadable(path);
-			const text = await ops.files.read(path, { maxBytes: p.maxBytes !== undefined ? Number(p.maxBytes) : undefined, signal });
+			// maxBytes 非有限数（NaN/Infinity）会让 files.read 的 size>maxBytes 恒 false → 整文件入内存：
+			// 非法值回落缺省，并夹到 [1, 16 MiB] 硬上限
+			const rawMax = Number(p.maxBytes);
+			const maxBytes = Number.isFinite(rawMax) ? Math.min(Math.max(Math.floor(rawMax), 1), 16 * 1024 * 1024) : undefined;
+			const text = await ops.files.read(path, { maxBytes, signal });
 			return { content: [{ type: "text", text }], details: { authz } };
 		},
 	});

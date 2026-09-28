@@ -1,6 +1,8 @@
 import { criticalReason, evaluateAuthorization, needsOwnerAuth, OpsError } from "@ops-pi/core";
 import type { AuthzSource, AuthorizationVerdict, PolicyRequest, TargetPolicy, TokenStore } from "@ops-pi/core";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { TIER_TABLE, requiresOwnerAuth, getRegisteredOpsToolDefs } from "./approvals.ts";
 import { policyRequestFor } from "./request.ts";
 
@@ -70,10 +72,16 @@ export function checkToolRegistry(pi: ExtensionAPI): RegistryCheckReport {
 	return { failures, hijacked };
 }
 
-/** 本扩展源码路径特征：源码树（packages/ops-extension）与安装目录（~/.ops-pi）均含标识串 */
-function isOwnSourcePath(path: string): boolean {
-	if (path.startsWith("<") && path.endsWith(">")) return true; // 宿主占位符（非真实路径，无法判定 → 放行）
-	return path.includes("ops-extension") || path.includes("ops-pi");
+/** 本扩展自身目录（安装态/源码态通用指纹；win32 反斜杠归一） */
+const OWN_DIR = path.dirname(fileURLToPath(import.meta.url)).replaceAll("\\", "/");
+
+/** 本扩展源码路径特征：优先按自身真实安装路径前缀判定；打包路径前缀不同时退回
+ * 分隔符锚定的目录名特征（不锚定会把 `my-ops-pi-x` 这类共载扩展误判为己方、漏报劫持） */
+function isOwnSourcePath(p: string): boolean {
+	if (p.startsWith("<") && p.endsWith(">")) return true; // 宿主占位符（非真实路径，无法判定 → 放行）
+	const norm = p.replaceAll("\\", "/");
+	if (norm.startsWith(OWN_DIR)) return true;
+	return /(?:^|\/)(?:ops-extension|ops-pi)(?:\/|$)/.test(norm);
 }
 
 /**
@@ -112,6 +120,14 @@ export function assertToolRegistryIntegrity(pi: ExtensionAPI): string[] {
 }
 
 /**
+ * 工具输入中的命令载体字段：`command`（ops_shell_exec 等）与 `script`（ops_shell_script）。
+ * 内容硬拒两个都要查——只查 command 时，script 字段整体绕过灾难命令黑名单。
+ */
+function commandPayload(input: unknown): string | undefined {
+	return readString(input, "command") ?? readString(input, "script");
+}
+
+/**
  * `tool_call` 钩子：①-b 无人值守兜底 + ② 内容硬拒。
  * ★ 只读判定不改写 event.input（§7.4.4 规范 2）；★ 同步不 await（O6 30s 上限）；
  * ★ 判定走 evaluateAuthorization 单一事实源，与审批层/③ 复核逐字段一致。
@@ -124,7 +140,7 @@ export function onToolCall(
 	if (!event.toolName.startsWith("ops_")) return undefined;
 
 	// ② 内容硬拒
-	const command = readString(event.input, "command");
+	const command = commandPayload(event.input);
 	if (command !== undefined) {
 		const reason = criticalReason(command);
 		if (reason !== null) return { block: true, reason: `[ERR_POLICY] ${reason}` };
@@ -146,8 +162,8 @@ export function onToolCall(
  * @throws OpsError("POLICY_DENIED")（内容硬拒）或 OpsError("PERMISSION_DENIED")（未授权）
  */
 export function assertAuthorized(toolName: string, input: unknown, authz: AuthorizationView): AuthzSource {
-	// ② 内容硬拒在 ③ 同样成立（①-b 可能被绕过的最后一道闸）
-	const command = readString(input, "command");
+	// ② 内容硬拒在 ③ 同样成立（①-b 可能被绕过的最后一道闸）；command 与 script 两个载体都查
+	const command = commandPayload(input);
 	if (command !== undefined) {
 		const reason = criticalReason(command);
 		if (reason !== null) throw new OpsError("POLICY_DENIED", reason);

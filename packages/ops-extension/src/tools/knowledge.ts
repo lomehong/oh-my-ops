@@ -8,7 +8,7 @@ import { registerOpsTool } from "../approvals.ts";
 import { assertAuthorized } from "../guards.ts";
 import type { KnowledgeStore } from "../knowledge.ts";
 import { syncKb } from "../kb-sync.ts";
-import { credentialAgeDays, kbGitCredentialsPath, loadKbCredential, loadKbState, redactUrl, rotationHint } from "../kb-credential.ts";
+import { credentialAgeDays, kbGitCredentialsPath, loadKbCredential, loadKbState, redactUrl, rotationHint, secretPrefix } from "../kb-credential.ts";
 import type { OpsContext } from "../context.ts";
 
 export interface KbSyncConfig {
@@ -145,7 +145,8 @@ export function registerKnowledgeTools(pi: ExtensionAPI, ctx: OpsContext, approv
 			else if (credential === undefined) ctxLines.push("凭据：未配置（本地模式；可用 `omo kb enroll` 兑换）");
 			else {
 				const age = credentialAgeDays(credential.createdAt);
-				ctxLines.push(`凭据：${credential.username}（${credential.kind}，前缀 ${credential.secret.slice(0, 8)}…${age === undefined ? "" : `，已用 ${age} 天`}）`);
+				// secretPrefix：短秘密（≤8 字符）只露 2 字符——手写 slice(0,8) 会把短秘密全量打进会话上下文
+				ctxLines.push(`凭据：${credential.username}（${credential.kind}，前缀 ${secretPrefix(credential.secret)}${age === undefined ? "" : `，已用 ${age} 天`}）`);
 				const hint = rotationHint(credential);
 				if (hint !== undefined) ctxLines.push(`⚠ ${hint}`);
 			}

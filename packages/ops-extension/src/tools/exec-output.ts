@@ -27,12 +27,21 @@ export function fmtExecResult(
 		if (lines.length <= 8) return lines.join("\n").trim();
 		return [...lines.slice(0, 5), `…(省略 ${lines.length - 8} 行)…`, ...lines.slice(-3)].join("\n").trim();
 	};
-	const head = clip;
+	// 成功 stdout 同样封顶（工具侧最后一道口子；`docker compose logs` 这类无 --tail 的命令可稳定
+	// 吐出巨量成功输出直达 10 MiB exec 上限）。预算远宽于失败路径：头 100 + 尾 50；
+	// 阈值内原样返回（不吞内部空行，不改变正常输出的形态）。
+	const clipSuccess = (s: string): string => {
+		if (s.split("\n").length <= 200) return s.trim();
+		const kept = s.split("\n").map((l) => l.trimEnd()).filter((l) => l.trim() !== "");
+		if (kept.length <= 200) return kept.join("\n").trim();
+		return [...kept.slice(0, 100), `…(省略 ${kept.length - 150} 行，超工具侧回显上限)…`, ...kept.slice(-50)].join("\n").trim();
+	};
+	const stdoutShown = clipSuccess(stdout);
 	if (result.exitCode !== 0) {
 		const detail = stderr === "" ? stdout : stderr;
-		const top = head(detail);
+		const top = clip(detail);
 		return `exit=${result.exitCode}${top === "" ? "" : `\n${top}`}`;
 	}
-	if (stdout === "") return stderr === "" ? emptyLabel : `(stderr)\n${head(stderr)}`;
-	return stderr === "" ? stdout : `${stdout}\n\n(stderr)\n${head(stderr)}`;
+	if (stdoutShown === "") return stderr === "" ? emptyLabel : `(stderr)\n${clip(stderr)}`;
+	return stderr === "" ? stdoutShown : `${stdoutShown}\n\n(stderr)\n${clip(stderr)}`;
 }

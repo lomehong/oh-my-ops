@@ -23,17 +23,18 @@ describe("wrapBwrap", () => {
 
 describe("SandboxedShell", () => {
 	test("disabled → 直接透传（不包 bwrap）", async () => {
-		const inner = new ShellExec();
+		// spy 只需记录 argv、回固定结果：真跑 `echo` 在 Windows 上无该可执行文件会挂死（bun spawn 语义）
 		let seen: string[] = [];
-		const spy: ShellExec = {
-			exec: async (cmd, options) => {
+		const spy = {
+			exec: async (cmd: string | readonly string[]) => {
 				seen = [...cmd] as string[];
-				return inner.exec(cmd, options);
+				return { stdout: "ok", stderr: "", exitCode: 0, durationMs: 0 };
 			},
-		};
+		} as unknown as ShellExec;
 		const shell = new SandboxedShell(spy, { enabled: false, writableDir: dir }, true);
 		await shell.exec(["echo", "pass"]);
 		expect(seen[0]).toBe("echo");
+		expect(seen).not.toContain("bwrap");
 	});
 
 	test("enabled + bwrap 不可用 → SANDBOX_UNAVAILABLE（fail-closed）", async () => {

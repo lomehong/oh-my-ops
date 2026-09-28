@@ -38,26 +38,38 @@ export function registerWebVerifyTools(pi: ExtensionAPI, ctx: OpsContext, _appro
 				.array(z.object({ name: z.string(), value: z.string(), domain: z.string().optional(), path: z.string().optional(), url: z.string().optional() }))
 				.optional()
 				.describe("登录态注入（SSO/受保护页面）"),
-			screenshotPath: z.string().optional().describe("截图落盘路径（缺省 /tmp/omo-web-verify-<时间戳>.png）"),
-			timeoutMs: z.number().optional().describe("超时（毫秒，缺省 20000）"),
+			screenshotPath: z.string().optional().describe("截图落盘路径（受路径守卫约束，机密/信任根不可写；缺省 /tmp/omo-web-verify-<时间戳>.png）"),
+			timeoutMs: z.number().optional().describe("超时（毫秒，缺省 20000，上限 120000）"),
 			failOnErrors: z.boolean().optional().describe("为 true 时要求无控制台错误/失败请求才判 ok（缺省 false：报错仅作为证据列出）"),
 			cdpUrl: z.string().optional().describe("CDP 端点地址（覆盖 OMO_BROWSER_CDP）"),
 		}),
 		async execute(_toolCallId, params, _signal) {
 			const p = params as Record<string, unknown>;
 			const authz = assertAuthorized("ops_web_verify", p, ctx.authzView);
-			const verdict = await verifyPage({
-				url: String(p.url ?? ""),
-				waitFor: p.waitFor === undefined ? undefined : String(p.waitFor),
-				waitForText: p.waitForText === undefined ? undefined : String(p.waitForText),
-				expectTitle: p.expectTitle === undefined ? undefined : String(p.expectTitle),
-				expectText: p.expectText === undefined ? undefined : String(p.expectText),
-				expectSelector: p.expectSelector === undefined ? undefined : String(p.expectSelector),
-				cookies: Array.isArray(p.cookies) ? (p.cookies as { name: string; value: string; domain?: string; path?: string; url?: string }[]) : undefined,
-				screenshotPath: p.screenshotPath === undefined ? undefined : String(p.screenshotPath),
-				timeoutMs: p.timeoutMs === undefined ? undefined : Number(p.timeoutMs),
-				failOnErrors: p.failOnErrors === true,
-			});
+			// read 档不变量「不落地变更」：截图路径是本工具唯一的落盘点，必须与 file 写工具过同一守卫
+			// （拒机密根/信任根），否则模型可用 PNG 字节覆盖任意可写文件。
+			let screenshotPath: string | undefined;
+			if (p.screenshotPath !== undefined) {
+				screenshotPath = String(p.screenshotPath);
+				ctx.pathGuard.assertWritable(screenshotPath);
+			}
+			const verdict = await verifyPage(
+				{
+					url: String(p.url ?? ""),
+					waitFor: p.waitFor === undefined ? undefined : String(p.waitFor),
+					waitForText: p.waitForText === undefined ? undefined : String(p.waitForText),
+					expectTitle: p.expectTitle === undefined ? undefined : String(p.expectTitle),
+					expectText: p.expectText === undefined ? undefined : String(p.expectText),
+					expectSelector: p.expectSelector === undefined ? undefined : String(p.expectSelector),
+					cookies: Array.isArray(p.cookies) ? (p.cookies as { name: string; value: string; domain?: string; path?: string; url?: string }[]) : undefined,
+					screenshotPath,
+					// 封顶 120s：模型传大值可把会话挂死数十分钟（其余 exec 类工具均有 readTimeoutSec 同款上限）
+					timeoutMs: Math.min(Math.max(Number(p.timeoutMs) || 20_000, 1_000), 120_000),
+					failOnErrors: p.failOnErrors === true,
+				},
+				// cdpUrl 参数此前声明「覆盖 OMO_BROWSER_CDP」但从未被读取（死参数，静默忽略违背诚实失败纪律）
+				{ endpoint: typeof p.cdpUrl === "string" && p.cdpUrl !== "" ? p.cdpUrl : undefined },
+			);
 			return {
 				content: [{ type: "text" as const, text: JSON.stringify(verdict, null, 2) }],
 				details: { authz, ok: verdict.ok, assertions: verdict.assertions.length, failedRequests: verdict.failedRequests.length },
