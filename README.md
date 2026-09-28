@@ -7,13 +7,15 @@
 
 ### 前置条件
 
-- [oh-my-pi](https://github.com/can1357/oh-my-pi) ≥ 18.1.18（含 Bun 运行时）
-- Node.js ≥ 22
+- 一台 Linux（x86_64，glibc ≥ 2.17 即 el7 可用）或 macOS 机器 + `curl`；Windows 控制节点从源码运行（见下）
 - Yuyi Agent Token（可选，用于跨 Agent 通信；没有也能用全部单机运维功能）
+
+> 无需预装 oh-my-pi / Node / Bun —— v4 起安装自包含（bun 与 omp 单文件运行时由安装器布置）。
+> 版本以 GitHub Release tag 为准（仓内 package.json 的 version 是 monorepo 占位，不随发布走）。
 
 ### 安装（自包含：零前置，与原生 omp 零接触）
 
-一行命令（bootstrap 自动多通道回退；进入包内 install.sh 后 bun 自动装到 `~/.omo/bin`、omp 单文件运行时随包携带）：
+一行命令（bootstrap 自动多通道回退；进入包内 install.sh 后 bun 自动装到 `~/.bun/bin`、omp 单文件运行时随包携带）：
 
 ```bash
 for u in "https://cdn.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://fastly.jsdelivr.net/gh/lomehong/oh-my-ops@main/scripts/bootstrap.sh" "https://raw.githubusercontent.com/lomehong/oh-my-ops/main/scripts/bootstrap.sh"; do rm -f /tmp/omo-install.sh; curl -fsSL --retry 3 --connect-timeout 8 "$u" -o /tmp/omo-install.sh && break; done; [ -s /tmp/omo-install.sh ] && grep -q "omo 安装" /tmp/omo-install.sh && bash /tmp/omo-install.sh || echo "✗ bootstrap 下载失败（三源均不可达）：不要沿用 /tmp/omo-install.sh 旧文件，请重试或改用发布包"
@@ -46,17 +48,9 @@ HOME="$HOME" bash /tmp/omo-src/scripts/install.sh --token-file ~/.yuyi/token   #
 OMO_VERSION=v0.7.0 bash /tmp/omo-install.sh --token <yuyi-token>
 ```
 
-开发者从源码安装：
-
-```bash
-git clone https://github.com/lomehong/oh-my-ops.git && cd oh-my-ops
-bash scripts/build-omp-runtime.sh   # 构建 omp-single（需 bun；上游包 sha256 pin）
-bash scripts/install.sh
-```
-
 安装脚本自动完成：
 
-1. 安装私有 bun 到 `~/.omo/bin/`（锁 1.4.x；官方脚本直连 → npmmirror 镜像回退；已装同版本则跳过）
+1. 安装 bun 到 `~/.bun/bin`（锁 1.4.x；官方脚本直连 → npmmirror 镜像回退；已有 bun 则沿用）——标准共享位，不属于 omo 私有域
 2. 布置预编译 omp 单文件运行时到 `~/.omo/runtime/`（品牌内置；构建自 pin 的 oh-my-pi 18.1.18）
 3. 部署 ops-pi 扩展 + Yuyi 适配器到 `~/.omo/extensions/`，脱敏扩展（模型厂商边界双向脱敏）到 `~/.omo/home/.omp/agent/extensions/`（与凭据无关，无 token 也落位）
 4. 创建 `omo` CLI（启动器将 HOME 重定向到 `~/.omo/home`——状态/策略/凭据/会话全部私有，**与原生 omp 及 `~/.omp` 零接触**）
