@@ -56,6 +56,29 @@ export function setSshAcceptNewSupport(value: boolean | undefined): void {
 	acceptNewSupported = value;
 }
 
+/** 降级告警只发一次（进程级）：StrictHostKeyChecking=no 首连不校验指纹，必须让 Owner 知道 */
+let weakHostKeyWarned = false;
+function warnWeakHostKeyOnce(): void {
+	if (weakHostKeyWarned) return;
+	weakHostKeyWarned = true;
+	console.error(
+		"[omo][ssh] 警告：本机 OpenSSH 不支持 StrictHostKeyChecking=accept-new（需 ≥7.6），已回退为 no + 受管 known_hosts ——" +
+			"首次连接不校验主机指纹（存在 MITM 风险，known_hosts 仅记录不校验）。建议升级 OpenSSH 或由 Owner 预置指纹后设 StrictHostKeyChecking=yes。",
+	);
+}
+
+/**
+ * POSIX 单引号引述：把单个 argv 元素转为「远端登录 shell 解析后仍还原为同一参数」的形态。
+ *
+ * 为什么必须：ssh 把 `--` 之后的 argv 用空格拼接成**单一字符串**交给远端登录 shell 重新解析——
+ * 含空格/引号/`;`/`$()`/反引号的元素若不引述，会被远端二次解释（等价命令注入）。
+ * 安全字符集（不含 shell 元字符）外的参数一律包裹单引号，`'` 编码为 `'\''`。
+ */
+export function posixShellQuote(arg: string): string {
+	if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(arg)) return arg;
+	return `'${arg.replaceAll("'", `'\\''`)}'`;
+}
+
 const DEFAULTS = {
 	connectTimeoutSec: 10,
 	controlPersistSec: 600,
@@ -86,7 +109,8 @@ export function normalizeTargetHost(raw: unknown): string | undefined {
  * SshPool —— 基于 OpenSSH ControlMaster 的远程执行通道（P7，§3.2）。
  *
  * 设计：
- *  - 零 npm 依赖：spawn 系统 ssh（argv 数组，无 shell 注入面）。
+ *  - 零 npm 依赖：spawn 系统 ssh（本地侧 argv 数组；远端侧经 posixShellQuote 逐元素引述，
+ *    保证远端 shell 解析后逐字还原为原 argv——ssh 的 `--` 后参数会被远端登录 shell 重新解析，见 wrap()）。
  *  - 连接复用：ControlMaster=auto + ControlPersist，同目标后续执行走多路复用_socket。
  *  - 并发上限：maxSessions 信号量，超出排队（防打爆目标机）。
  *  - 认证：仅密钥（BatchMode），交互式密码永不出现（无人值守安全）。
@@ -145,6 +169,7 @@ export class SshPool {
 		const knownHosts = path.join(this.controlDir, "known_hosts");
 		const supported = this.hostKeySupport ?? sshSupportsAcceptNew();
 		this.hostKeyMode = supported ? "accept-new" : "no+managed-known-hosts";
+		if (!supported) warnWeakHostKeyOnce();
 		this.hostKeyOptions = supported
 			? [`StrictHostKeyChecking=accept-new`, `UserKnownHostsFile=${knownHosts}`]
 			: [`StrictHostKeyChecking=no`, `UserKnownHostsFile=${knownHosts}`];
@@ -153,29 +178,43 @@ export class SshPool {
 
 	/** 当前 host key 策略（可观测：审计/日志用） */
 	hostKeyPolicy(): { mode: "accept-new" | "no+managed-known-hosts"; options: string[] } {
-		return { mode: this.hostKeyMode ?? (this.hostKeyOptionList(), this.hostKeyMode!), options: this.hostKeyOptionList() };
+		const options = this.hostKeyOptionList();
+		return { mode: this.hostKeyMode!, options };
 	}
 
-	/** 把本地 argv 包装为经 ssh 在目标主机执行的 argv（无 shell 注入面：全程 argv 数组） */
+	/**
+	 * 把本地 argv 包装为经 ssh 在目标主机执行的 argv。
+	 *
+	 * 数组形式（推荐）：逐元素 POSIX 引述后合并为**单一**远端命令字符串——远端 shell 解析后
+	 * 逐字还原为原 argv，含空格/引号/`;`/`$()` 的参数不再被二次解释。
+	 * 字符串形式：视为**远端 shell 命令行**原样传递（管道/`&&` 等 shell 语法按调用方书写生效）；
+	 * ssh 通道远端恒经登录 shell，字符串形式没有「无 shell」语义，安全边界在 exec 档位授权。
+	 */
 	wrap(host: string, argv: string | readonly string[]): string[] {
+		normalizeTargetHost(host); // core 层自防：不依赖扩展层纪律（防 "-oProxyCommand=…" 形态选项注入）
 		const dest = this.destination(host);
-		const args = typeof argv === "string" ? argv.trim().split(/\s+/) : [...argv];
-		return ["ssh", ...this.baseOptions().flatMap((o) => ["-o", o]), dest, "--", ...args];
+		const remote = typeof argv === "string" ? argv : argv.map(posixShellQuote).join(" ");
+		return ["ssh", ...this.baseOptions().flatMap((o) => ["-o", o]), dest, "--", remote];
 	}
 
 	/** 在目标主机执行 argv（并发受 maxSessions 限制） */
 	async exec(host: string, argv: string | readonly string[], options: ExecOptions = {}): Promise<ExecResult> {
 		if (this.inFlight >= this.cfg.maxSessions) {
 			await new Promise<void>((resolve) => this.queue.push(resolve));
+			// 槽位由释放者直接移交（唤醒前已递增），此处不再自增：
+			// 否则「唤醒 → 等待者恢复执行」的微任务窗口内新调用者看到已递减的计数，可越过 maxSessions
+		} else {
+			this.inFlight += 1;
 		}
-		this.inFlight += 1;
 		this.destinations.add(this.destination(host));
 		try {
 			return await this.runner.exec(this.wrap(host, argv), options);
 		} finally {
 			this.inFlight -= 1;
-			const next = this.queue.shift();
-			if (next) next();
+			if (this.queue.length > 0 && this.inFlight < this.cfg.maxSessions) {
+				this.inFlight += 1; // 移交槽位给下一个等待者（同步完成，无竞态窗口）
+				this.queue.shift()!();
+			}
 		}
 	}
 

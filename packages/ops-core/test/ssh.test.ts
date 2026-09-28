@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeTargetHost, SshPool } from "../src/ssh.ts";
+import { normalizeTargetHost, posixShellQuote, SshPool } from "../src/ssh.ts";
 import { OpsError } from "../src/errors.ts";
 import type { ExecResult, Runner } from "../src/runner.ts";
 
@@ -58,8 +58,60 @@ describe("normalizeTargetHost", () => {
 	});
 });
 
+describe("posixShellQuote", () => {
+	it("安全字符集原样透传", () => {
+		for (const safe of ["uptime", "-p", "/var/log/app.log", "10.0.0.5", "a_b=c", "%h:%p"]) {
+			assert.equal(posixShellQuote(safe), safe);
+		}
+	});
+	it("含空格/引号/shell 元字符一律单引号包裹，' 编码为 '\\''", () => {
+		assert.equal(posixShellQuote("a b"), `'a b'`);
+		assert.equal(posixShellQuote("it's"), `'it'\\''s'`);
+		assert.equal(posixShellQuote("a;b"), `'a;b'`);
+		assert.equal(posixShellQuote("$(x)"), `'$(x)'`);
+		assert.equal(posixShellQuote("`id`"), "'`id`'");
+		assert.equal(posixShellQuote("a\nb"), "'a\nb'");
+	});
+	/** 迷你 POSIX shell words 解析器：模拟远端登录 shell 对拼接命令串的切词（验证引述往返） */
+	function shellWords(input: string): string[] {
+		const words: string[] = [];
+		let cur = "";
+		let quoted: string | null = null;
+		for (let i = 0; i < input.length; i++) {
+			const c = input[i]!;
+			if (quoted === "'") {
+				if (c === "'") quoted = null;
+				else cur += c;
+			} else if (c === "\\" ) {
+				cur += input[++i] ?? ""; // 引号外的反斜杠转义：下一字符取字面量（'\'' 编码的还原关键）
+			} else if (c === "'") {
+				quoted = "'";
+			} else if (c === " ") {
+				if (cur !== "" || quoted !== null) words.push(cur);
+				cur = "";
+			} else {
+				cur += c;
+			}
+		}
+		if (cur !== "" || quoted !== null) words.push(cur);
+		return words;
+	}
+	it("引述往返：远端 shell 切词后逐字还原原 argv（空格/引号/;$()/反引号）", () => {
+		const cases: string[][] = [
+			["grep", "-rnH", "my pattern", "/var/log"],
+			["sh", "-c", "uptime && free -h | head -3"],
+			["cat", "--", "/tmp/a;b$(whoami)`id`/file"],
+			["stat", "-c", "%s", "--", "/tmp/it's"],
+		];
+		for (const argv of cases) {
+			const remote = argv.map(posixShellQuote).join(" ");
+			assert.deepStrictEqual(shellWords(remote), argv);
+		}
+	});
+});
+
 describe("SshPool", () => {
-	it("wrap：BatchMode/ControlMaster/目标/-- 分隔，argv 原样透传", () => {
+	it("wrap：BatchMode/ControlMaster/目标/-- 分隔，数组形式引述合并为单一远端命令串", () => {
 		const pool = new SshPool({ user: "ops", port: 2222, identityFile: "/k/id" }, new GateRunner(), "/tmp/cp-test");
 		const wrapped = pool.wrap("web-01", ["uptime", "-p"]);
 		assert.equal(wrapped[0], "ssh");
@@ -68,8 +120,30 @@ describe("SshPool", () => {
 		assert.ok(wrapped.some((o) => o.startsWith("IdentityFile=/k/id")));
 		assert.ok(wrapped.some((o) => o.startsWith("Port=2222")));
 		const dd = wrapped.indexOf("--");
-		assert.equal(wrapped[dd + 1], "uptime");
-		assert.equal(wrapped[dd + 2], "-p");
+		assert.equal(wrapped.length, dd + 2, "-- 之后必须只有一个（合并引述的）远端命令串");
+		assert.equal(wrapped[dd + 1], "uptime -p");
+	});
+
+	it("wrap：含 shell 元字符的参数被引述，远端切词后还原（注入回归：; $() 不得逃逸）", () => {
+		const runner = new GateRunner();
+		const pool = new SshPool({}, runner, "/tmp/cp-test-inject");
+		const wrapped = pool.wrap("web-01", ["/tmp; cat /etc/shadow", "a $(pwned) b"]);
+		const dd = wrapped.indexOf("--");
+		assert.equal(wrapped.length, dd + 2, "元字符参数不得拆成多个 ssh 参数");
+		assert.equal(wrapped[dd + 1], `'/tmp; cat /etc/shadow' 'a $(pwned) b'`, "远端 shell 收到的串必须整体在引号内");
+	});
+
+	it("wrap：字符串形式 = 远端 shell 命令行原样传递（不再按空白拆散）", () => {
+		const pool = new SshPool({}, new GateRunner(), "/tmp/cp-test-str");
+		const wrapped = pool.wrap("web-01", "sh -c 'uptime && free -h | head -3'");
+		const dd = wrapped.indexOf("--");
+		assert.equal(wrapped.length, dd + 2);
+		assert.equal(wrapped[dd + 1], "sh -c 'uptime && free -h | head -3'");
+	});
+
+	it("wrap：core 层拒绝选项注入形态主机名（不依赖扩展层纪律）", () => {
+		const pool = new SshPool({}, new GateRunner(), "/tmp/cp-test-host");
+		assert.throws(() => pool.wrap("-oProxyCommand=evil", ["uptime"]), OpsError);
 	});
 
 	it("exec：目标地址与 -- 分隔出现在 runner 收到的 argv 中", async () => {
@@ -79,7 +153,7 @@ describe("SshPool", () => {
 		await drain();
 		const argv = runner.calls[0]!;
 		assert.equal(argv[argv.indexOf("db-01") + 1], "--");
-		assert.equal(argv[argv.indexOf("--") + 1], "df");
+		assert.equal(argv[argv.indexOf("--") + 1], "df -h /");
 		runner.release(1);
 		await pending;
 	});
@@ -100,6 +174,25 @@ describe("SshPool", () => {
 		runner.release(1);
 		await Promise.all(all);
 		assert.ok(runner.maxInFlightSeen <= 2);
+	});
+
+	it("maxSessions 槽位移交：释放后立刻发起新调用也不得越过上限（竞态回归）", async () => {
+		const runner = new GateRunner();
+		const pool = new SshPool({ maxSessions: 2 }, runner, "/tmp/cp-test-race");
+		const first = Array.from({ length: 4 }, () => pool.exec("h", ["echo", "x"]));
+		await drain();
+		assert.equal(runner.calls.length, 2);
+		runner.release(2); // 释放前两个，唤醒队列中的 2 个（槽位移交，inFlight 保持 2）
+		// 在被唤醒者恢复执行**之前**发起新调用——旧实现此处看到已递减的 inFlight 会越过上限
+		const second = Array.from({ length: 2 }, () => pool.exec("h", ["echo", "y"]));
+		await drain();
+		assert.equal(runner.calls.length, 4, "唤醒窗口内的新调用必须排队而非直接入跑");
+		runner.release(4);
+		await drain();
+		assert.equal(runner.calls.length, 6);
+		runner.release(2);
+		await Promise.all([...first, ...second]);
+		assert.ok(runner.maxInFlightSeen <= 2, `在飞数越过上限：${runner.maxInFlightSeen}`);
 	});
 
 	it("closeAll：对每个已知目标发 -O exit", async () => {
