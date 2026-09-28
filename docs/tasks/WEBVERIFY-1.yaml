@@ -1,6 +1,6 @@
 id: 'WEBVERIFY-1'
 title: 'ops_web_verify：部署后浏览器真实验证工具（无头浏览器 + 断言 + 截图 + 控制台/失败请求证据）'
-state: '待确认'
+state: '已落定'
 level: 'read-only(仅访问与截图，不提交表单、不改远端)'
 created: '2026-09-24T07:55:24.747Z'
 accept:
@@ -21,6 +21,10 @@ events:
     op: 'report'
     by: 'omp-architect(omp-docker)'
     note: 'ops_web_verify 已实现并随 v0.15.0 发布：零依赖 CDP 客户端 + verifyPage 编排（cookie 注入/导航/等渲染/等网络空闲/断言/截图/证据采集），工具注册为 read 档并登记 README；端点不可达返回可执行启动指引（docker/本机/远程三选一），不静默降级。'
+  - ts: '2026-09-24T09:21:06.392Z'
+    op: 'confirm'
+    by: 'hz0704027'
+    note: 'omp-docker 会话主人消息「确认；好」（2026-09-24）'
 branch: 'main'
 report:
   summary: 'ops_web_verify 已实现并随 v0.15.0 发布：零依赖 CDP 客户端 + verifyPage 编排（cookie 注入/导航/等渲染/等网络空闲/断言/截图/证据采集），工具注册为 read 档并登记 README；端点不可达返回可执行启动指引（docker/本机/远程三选一），不静默降级。'
@@ -33,3 +37,5 @@ report:
     - '知识回灌：两条工程教训待入 architect-knowledge/practice（已起草，随本轮提交）'
   at: '2026-09-24T08:14:30.674Z'
   by: 'omp-architect(omp-docker)'
+confirmedBy: 'hz0704027'
+confirmedVia: 'omp-docker 会话主人消息「确认；好」（2026-09-24）'
