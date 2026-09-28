@@ -1,0 +1,46 @@
+name: CI
+
+# 日常推送/PR 的远端闸门。此前仅 Release（tag 触发）有远端检查，坏提交只能等到下次打 tag 才暴露；
+# 本地 pre-push 虽跑全量 test:ci，但 OMO_SKIP_HOOKS=1 / GitHub web 直推都可绕过。
+# 步骤与 Release test job 同源，另补 ops-extension 的类型检查（Release 只跑 typecheck:core，
+# bun test 剥类型不查类型，extension 的 TS 类型回归此前在远端全程无人抓）。
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: 测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2   # 与安装器/Release 锁版一致（T3），消除版本分裂
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 安装依赖
+        # --ignore-scripts 是有意的供应链卫生（当前依赖树无必需 install 脚本），勿「修复」掉
+        run: npm install --ignore-scripts
+
+      - name: L1 测试
+        run: npm run test:l1
+
+      - name: L2 测试
+        run: npm run test:l2
+
+      - name: 类型检查（core + extension）
+        run: npm run typecheck
+
+      - name: 台账校验
+        run: |
+          npm run ledger:selftest
+          npm run ledger:validate
