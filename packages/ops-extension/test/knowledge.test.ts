@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { rmTempSync } from "./tmp-cleanup.ts";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -69,7 +70,7 @@ describe("gitSync（工具层包装：本地模式 + 分支纪律）", () => {
 		} finally {
 			if (saved === undefined) delete process.env.YUYI_DEVICE;
 			else process.env.YUYI_DEVICE = saved;
-			fs.rmSync(base, { recursive: true, force: true });
+			rmTempSync(base);
 		}
 	});
 

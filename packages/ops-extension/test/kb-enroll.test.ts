@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { rmTempSync } from "./tmp-cleanup.ts";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -142,8 +143,8 @@ describe("P3 · 凭据自注册端到端（服务真 HTTP + 客户端真兑换�
 		} finally {
 			svc.stop();
 			gitea.stop();
-			fs.rmSync(dir, { recursive: true, force: true });
-			fs.rmSync(omo, { recursive: true, force: true });
+			rmTempSync(dir);
+			rmTempSync(omo);
 		}
 	});
 
@@ -178,8 +179,8 @@ describe("P3 · 凭据自注册端到端（服务真 HTTP + 客户端真兑换�
 		} finally {
 			svc.stop();
 			gitea.stop();
-			fs.rmSync(dir, { recursive: true, force: true });
-			fs.rmSync(omo, { recursive: true, force: true });
+			rmTempSync(dir);
+			rmTempSync(omo);
 		}
 	});
 
@@ -202,8 +203,8 @@ describe("P3 · 凭据自注册端到端（服务真 HTTP + 客户端真兑换�
 		} finally {
 			svc.stop();
 			gitea.stop();
-			fs.rmSync(dir, { recursive: true, force: true });
-			fs.rmSync(omo, { recursive: true, force: true });
+			rmTempSync(dir);
+			rmTempSync(omo);
 		}
 	});
 
@@ -225,7 +226,7 @@ describe("P3 · 凭据自注册端到端（服务真 HTTP + 客户端真兑换�
 			expect(err).toContain("拒绝以明文 HTTP 启动");
 		} finally {
 			gitea.stop();
-			fs.rmSync(dir, { recursive: true, force: true });
+			rmTempSync(dir);
 		}
 	});
 
@@ -244,7 +245,7 @@ describe("P3 · 凭据自注册端到端（服务真 HTTP + 客户端真兑换�
 		} finally {
 			svc.stop();
 			gitea.stop();
-			fs.rmSync(dir, { recursive: true, force: true });
+			rmTempSync(dir);
 		}
 	});
 });

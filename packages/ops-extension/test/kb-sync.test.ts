@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { rmTempSync } from "./tmp-cleanup.ts";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -23,7 +24,7 @@ function fixture(): { bare: string; dirs: { a: string; b: string; coord: string 
 		coord: path.join(base, "coordinator"),
 	};
 	for (const d of Object.values(dirs)) fs.mkdirSync(path.join(d, "knowledge"), { recursive: true });
-	return { bare, dirs, cleanup: () => fs.rmSync(base, { recursive: true, force: true }) };
+	return { bare, dirs, cleanup: () => rmTempSync(base) };
 }
 
 async function initBare(shell: ShellExec, bare: string): Promise<void> {
@@ -65,7 +66,7 @@ describe("KBORG-1：main 有存量 + 本地新知 ⇒ 归并（.122 真机场景
 			expect(living).toContain("KBORG-1 验收");
 			expect(fs.existsSync(path.join(clone, "kborg1-accept.md"))).toBe(false);
 		} finally {
-			fs.rmSync(root, { recursive: true, force: true });
+			rmTempSync(root);
 		}
 	});
 });
@@ -147,7 +148,7 @@ describe("syncKb：分支纪律（真 git + file:// 裸仓）", () => {
 			expect(r.ok).toBe(true);
 			expect(r.actions.join(" ")).toContain("本地模式");
 		} finally {
-			fs.rmSync(dir, { recursive: true, force: true });
+			rmTempSync(dir);
 		}
 	});
 
@@ -159,7 +160,7 @@ describe("syncKb：分支纪律（真 git + file:// 裸仓）", () => {
 			expect(r.ok).toBe(false);
 			expect(String(r.error)).toContain("分支纪律");
 		} finally {
-			fs.rmSync(dir, { recursive: true, force: true });
+			rmTempSync(dir);
 		}
 	});
 });
@@ -180,7 +181,7 @@ describe("kb-credential：凭据落盘与展示纪律", () => {
 			expect(secretPrefix("abcdef1234567890")).toBe("abcdef12…");
 			expect(kbGitCredentialsPath(dir)).toContain(path.join("home", ".git-credentials")); // store canonical 路径（实测）
 		} finally {
-			fs.rmSync(dir, { recursive: true, force: true });
+			rmTempSync(dir);
 		}
 	});
 
@@ -215,7 +216,7 @@ describe("凭据绝不入库（含 kbDir 与 $OMO_DIR/kb 误配的场景）", ()
 			expect(tracked.stdout).not.toContain("state.json");
 			expect(tracked.stdout).not.toContain("git-credentials");
 		} finally {
-			fs.rmSync(base, { recursive: true, force: true });
+			rmTempSync(base);
 		}
 	});
 });
@@ -240,7 +241,7 @@ describe("凭据注入机制（真机实测口径）：credential.helper=store +
 			expect(r.stdout).toContain("username=omo-bot");
 			expect(r.stdout).toContain("password=TOKEN-VALUE-1234");
 		} finally {
-			fs.rmSync(omo, { recursive: true, force: true });
+			rmTempSync(omo);
 		}
 	});
 
@@ -252,7 +253,7 @@ describe("凭据注入机制（真机实测口径）：credential.helper=store +
 			expect(r.ok).toBe(true);
 			expect(r.actions.join(" ")).toContain("本地模式");
 		} finally {
-			fs.rmSync(dir, { recursive: true, force: true });
+			rmTempSync(dir);
 		}
 	});
 });
@@ -266,7 +267,7 @@ describe("凭据文件损坏/旧格式必须大声失败（禁止静默降级为
 			await expect(loadKbCredential(omo)).rejects.toThrow(KbCredentialError);
 			await expect(loadKbCredential(omo)).rejects.toThrow(/旧格式|重新签发/);
 		} finally {
-			fs.rmSync(omo, { recursive: true, force: true });
+			rmTempSync(omo);
 		}
 	});
 
@@ -282,7 +283,7 @@ describe("凭据文件损坏/旧格式必须大声失败（禁止静默降级为
 			fs.writeFileSync(kbCredentialPath(omo), JSON.stringify({ repo: "", username: "u", secret: "s", kind: "password" }), { mode: 0o600 });
 			await expect(loadKbCredential(omo)).rejects.toThrow(/空值/);
 		} finally {
-			fs.rmSync(omo, { recursive: true, force: true });
+			rmTempSync(omo);
 		}
 	});
 });
@@ -301,7 +302,7 @@ describe("凭据轮换后 git store 文件必须刷新（真机教训：旧密�
 			expect(line).not.toContain("pw-v1");
 			expectSecret0600(kbGitCredentialsPath(omo));
 		} finally {
-			fs.rmSync(omo, { recursive: true, force: true });
+			rmTempSync(omo);
 		}
 	});
 });
@@ -345,7 +346,7 @@ describe("★ 同设备名的新克隆：远端已有实例分支时必须能推
 			expect(living.stdout).toContain("from B");
 			// 真机回归：B 的归并不得覆盖 integrate 带下来的 A 小节（曾因缺基底被整文件覆盖）
 		} finally {
-			fs.rmSync(root, { recursive: true, force: true });
+			rmTempSync(root);
 		}
 	});
 });
@@ -388,7 +389,7 @@ describe("★ 已有本地提交但本轮无新改动时，也必须推送（真
 			expect(tree9.stdout).toContain("legacy-main-doc.md"); // 存量文件原地保留（未被归并/移除）
 			expect(stranded.stdout).not.toContain("main 存量");
 		} finally {
-			fs.rmSync(root, { recursive: true, force: true });
+			rmTempSync(root);
 		}
 	});
 });
@@ -430,7 +431,7 @@ describe("★ 回退（设计 §七 Rollback）：disable 后回落本地模式"
 			expect(r.actions.join(" ")).toContain("本地模式");
 			expect(fs.readFileSync(path.join(kb, "keep.md"), "utf8")).toContain("survives");
 		} finally {
-			fs.rmSync(omo, { recursive: true, force: true });
+			rmTempSync(omo);
 		}
 	});
 });
@@ -470,7 +471,7 @@ describe("★ 静默降级防护：曾同步过但凭据缺失必须显式告警
 			expect(out).not.toContain("此前同步过");
 			expect(out).toContain("凭据：bot");
 		} finally {
-			fs.rmSync(omo, { recursive: true, force: true });
+			rmTempSync(omo);
 		}
 	});
 });
