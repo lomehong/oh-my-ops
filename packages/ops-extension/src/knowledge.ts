@@ -19,12 +19,24 @@ export interface KbSearchHit extends KbEntryMeta {
 }
 
 const MAX_BYTES = 256 * 1024;
-/** 清单/检索的单文件读取上限：front-matter 在文件头部，无需为取标题读完整篇（审查 5.2） */
-const HEAD_BYTES = 4 * 1024;
+/** front-matter 起始探测窗口：首读块大小；不够则按需增量读到闭合 `---` 为止 */
+const HEAD_CHUNK = 4 * 1024;
+/** front-matter 硬上限：超过此值视为无 front-matter（防御超长 tags 列表拖垮 list()） */
+const MAX_FRONTMATTER = 64 * 1024;
 /** list/search 返回条目数上限：条目数无界增长时防止撑爆模型上下文 */
 const MAX_ENTRIES = 500;
 /** 单次检索返回上限（模型上下文保护） */
 const MAX_SEARCH_HITS = 200;
+
+/**
+ * front-matter 是否已闭合（读到 `---` 结束行）。
+ * ★ 必须按「闭合」判定而非固定字节数——固定 4KB 会在 tags 列表较长时读到半截 front-matter，
+ *   正则匹配不到闭合标记 ⇒ meta 全丢（标题回退成文件名、tags/时间戳消失），
+ *   这正是为省 I/O 引入 readHead() 时踩到的坑（CI 的 knowledge 用例即栽在这里）。
+ */
+function frontMatterClosed(text: string): boolean {
+	return /^---\n[\s\S]*?\n---\n?/.test(text);
+}
 
 /** slug → 安全文件名（防路径穿越/非法字符） */
 export function slugify(raw: string): string {
@@ -68,17 +80,31 @@ export class KnowledgeStore {
 	}
 
 	/**
-	 * 读文件头（front-matter 所在区域）。
+	 * 读 front-matter（增量读到闭合为止）。
+	 *
 	 * list() 只需 meta（title/tags/时间），无需整篇正文——此前为取标题读完整文件，
 	 * 条目数增长后 list() 线性变慢，而它是 ops_kb_list / ops_kb_search 的高频入口。
+	 *
+	 * 读取策略：分块读，**直到 front-matter 闭合或触达 MAX_FRONTMATTER 上限**才停。
+	 * 固定字节数截断是错的：超长 tags 会让闭合 `---` 落在窗口之外，
+	 * 导致 meta 静默全丢（标题退化成文件名、tags/时间戳消失）。
 	 */
-	private async readHead(file: string): Promise<string> {
+	private async readFrontMatter(file: string): Promise<string> {
 		let handle: fs.FileHandle | undefined;
 		try {
 			handle = await fs.open(path.join(this.kbDir, file), "r");
-			const buf = Buffer.alloc(HEAD_BYTES);
-			const { bytesRead } = await handle.read(buf, 0, HEAD_BYTES, 0);
-			return buf.subarray(0, bytesRead).toString("utf8");
+			const parts: Buffer[] = [];
+			let read = 0;
+			for (;;) {
+				const buf = Buffer.alloc(HEAD_CHUNK);
+				const { bytesRead } = await handle.read(buf, 0, HEAD_CHUNK, read);
+				if (bytesRead === 0) break;
+				parts.push(buf.subarray(0, bytesRead));
+				read += bytesRead;
+				if (frontMatterClosed(Buffer.concat(parts).toString("utf8"))) break;
+				if (read >= MAX_FRONTMATTER) break;
+			}
+			return Buffer.concat(parts).toString("utf8");
 		} catch {
 			return "";
 		} finally {
@@ -91,7 +117,7 @@ export class KnowledgeStore {
 		const out: KbEntryMeta[] = [];
 		for (const f of await this.entryFiles()) {
 			try {
-				const { meta } = parseFrontMatter(await this.readHead(f));
+				const { meta } = parseFrontMatter(await this.readFrontMatter(f));
 				out.push({
 					file: f,
 					slug: f.replace(/\.md$/, ""),

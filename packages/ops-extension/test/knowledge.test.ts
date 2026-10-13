@@ -23,6 +23,30 @@ describe("KnowledgeStore", () => {
 		expect(entry !== undefined && entry.content.includes("不该出现")).toBe(true);
 	});
 
+	// 回归：list() 曾改为「只读文件头固定 4KB」以省I/O，超长 tags 会让闭合 `---`
+	// 落在窗口外 ⇒ 正则匹配失败 ⇒ meta 静默全丢（标题退化成文件名、tags/时间戳消失）。
+	// 修复为「增量读到 front-matter 闭合为止」，此处固化该场景。
+	test("★ front-matter 超长时 list() 仍完整解析（不得因读窗口截断而丢 meta）", async () => {
+		const store = new KnowledgeStore(tmpDir());
+		const manyTags = Array.from({ length: 900 }, (_, i) => `tag${i}`);
+		await store.save("huge-tags", "超长标签标题", "正文内容", manyTags);
+		// 大正文条目：验证增量读取在 front-matter 闭合后即停，不受正文长度影响
+		await store.save("big-body", "大正文标题", "X".repeat(200 * 1024), ["z"]);
+
+		const byslug = new Map((await store.list()).map((m) => [m.slug, m]));
+		const huge = byslug.get("huge-tags")!;
+		expect(huge.title).toBe("超长标签标题"); // 未退化为文件名
+		expect(huge.tags.length).toBe(900);
+		expect(huge.createdAt).not.toBe("");
+		const big = byslug.get("big-body")!;
+		expect(big.title).toBe("大正文标题");
+		expect(big.tags).toEqual(["z"]);
+
+		const hits = await store.search("超长", 5);
+		expect(hits.length).toBe(1);
+		expect(hits[0]!.title).toBe("超长标签标题");
+	});
+
 	test("save 覆盖保留 createdAt；search 命中标题/标签/正文", async () => {
 		const store = new KnowledgeStore(tmpDir());
 		const first = await store.save("disk-full", "磁盘满处置", "现象：/ 使用率 100%。处置：log-rotate。", ["disk"]);
