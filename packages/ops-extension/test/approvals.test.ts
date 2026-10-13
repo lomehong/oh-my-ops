@@ -10,6 +10,7 @@ import {
 	tierFor,
 	requiresOwnerAuth,
 	getRegisteredOpsToolDefs,
+	restoreRegisteredDefs,
 } from "../src/approvals.ts";
 import { policyRequestFor } from "../src/request.ts";
 
@@ -202,7 +203,12 @@ describe("buildCapabilityLists（提示词 = TIER_TABLE 零漂移）", () => {
 	});
 
 	test("registry 对账：注册清单键集 === TIER_TABLE 键集（清单/提示词/注册三方一致）", () => {
+		// REGISTERED_DEFS 是模块级全局：同进程内其他测试文件注册的工具（如脱敏还原探针
+		// ops_probe_restore）会残留其中，使本断言多出键而失败——是否失败取决于 bun 的文件
+		// 调度顺序，属顺序依赖型 flaky。此处断言前先清空，registerAll 重新填入，
+		// 使断言只反映「本次注册 vs 档位表」，与外部残留无关。
 		const pi = new FakePi();
+		restoreRegisteredDefs(new Map());
 		registerAll(pi);
 		expect([...getRegisteredOpsToolDefs().keys()].sort()).toEqual(Object.keys(TIER_TABLE).sort());
 	});

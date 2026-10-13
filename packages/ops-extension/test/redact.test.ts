@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -22,7 +22,7 @@ import {
 	restoreText,
 	saveStateSync,
 } from "@ops-pi/core";
-import { registerOpsTool } from "../src/approvals.ts";
+import { registerOpsTool, restoreRegisteredDefs, snapshotRegisteredDefs } from "../src/approvals.ts";
 import { loadRedactConfig, redactPaths, restoreToolInput, setupRedact } from "../src/redact.ts";
 import { OpsContext } from "../src/context.ts";
 import { registerReadOnlyTools } from "../src/tools/read-only.ts";
@@ -307,6 +307,17 @@ function makeCtx(omo: string): OpsContext {
 }
 
 describe("脱敏装配：出站掩码 + 工具层还原（保证生效）", () => {
+	// REGISTERED_DEFS 是模块级全局：本文件注册的还原探针 ops_probe_restore 会残留其中，
+	// 同进程内随后运行的 approvals「registry 对账」用例会因多出的探针而失败
+	//（是否失败取决于 bun 的文件调度顺序 → 顺序依赖型 flaky）。此处快照/恢复做显式隔离。
+	let defsSnapshot: ReadonlyMap<string, unknown>;
+	beforeAll(() => {
+		defsSnapshot = snapshotRegisteredDefs();
+	});
+	afterAll(() => {
+		restoreRegisteredDefs(defsSnapshot as never);
+	});
+
 	test("★ 出站把真实值换成占位符；工具层把占位符还原为真实值；未启用零干预", async () => {
 		const omo = fs.mkdtempSync(path.join(os.tmpdir(), "omo-redact-wire-"));
 		try {

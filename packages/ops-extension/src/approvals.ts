@@ -104,6 +104,27 @@ export function getRegisteredOpsToolDefs(): ReadonlyMap<string, ToolDefinition> 
 }
 
 /**
+ * 注册清单的快照/恢复（**仅供测试隔离**）。
+ *
+ * REGISTERED_DEFS 是模块级状态：任何经registerOpsTool 注册的工具都会进入该 Map。
+ * 测试若注册探针工具（如脱敏还原探针 ops_probe_restore），会**残留**在全局 Map 中；
+ * 同进程内随后执行的「registry 对账」用例（断言键集 === TIER_TABLE 键集）就会因
+ * 多出的探针而失败——且是否失败取决于 bun 的文件调度顺序，属典型的顺序依赖型 flaky。
+ *
+ * 修法不是调整执行顺序（那是掩盖），而是给用例一个显式的隔离手段：
+ * beforeEach 快照、afterEach 恢复，使每个用例只看到自己注册的内容。
+ */
+export function snapshotRegisteredDefs(): ReadonlyMap<string, ToolDefinition> {
+	return new Map(REGISTERED_DEFS);
+}
+
+/** 恢复注册清单到给定快照（测试 teardown 用；生产路径不调用） */
+export function restoreRegisteredDefs(snapshot: ReadonlyMap<string, ToolDefinition>): void {
+	REGISTERED_DEFS.clear();
+	for (const [name, def] of snapshot) REGISTERED_DEFS.set(name, def);
+}
+
+/**
  * 工具注册统一入口（方案 §7.3）。
  * ★ 直接使用宿主 ToolDefinition，不造平行类型；★ 强制 loadMode/approval/前缀（fail-fast）。
  */
