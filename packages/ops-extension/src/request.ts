@@ -13,6 +13,16 @@ export const POLICY_ACTIONS: ActionVocabulary = {
 };
 
 /**
+ * compose 的 service 维度：仅在调用方**显式给出** file 时并入「目录#文件名」，
+ * 否则保持裸 projectDir —— 未指定 file（走 docker-compose.yml 缺省）的既有 policy 规则语义不变。
+ */
+function composeService(projectDir: string | undefined, file: string | undefined): string | undefined {
+	if (projectDir === undefined) return undefined;
+	if (file === undefined) return projectDir;
+	return `${projectDir}#${file}`;
+}
+
+/**
  * 工具入参 → PolicyRequest 统一映射（单一事实源）。
  * ①-a 审批层 / ①-b 兜底层 / ③ execute 复核层共用：三层看到的 request 必须逐字段一致，
  * 否则就会出现「审批层看到的与 execute 执行的不是一个目标」（方向① 伪造间隙）。
@@ -43,7 +53,11 @@ export function policyRequestFor(toolName: string, input: unknown): PolicyReques
 		case "ops_docker_exec":
 			return { host, service: str("container"), action: "exec", command: str("command") };
 		case "ops_docker_compose":
-			return { host, service: str("projectDir"), action: str("action") };
+			// ★ file 纳入 service 维度（审查 3.3）：策略此前只覆盖 projectDir，
+			//   文件名可穿越到授权目录之外。现以「目录#文件名」整体作为 service 维度，
+			//   Owner 需精确授权到具体 compose 文件；不带 file 参数的调用仍走原 projectDir 规则。
+			//   （与项目既有 "kind/name" 复合维度（ops_k8s_rollout）同风格）
+			return { host, service: composeService(str("projectDir"), str("file")), action: str("action") };
 
 		// K8s：Pod 名作为 service 维度
 		case "ops_k8s_exec":

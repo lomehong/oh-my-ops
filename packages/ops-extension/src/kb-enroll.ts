@@ -108,6 +108,20 @@ export async function readCodeFile(file: string): Promise<string> {
 	return (await fs.readFile(file, "utf8")).trim();
 }
 
+/**
+ * 构造「跳过 TLS 校验」的 undici Agent（仅绑定到本次 fetch）。
+ * undici 不可用（bun 原生 fetch / 老 Node）→ 返回 undefined，由调用方回退到进程级开关 + 立即恢复。
+ */
+function insecureDispatcher(): unknown {
+	try {
+		const undici = (globalThis as { Agent?: new (o: unknown) => unknown }).Agent;
+		if (typeof undici !== "function") return undefined;
+		return new undici({ connect: { rejectUnauthorized: false } });
+	} catch {
+		return undefined;
+	}
+}
+
 function failMessageFor(status: number, body: { error?: string }): string {
 	switch (status) {
 		case 400:
@@ -137,18 +151,31 @@ export async function enroll(opts: EnrollOptions, omoDir: string): Promise<Enrol
 	if (url.startsWith("http://") && opts.allowInsecureHttp !== true) {
 		throw new Error("拒绝以明文 HTTP 兑换凭据（会经网络明文传输）：服务请配 TLS，或显式 --allow-insecure-http（仅限受信内网）");
 	}
-	if (opts.allowInsecureTls === true) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 	let res: Response;
+	// ★ 跳过 TLS 校验必须**限定在本次请求**：此前写 process.env.NODE_TLS_REJECT_UNAUTHORIZED="0"
+	//   会污染整个进程的后续所有 HTTPS（含 KB 同步的凭据交换），且无恢复机制。
+	//   现用 undici Agent 绑定到单次 fetch 的 dispatcher；非 undici 运行时（bun 原生 fetch）
+	//   回退为「设置后立即恢复」，作用域收敛到本函数执行期。
+	const dispatcher = opts.allowInsecureTls === true ? insecureDispatcher() : undefined;
+	const prevTlsEnv = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+	if (dispatcher === undefined && opts.allowInsecureTls === true) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 	try {
-		res = await fetch(url, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ code: opts.code, device: opts.device, agent_id: opts.agentId }),
-			signal: AbortSignal.timeout(opts.timeoutMs ?? 20_000),
-		});
-	} catch (err) {
-		throw new Error(`无法连接自注册服务（${opts.server}）：${String((err as Error)?.message ?? err)}`);
+		try {
+			res = await fetch(url, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ code: opts.code, device: opts.device, agent_id: opts.agentId }),
+				signal: AbortSignal.timeout(opts.timeoutMs ?? 20_000),
+				...(dispatcher !== undefined ? { dispatcher } : {}),
+			} as RequestInit & { dispatcher?: unknown });
+		} catch (err) {
+			throw new Error(`无法连接自注册服务（${opts.server}）：${String((err as Error)?.message ?? err)}`);
+		}
+	} finally {
+		// 恢复进程级开关：不得让「一次性自签证书信任」泄漏到后续请求
+		if (prevTlsEnv === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+		else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTlsEnv;
 	}
 	let body: { ok?: boolean; op?: string; credential?: KbCredential; revoked?: boolean; error?: string } = {};
 	try {

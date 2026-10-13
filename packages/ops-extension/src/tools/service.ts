@@ -1,4 +1,4 @@
-import { LOCAL_HOST, normalizeTargetHost } from "@ops-pi/core";
+import { LOCAL_HOST, assertSafeIdentifier, normalizeTargetHost } from "@ops-pi/core";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { ApprovalFn } from "../approvals.ts";
 import { registerOpsTool } from "../approvals.ts";
@@ -33,7 +33,10 @@ export function registerServiceTools(pi: ExtensionAPI, ctx: OpsContext, approval
 		}),
 		async execute(_toolCallId, params, signal) {
 			const p = params as Record<string, unknown>;
-			const service = String(p.service ?? "");
+			// ★ argv 收口：service 来自模型入参，以 '-' 开头会被 systemctl 解析为选项
+			//   （service="--all" ⇒ `systemctl restart --all`，破坏范围扩大到全机服务）。
+			//   策略只校验了 service 字符串本身，**不覆盖**旗标形态——必须在执行前收口。
+			const service = assertSafeIdentifier("systemdUnit", String(p.service ?? ""));
 			const action = String(p.action ?? "status");
 
 			// host 规范化：@local/空 → 本机；真实主机名 → SshPool 远程通道
@@ -43,9 +46,10 @@ export function registerServiceTools(pi: ExtensionAPI, ctx: OpsContext, approval
 			// ③ 权威复核：policyRequestFor 统一映射（host, service, action），独立重算，不看 approval 判定结果
 			const authz = assertAuthorized("ops_service", { host, service, action, command: `systemctl ${action} ${service}` }, ctx.authzView);
 
+			// `--` 结束选项解析（双保险：标识符已白名单校验，此处再挡住任何以 '-' 开头的形态）
 			if (action === "status") {
 				const result = await ops.shell.exec(
-					["systemctl", "status", service, "--no-pager", "-l"],
+					["systemctl", "--no-pager", "-l", "status", "--", service],
 					{ signal, timeoutMs: 10_000 },
 				);
 				return {
@@ -54,9 +58,9 @@ export function registerServiceTools(pi: ExtensionAPI, ctx: OpsContext, approval
 				};
 			}
 
-			// 变更类操作：systemctl <action> <service>
+			// 变更类操作：systemctl <action> -- <service>
 			const result = await ops.shell.exec(
-				["systemctl", action, service],
+				["systemctl", action, "--", service],
 				{ signal, timeoutMs: 30_000 },
 			);
 			return {

@@ -19,6 +19,12 @@ export interface KbSearchHit extends KbEntryMeta {
 }
 
 const MAX_BYTES = 256 * 1024;
+/** 清单/检索的单文件读取上限：front-matter 在文件头部，无需为取标题读完整篇（审查 5.2） */
+const HEAD_BYTES = 4 * 1024;
+/** list/search 返回条目数上限：条目数无界增长时防止撑爆模型上下文 */
+const MAX_ENTRIES = 500;
+/** 单次检索返回上限（模型上下文保护） */
+const MAX_SEARCH_HITS = 200;
 
 /** slug → 安全文件名（防路径穿越/非法字符） */
 export function slugify(raw: string): string {
@@ -52,14 +58,40 @@ export class KnowledgeStore {
 		await fs.mkdir(this.kbDir, { recursive: true });
 	}
 
+	/** 知识库内的 .md 文件名（已排序、已限量）；子目录的域活档案不在清单范围内 */
+	private async entryFiles(): Promise<string[]> {
+		const names = (await fs.readdir(this.kbDir).catch(() => [] as string[]))
+			.filter((f) => f.endsWith(".md") && !f.startsWith("."))
+			.sort()
+			.slice(0, MAX_ENTRIES);
+		return names;
+	}
+
+	/**
+	 * 读文件头（front-matter 所在区域）。
+	 * list() 只需 meta（title/tags/时间），无需整篇正文——此前为取标题读完整文件，
+	 * 条目数增长后 list() 线性变慢，而它是 ops_kb_list / ops_kb_search 的高频入口。
+	 */
+	private async readHead(file: string): Promise<string> {
+		let handle: fs.FileHandle | undefined;
+		try {
+			handle = await fs.open(path.join(this.kbDir, file), "r");
+			const buf = Buffer.alloc(HEAD_BYTES);
+			const { bytesRead } = await handle.read(buf, 0, HEAD_BYTES, 0);
+			return buf.subarray(0, bytesRead).toString("utf8");
+		} catch {
+			return "";
+		} finally {
+			await handle?.close().catch(() => undefined);
+		}
+	}
+
 	async list(): Promise<KbEntryMeta[]> {
 		await this.ensureDir();
 		const out: KbEntryMeta[] = [];
-		for (const f of (await fs.readdir(this.kbDir)).sort()) {
-			if (!f.endsWith(".md")) continue;
+		for (const f of await this.entryFiles()) {
 			try {
-				const text = await fs.readFile(path.join(this.kbDir, f), "utf8");
-				const { meta } = parseFrontMatter(text);
+				const { meta } = parseFrontMatter(await this.readHead(f));
 				out.push({
 					file: f,
 					slug: f.replace(/\.md$/, ""),
@@ -111,22 +143,39 @@ export class KnowledgeStore {
 		};
 	}
 
-	/** 大小写不敏感检索：命中标题或正文行，返回命中行（上限防刷屏） */
+	/**
+	 * 大小写不敏感检索：命中标题或正文行，返回命中行（上限防刷屏）。
+	 *
+	 * 实现说明（审查 5.1）：此前先 list() 再对每个条目 read() —— 同一文件被读两遍（N 个条目 2N 次 I/O），
+	 * 且 list() 内又各读一次全文，实际 3N 次。现改为**单次遍历**：枚举文件 → 读一次 → 同时产出 meta 与命中，
+	 * 命中数达 limit 即停（避免无谓读完全库）。
+	 */
 	async search(query: string, limit = 20): Promise<KbSearchHit[]> {
 		const q = query.trim().toLowerCase();
 		if (q === "") return [];
+		// limit 夹取：NaN/≤0 会让 `hits.length >= limit` 恒真（空结果），负数同理
+		const capped = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), MAX_SEARCH_HITS) : 20;
+		await this.ensureDir();
 		const hits: KbSearchHit[] = [];
-		for (const meta of await this.list()) {
-			const entry = await this.read(meta.slug);
-			if (entry === undefined) continue;
-			const haystack = `${entry.title}\n${entry.tags.join(" ")}\n${entry.content}`.toLowerCase();
+		for (const f of await this.entryFiles()) {
+			if (hits.length >= capped) break;
+			const text = await fs.readFile(path.join(this.kbDir, f), "utf8").catch(() => undefined);
+			if (text === undefined) continue;
+			const { meta, body } = parseFrontMatter(text);
+			const haystack = `${meta.title ?? ""}\n${meta.tags ?? ""}\n${body}`.toLowerCase();
 			if (!haystack.includes(q)) continue;
-			const matchedLines = entry.content
-				.split("\n")
-				.filter((l) => l.toLowerCase().includes(q))
-				.slice(0, 5);
-			hits.push({ ...meta, matchedLines });
-			if (hits.length >= limit) break;
+			hits.push({
+				file: f,
+				slug: f.replace(/\.md$/, ""),
+				title: meta.title ?? f.replace(/\.md$/, ""),
+				tags: meta.tags ? meta.tags.split(",").map((x) => x.trim()).filter(Boolean) : [],
+				createdAt: meta.created ?? "",
+				updatedAt: meta.updated ?? "",
+				matchedLines: body
+					.split("\n")
+					.filter((l) => l.toLowerCase().includes(q))
+					.slice(0, 5),
+			});
 		}
 		return hits;
 	}

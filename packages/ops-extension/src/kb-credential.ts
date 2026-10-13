@@ -164,9 +164,27 @@ export function daysUntilExpiry(expiresAt?: string, nowMs: number = Date.now()):
 	return Math.floor((t - nowMs) / 86_400_000);
 }
 
-/** 脱敏 URL（去掉可能内嵌的 user:token@），用于任何输出 */
+/**
+ * 脱敏 URL（去掉内嵌的 user:secret@），用于任何输出。
+ *
+ * 实现要点：此前用 `/\/\/[^/@]*@/` —— 该模式在**遇到第一个 `@` 即停**，若秘密本体含未编码的 `@`
+ * （如 `p@ss`），userinfo 会被截断在 `user:p` 处，**残留 `ss@host` 泄露半个密码**。
+ * 现改为：userinfo 是 `userinfo@host` 中 host 之前、最后一个 `@` 之前的**全部内容**——
+ * 取最后一个 `@` 才是正确边界（host 本身不会含 @）。
+ */
 export function redactUrl(url: string): string {
-	return url.replace(/\/\/[^/@]*@/, "//");
+	try {
+		const u = new URL(url);
+		if (u.username === "" && u.password === "") return url;
+		u.username = "";
+		u.password = "";
+		// URL 序列化会把 `//` 规范化回来：https://host/path
+		return u.toString();
+	} catch {
+		// 非绝对 URL（如 scp 形态 git@host:path）：按最后一个 @ 切分 userinfo
+		const m = /^([A-Za-z][A-Za-z0-9+.-]*:\/\/)(.*)@([^/]*)(.*)$/.exec(url);
+		return m === null ? url : `${m[1]}//${m[3]}${m[4]}`;
+	}
 }
 
 export async function loadKbState(omoDir: string): Promise<KbSyncState | undefined> {

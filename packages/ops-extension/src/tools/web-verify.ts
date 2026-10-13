@@ -5,6 +5,7 @@ import { registerOpsTool } from "../approvals.ts";
 import { assertAuthorized } from "../guards.ts";
 import type { OpsContext } from "../context.ts";
 import { verifyPage } from "../web/verify.ts";
+import { assertVerifiableUrl } from "../web/url-guard.ts";
 
 /**
  * ops_web_verify —— 部署后用「真实无头浏览器」验证 web 系统（read-only：只访问与截图，不提交表单、不改远端）。
@@ -26,7 +27,9 @@ export function registerWebVerifyTools(pi: ExtensionAPI, ctx: OpsContext, _appro
 		description:
 			"用无头浏览器真实访问 URL 并验证：截图 + 断言（标题/文本/选择器，支持等待 SPA 渲染）+ 控制台错误 + 失败请求。" +
 			"部署 web 系统后必须执行（这是交付与验收的唯一真相）；也用于排查'页面空白/跳转异常/接口 404'。" +
-			"受保护页面可注入 cookie 复用登录态。需要无头浏览器 CDP 端点（OMO_BROWSER_CDP，缺省 127.0.0.1:9222）。",
+			"受保护页面可注入 cookie 复用登录态（cookie 值只由 Owner 主动提供，不得从日志/页面内容里抄——那是凭据外泄路径）。" +
+			"需要无头浏览器 CDP 端点（OMO_BROWSER_CDP，缺省 127.0.0.1:9222）。" +
+			"安全边界：拒绝云元数据端点（169.254.169.254 等）与非 http(s) 协议；内网地址可用（属预期用途）。",
 		parameters: z.object({
 			url: z.string().describe("要访问的 URL（含协议，如 http://127.0.0.1:5173/ 或 https://svc.internal/app）"),
 			waitFor: z.string().optional().describe("等待该 CSS 选择器出现（SPA 必需，如 '#rows'）"),
@@ -53,6 +56,10 @@ export function registerWebVerifyTools(pi: ExtensionAPI, ctx: OpsContext, _appro
 				screenshotPath = String(p.screenshotPath);
 				ctx.pathGuard.assertWritable(screenshotPath);
 			}
+			// ★ 出站目标校验（审查 4.5）：read 档工具可导航任意 URL ⇒ SSRF 面。
+			//   阻断云元数据端点（169.254.169.254 等，挂 IAM 临时凭据）与非 http(s) 协议；
+			//   内网地址放行（验证内部系统是本工具的核心用例）但记 note 供审计可见。
+			const urlGuard = assertVerifiableUrl(String(p.url ?? ""));
 			const verdict = await verifyPage(
 				{
 					url: String(p.url ?? ""),
@@ -72,7 +79,13 @@ export function registerWebVerifyTools(pi: ExtensionAPI, ctx: OpsContext, _appro
 			);
 			return {
 				content: [{ type: "text" as const, text: JSON.stringify(verdict, null, 2) }],
-				details: { authz, ok: verdict.ok, assertions: verdict.assertions.length, failedRequests: verdict.failedRequests.length },
+				details: {
+					authz,
+					ok: verdict.ok,
+					assertions: verdict.assertions.length,
+					failedRequests: verdict.failedRequests.length,
+					...(urlGuard.note !== undefined ? { targetNote: urlGuard.note } : {}),
+				},
 			};
 		},
 	});

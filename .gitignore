@@ -32,3 +32,6 @@ ops-kb-registry.json
 
 # Graphify 图谱产物（本机构建物；图谱是发现辅助，不入库）
 graphify-out/
+
+# AI 助手会话记忆（本机工作数据，非项目代码；勿删但不入库）
+.workbuddy/

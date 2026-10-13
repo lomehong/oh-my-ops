@@ -3,6 +3,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { OpsContext } from "./context.ts";
 import { buildCapabilityLists } from "./approvals.ts";
 import { probeBwrap } from "./sandbox.ts";
+import { healthProbeScript } from "./tools/read-only.ts";
 import { FILE_SCOPE_NOTE, formatAuditReport, parseAuditLimit, toAuditViews } from "./audit-view.ts";
 import { recordAudit, recordsToViews } from "./audit-sink.ts";
 import { explainAuthorization, formatExplain, formatLint, parseExplainArgs, runPolicyLint } from "./policy-explain.ts";
@@ -78,13 +79,7 @@ export function registerOpsCommands(pi: ExtensionAPI, ctx: OpsContext): void {
 			}
 			const ops = ctx.forHost(host === LOCAL_HOST ? undefined : host);
 			cmdCtx.ui.notify(`开始巡检（${host}）…`, "info");
-			const commands = [
-				"echo '=== CPU ===' && uptime",
-				"echo '=== MEMORY ===' && free -h | head -3",
-				"echo '=== DISK ===' && df -h / | tail -1",
-				"echo '=== TOP ===' && ps aux --sort=-%cpu | head -6",
-			].join(" && ");
-			const result = await ops.shell.exec(["sh", "-c", commands], { timeoutMs: 30_000 });
+			const result = await ops.shell.exec(["sh", "-c", healthProbeScript("full")], { timeoutMs: 30_000 });
 			cmdCtx.ui.notify(`巡检完成（${host}）\n${result.stdout}`, result.exitCode === 0 ? "info" : "error");
 			// 只读命令自落审计（命令路径不产生 tool_execution_end，§7.7）；host 记录真实目标
 			recordAudit(pi, ctx, { tool: "ops-inspect", host, isError: result.exitCode !== 0, ts: new Date().toISOString(), authz: "read" });
@@ -94,7 +89,7 @@ export function registerOpsCommands(pi: ExtensionAPI, ctx: OpsContext): void {
 	pi.registerCommand("ops-health", {
 		description: "快速健康检查（只读，本机）",
 		handler: async (_args, cmdCtx) => {
-			const result = await ctx.shell.exec(["sh", "-c", "uptime && free -h | head -3 && df -h / | tail -1"], { timeoutMs: 15_000 });
+			const result = await ctx.shell.exec(["sh", "-c", healthProbeScript("slim")], { timeoutMs: 15_000 });
 			cmdCtx.ui.notify(`健康状态：\n${result.stdout}`, result.exitCode === 0 ? "info" : "error");
 			recordAudit(pi, ctx, { tool: "ops-health", host: LOCAL_HOST, isError: result.exitCode !== 0, ts: new Date().toISOString(), authz: "read" });
 		},
@@ -108,7 +103,8 @@ export function registerOpsCommands(pi: ExtensionAPI, ctx: OpsContext): void {
 				`策略配置：${ctx.targetPolicy.isConfigured ? "✓ 已加载" : "✗ 未配置（变更类操作全拒）"}`,
 				`沙箱：${process.env.OPS_PI_SANDBOX === "1" ? (probeBwrap() ? "✓ 已启用（bubblewrap）" : "✗ 已启用但 bwrap 不可用（本地 shell 将 fail-closed 拒绝）") : "⚠ 未启用（进程级隔离）"}`,
 				`Vault：${ctx.config?.vault?.dbPath ? "✓ 已配置" : "✗ 未配置"}`,
-				`独立审计：${ctx.audit.path}（${chain.ok ? `✓ 链完整，${chain.count} 条` : `✗ 第 ${chain.brokenAt} 行断链：${chain.reason}`}${ctx.audit.lastError ? `；最近写入失败：${ctx.audit.lastError}` : ""}）`,
+				`批准令牌：${ctx.tokens.lastConsumeError === undefined ? "（无消费失败）" : `⚠ 最近消费写盘失败：${ctx.tokens.lastConsumeError}——该令牌在本进程内已失效，但跨会话仍可重放，请检查目录权限`}`,
+				`独立审计：${ctx.audit.path}（${chain.ok ? `✓ 链完整，${chain.count} 条` : `✗ 第 ${chain.brokenAt} 行断链：${chain.reason}`}${ctx.audit.lastError === undefined ? "" : `；⚠ 最近写入失败（${ctx.audit.lastErrorAt ?? "时间未知"}）：${ctx.audit.lastError}`}）`,
 			];
 			cmdCtx.ui.notify(`omo 状态：\n${parts.join("\n")}`, "info");
 		},

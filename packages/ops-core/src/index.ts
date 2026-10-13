@@ -27,6 +27,8 @@ export { AuditLog, AUDIT_GENESIS, hashRecord } from "./audit.ts";
 export type { AuditData, AuditRecord, AuditVerifyResult } from "./audit.ts";
 export { PathGuard, realize } from "./path-guard.ts";
 export type { PathGuardRoots } from "./path-guard.ts";
+export { assertSafeIdentifier, assertNoFlagLike, safeRelativePath, clampNumeric, IDENTIFIER_KINDS } from "./argv-safety.ts";
+export type { IdentifierKind, IdentifierKindName } from "./argv-safety.ts";
 
 export {
 	isPlaceholderShape,

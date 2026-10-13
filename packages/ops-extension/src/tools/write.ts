@@ -45,7 +45,10 @@ export function registerWriteTools(pi: ExtensionAPI, ctx: OpsContext, vault: Cre
 			if (pathVal === "") throw new Error("[INTERNAL] 缺少 path");
 
 			// ③ 权威复核：host 透传进策略维度（action='file-write'，P11 显式授权）
-			const authz = assertAuthorized("ops_file_write", { path: pathVal, host: host ?? LOCAL_HOST }, ctx.authzView);
+			// 注意：path **不参与**策略匹配——授权的是「对该 host 写文件」这一能力，
+			// 具体路径的信任根/机密根边界由下方 pathGuard.assertWritable 独立把关。
+			// 故此处只传 host，避免让 path 出现在授权入参里造成误解。
+			const authz = assertAuthorized("ops_file_write", { host: host ?? LOCAL_HOST }, ctx.authzView);
 			// 信任根/机密根不可写（仅本机）：file-write 授权不得用于改写 policy/token/config/审计/安装域——否则等价于自授权
 			if (host === undefined) ctx.pathGuard.assertWritable(pathVal);
 

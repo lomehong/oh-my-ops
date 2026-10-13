@@ -44,3 +44,13 @@ jobs:
         run: |
           npm run ledger:selftest
           npm run ledger:validate
+
+      # 供应链完整性：vendor 内置适配器必须与仓库内的 sha256 清单一致。
+      # 这是发布物可信链的最后一环——安装器落盘前会校验同一份清单，
+      # 但此前只有本地 test:ci 会跑，被 web 直推 / OMO_SKIP_HOOKS 绕过时无人拦截。
+      #
+      # 注：probe-install-ops-core.sh 会执行完整安装流程（含下载 bun 运行时），
+      # 网络波动会让 CI 出现与代码无关的红，故此处不纳入；安装器回归仍由
+      # test:ci / Release workflow 覆盖（发布前必跑，见 release.yml）。
+      - name: vendor 完整性校验
+        run: npm run test:vendor-integrity

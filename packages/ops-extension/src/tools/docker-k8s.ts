@@ -1,4 +1,4 @@
-import { LOCAL_HOST, normalizeTargetHost, READ } from "@ops-pi/core";
+import { LOCAL_HOST, assertSafeIdentifier, clampNumeric, normalizeTargetHost, READ, safeRelativePath } from "@ops-pi/core";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { ApprovalFn } from "../approvals.ts";
 import { registerOpsTool } from "../approvals.ts";
@@ -7,14 +7,21 @@ import { fmtExecResult } from "./exec-output.ts";
 import { policyRequestFor } from "../request.ts";
 import type { OpsContext } from "../context.ts";
 
-/** P3：Docker 工具——统一走 docker CLI over ShellExec（不挂生产 docker.sock，方案 §3.5/§7.1） */
-export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval: (name: string) => ApprovalFn): void {
-	const z = pi.zod;
-	/** host 参数 → 能力束（P7 远程路由）；details 统一带真实 host 供审计 */
-	const route = (raw: unknown) => {
+/** host 参数 → 能力束（P7 远程路由）；details 统一带真实 host 供审计 */
+type HostRouter = (raw: unknown) => { ops: ReturnType<OpsContext["forHost"]>; host: string };
+
+/** 两个注册函数共用的路由构造（此前两处重复定义，逐字相同） */
+function makeHostRouter(ctx: OpsContext): HostRouter {
+	return (raw: unknown) => {
 		const host = normalizeTargetHost(typeof raw === "string" ? raw : undefined) ?? LOCAL_HOST;
 		return { ops: ctx.forHost(host === LOCAL_HOST ? undefined : host), host };
 	};
+}
+
+/** P3：Docker 工具——统一走 docker CLI over ShellExec（不挂生产 docker.sock，方案 §3.5/§7.1） */
+export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval: (name: string) => ApprovalFn): void {
+	const z = pi.zod;
+	const route = makeHostRouter(ctx);
 
 	registerOpsTool(pi, {
 		name: "ops_docker_ps",
@@ -50,12 +57,13 @@ export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval:
 		}),
 		async execute(_id, params, signal) {
 			const p = params as Record<string, unknown>;
-			const container = String(p.container ?? "");
-			const lines = Math.min(Number(p.lines ?? 100), 5000);
-			if (!container) throw new Error("[INTERNAL] 缺少 container");
+			// argv 收口：容器名以 '-' 开头会被 docker 解析为选项（如 --privileged）
+			const container = assertSafeIdentifier("dockerContainer", String(p.container ?? ""));
+			// 行数夹取：非有限数/≤0 回落缺省，避免 `--tail NaN` 进入 argv
+			const lines = clampNumeric(p.lines, 100, 1, 5000);
 			const { ops, host } = route(p.host);
-			const authz = assertAuthorized("ops_docker_logs", { ...p, host }, ctx.authzView);
-			const result = await ops.shell.exec(["docker", "logs", "--tail", String(lines), container], { signal, timeoutMs: 15_000 });
+			const authz = assertAuthorized("ops_docker_logs", { ...p, container, host }, ctx.authzView);
+			const result = await ops.shell.exec(["docker", "logs", "--tail", String(lines), "--", container], { signal, timeoutMs: 15_000 });
 			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };
 		},
 	});
@@ -73,12 +81,12 @@ export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval:
 		}),
 		async execute(_id, params, signal) {
 			const p = params as Record<string, unknown>;
-			const container = String(p.container ?? "");
+			const container = assertSafeIdentifier("dockerContainer", String(p.container ?? ""));
 			const command = String(p.command ?? "");
 			const { ops, host } = route(p.host);
 			// ③ 复核走统一映射：{ host, service:容器名, action:"exec", command }
-			const authz = assertAuthorized("ops_docker_exec", { ...p, host }, ctx.authzView);
-			const result = await ops.shell.exec(["docker", "exec", container, "sh", "-c", command], { signal, timeoutMs: 30_000 });
+			const authz = assertAuthorized("ops_docker_exec", { ...p, container, host }, ctx.authzView);
+			const result = await ops.shell.exec(["docker", "exec", "--", container, "sh", "-c", command], { signal, timeoutMs: 30_000 });
 			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host, request: policyRequestFor("ops_docker_exec", { ...p, host }) } };
 		},
 	});
@@ -100,8 +108,14 @@ export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval:
 			const dir = String(p.projectDir ?? "");
 			const action = String(p.action ?? "ps");
 			const { ops, host } = route(p.host);
+			// ★ file 收口（审查 3.3）：策略此前只覆盖 projectDir（service 维度），
+			//   文件名不在校验范围内 ⇒ file="../../other/docker-compose.yml" 可加载授权目录外的
+			//   compose 执行 up/down/restart，且第②层内容硬拒只查 command/script、不覆盖路径类参数。
+			//   强制单段相对名（禁分隔符与 ..），保证 -f 一定落在 projectDir 内。
+			const fileName = safeRelativePath(String(p.file ?? "docker-compose.yml"), "compose 文件名");
+			// 授权入参传**原始** p：request.ts 仅在调用方显式给出 file 时才把它并入 service 维度，
+			// 未指定 file（走 docker-compose.yml 缺省）的既有规则语义不变，不破坏已部署的 policy.json
 			const authz = assertAuthorized("ops_docker_compose", { ...p, host }, ctx.authzView);
-			const fileName = String(p.file ?? "docker-compose.yml");
 			// 平台分支探测（2026-09-16 对端三轮实测）：compose v2 走 CLI 插件机制，而插件目录扫描是
 			// Docker CLI **19.03** 才引入的——老平台（如 18.09）装 v2 插件也不会被识别，只能走 standalone
 			// `docker-compose` v1（直连 daemon API，与 CLI 版本无关）。
@@ -154,11 +168,7 @@ export function registerDockerTools(pi: ExtensionAPI, ctx: OpsContext, approval:
 /** P3：K8s 工具——kubectl CLI（控制节点执行，靠 kubeconfig context 切换集群，方案 §3.6） */
 export function registerK8sTools(pi: ExtensionAPI, ctx: OpsContext, approval: (name: string) => ApprovalFn): void {
 	const z = pi.zod;
-	/** host 参数 → 能力束（P7 远程路由）；details 统一带真实 host 供审计 */
-	const route = (raw: unknown) => {
-		const host = normalizeTargetHost(typeof raw === "string" ? raw : undefined) ?? LOCAL_HOST;
-		return { ops: ctx.forHost(host === LOCAL_HOST ? undefined : host), host };
-	};
+	const route = makeHostRouter(ctx);
 
 	registerOpsTool(pi, {
 		name: "ops_k8s_pods",
@@ -174,7 +184,8 @@ export function registerK8sTools(pi: ExtensionAPI, ctx: OpsContext, approval: (n
 			const p = params as Record<string, unknown>;
 			const { ops, host } = route(p.host);
 			const authz = assertAuthorized("ops_k8s_pods", { ...p, host }, ctx.authzView);
-			const ns = p.namespace !== undefined ? String(p.namespace) : "default";
+			// argv 收口：namespace 以 '-' 开头会被 kubectl 解析为选项
+			const ns = assertSafeIdentifier("k8sNamespace", p.namespace !== undefined ? String(p.namespace) : "default");
 			const result = await ops.shell.exec(["kubectl", "get", "pods", "-n", ns, "-o", "wide"], { signal, timeoutMs: 15_000 });
 			return { content: [{ type: "text", text: fmtExecResult(result, "(no pods)") }], details: { authz, host } };
 		},
@@ -193,11 +204,12 @@ export function registerK8sTools(pi: ExtensionAPI, ctx: OpsContext, approval: (n
 		}),
 		async execute(_id, params, signal) {
 			const p = params as Record<string, unknown>;
-			const pod = String(p.pod ?? "");
-			const ns = p.namespace !== undefined ? String(p.namespace) : "default";
+			// argv 收口：Pod 名以 '-' 开头会被 kubectl 解析为选项（如 --kubeconfig=…）
+			const pod = assertSafeIdentifier("k8sName", String(p.pod ?? ""));
+			const ns = assertSafeIdentifier("k8sNamespace", p.namespace !== undefined ? String(p.namespace) : "default");
 			const { ops, host } = route(p.host);
-			const authz = assertAuthorized("ops_k8s_logs", { ...p, host }, ctx.authzView);
-			const result = await ops.shell.exec(["kubectl", "logs", pod, "-n", ns, "--tail=200"], { signal, timeoutMs: 15_000 });
+			const authz = assertAuthorized("ops_k8s_logs", { ...p, pod, host }, ctx.authzView);
+			const result = await ops.shell.exec(["kubectl", "logs", "--tail=200", pod, "-n", ns], { signal, timeoutMs: 15_000 });
 			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };
 		},
 	});
@@ -217,12 +229,13 @@ export function registerK8sTools(pi: ExtensionAPI, ctx: OpsContext, approval: (n
 		}),
 		async execute(_id, params, signal) {
 			const p = params as Record<string, unknown>;
-			const kind = String(p.kind ?? "deployment");
-			const name = String(p.name ?? "");
+			// argv 收口：kind/name 拼成位置参数，两者均不可含选项形态字符
+			const kind = assertSafeIdentifier("k8sName", String(p.kind ?? "deployment"));
+			const name = assertSafeIdentifier("k8sName", String(p.name ?? ""));
 			const action = String(p.action ?? "status");
-			const ns = p.namespace !== undefined ? String(p.namespace) : "default";
+			const ns = assertSafeIdentifier("k8sNamespace", p.namespace !== undefined ? String(p.namespace) : "default");
 			const { ops, host } = route(p.host);
-			const authz = assertAuthorized("ops_k8s_rollout", { ...p, host }, ctx.authzView);
+			const authz = assertAuthorized("ops_k8s_rollout", { ...p, kind, name, host }, ctx.authzView);
 			const cmdArgs = ["kubectl", "rollout", action, `${kind}/${name}`, "-n", ns];
 			if (action === "status") cmdArgs.push("--watch=false");
 			const result = await ops.shell.exec(cmdArgs, { signal, timeoutMs: 60_000 });
@@ -245,14 +258,15 @@ export function registerK8sTools(pi: ExtensionAPI, ctx: OpsContext, approval: (n
 		}),
 		async execute(_id, params, signal) {
 			const p = params as Record<string, unknown>;
-			const pod = String(p.pod ?? "");
+			const pod = assertSafeIdentifier("k8sName", String(p.pod ?? ""));
 			const command = String(p.command ?? "");
-			const ns = p.namespace !== undefined ? String(p.namespace) : "default";
-			const container = p.container !== undefined ? String(p.container) : undefined;
+			const ns = assertSafeIdentifier("k8sNamespace", p.namespace !== undefined ? String(p.namespace) : "default");
+			const container = p.container !== undefined ? assertSafeIdentifier("k8sName", String(p.container)) : undefined;
 			const { ops, host } = route(p.host);
-			const authz = assertAuthorized("ops_k8s_exec", { ...p, host }, ctx.authzView);
+			const authz = assertAuthorized("ops_k8s_exec", { ...p, pod, host }, ctx.authzView);
 			const args = ["kubectl", "exec", pod, "-n", ns];
 			if (container !== undefined) args.push("-c", container);
+			// `--` 后为容器内 argv：pod/pod 名已白名单校验，此处双保险挡旗标形态
 			args.push("--", "sh", "-c", command);
 			const result = await ops.shell.exec(args, { signal, timeoutMs: 30_000 });
 			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host } };

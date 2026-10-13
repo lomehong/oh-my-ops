@@ -171,7 +171,9 @@ ${state.actions.slice(-6).map((a) => `  · ${a}`).join("\n")}`);
 		async execute(_toolCallId, params, _signal) {
 			const p = params as Record<string, unknown>;
 			normalizeTargetHost(typeof p.host === "string" ? p.host : undefined);
-			const authz = assertAuthorized("ops_kb_sync", { sync: true }, ctx.authzView);
+			// 授权入参传 {}：policyRequestFor 对本工具走硬编码分支（host 恒 @local、action 恒 kb-sync），
+			// 传无语义的 { sync: true } 只会让读者误以为该字段参与授权判定
+			const authz = assertAuthorized("ops_kb_sync", {}, ctx.authzView);
 			const { actions } = await gitSync(ctx.omoDir, ctx.kb.kbDir, ctx.kbRepo, ctx.kbBranch, ctx.shell);
 			return {
 				content: [{ type: "text", text: actions.length > 0 ? actions.join("\n") : "已是最新，无同步动作" }],

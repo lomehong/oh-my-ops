@@ -103,6 +103,14 @@ export class ReloadableTokenStore implements TokenStore {
 		return this.tokens;
 	}
 
+	/**
+	 * 最近一次消费写盘失败的原因（成功写入会清除）。
+	 * ★ 审计/状态面板据此可发现「跨会话不可重放」这一保证当前**不成立**（审查 4.8）：
+	 *   内存态已消费只能保证本进程内不可重放；写盘失败时磁盘令牌未标记 consumed，
+	 *   进程退出后其他会话仍可重放。此前静默 catch，等于让安全保证无声降级。
+	 */
+	lastConsumeError: string | undefined;
+
 	consume(request: PolicyRequest): void {
 		this.refresh();
 		const found = this.find(request);
@@ -119,8 +127,12 @@ export class ReloadableTokenStore implements TokenStore {
 			fs.renameSync(tmp, this.path);
 			fs.chmodSync(this.path, 0o600);
 			this.mtimeMs = statMtimeMs(this.path);
-		} catch {
-			// 写盘失败：内存态已消费（保守侧）；Owner 可见 tmp 残留
+			this.lastConsumeError = undefined;
+		} catch (error) {
+			// 写盘失败：内存态已消费（保守侧）；Owner 可见 tmp 残留。
+			// 此处**记而不抛**：令牌消费发生在 ③ 复核之后，抛错会让「已放行的操作」反过来
+			// 报失败，调用方无法区分「授权失败」与「记账失败」。改为记录 + 由审计层暴露。
+			this.lastConsumeError = error instanceof Error ? error.message : String(error);
 		}
 	}
 }

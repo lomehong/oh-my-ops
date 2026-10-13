@@ -1,4 +1,4 @@
-import { LOCAL_HOST, READ } from "@ops-pi/core";
+import { LOCAL_HOST, READ, clampNumeric } from "@ops-pi/core";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { registerOpsTool } from "../approvals.ts";
 import { assertAuthorized } from "../guards.ts";
@@ -13,6 +13,29 @@ import type { OpsContext } from "../context.ts";
  * ★ hostname 支持远程目标（P7 SshPool）：经 ctx.forHost 路由；
  *   非法主机名由 forHost/normalizeTargetHost 即抛 POLICY_DENIED。
  */
+
+/**
+ * 巡检探针命令串（审查 2.2：此前在 health_check / health_poll / ops-inspect / hooks 轮询
+ * 4 处各自重复定义且略有差异，口径会随时间漂移）。现收敛为单一事实源，`flavor` 仅控制标题与条数。
+ *
+ * 一律为**硬编码只读**探针（不经 LLM、不接受模型入参），故不存在注入面。
+ */
+export function healthProbeScript(flavor: "full" | "slim"): string {
+	return flavor === "full"
+		? [
+			"echo '=== CPU ===' && uptime && mpstat 1 1 2>/dev/null | tail -1 || top -bn1 | head -3",
+			"echo '=== MEMORY ===' && free -h | head -3",
+			"echo '=== DISK ===' && df -h / 2>/dev/null | tail -1",
+			"echo '=== TOP PROCESSES ===' && ps aux --sort=-%cpu | head -6",
+		].join(" && ")
+		: [
+			"echo '=== LOAD ===' && uptime",
+			"echo '=== MEM ===' && free -h | head -3",
+			"echo '=== DISK ===' && df -h / 2>/dev/null | tail -1",
+			"echo '=== TOP3 ===' && ps aux --sort=-%cpu | head -4",
+		].join(" && ");
+}
+
 export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 	const z = pi.zod;
 
@@ -61,10 +84,9 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			const ops = ctx.forHost(typeof p.host === "string" ? p.host : undefined);
 			// 机密根不可读（模型凭据/SSH 私钥/vault/令牌）：read 档自动放行不覆盖此边界（仅本机）
 			if (ops.host === undefined) ctx.pathGuard.assertReadable(path);
-			// maxBytes 非有限数（NaN/Infinity）会让 files.read 的 size>maxBytes 恒 false → 整文件入内存：
-			// 非法值回落缺省，并夹到 [1, 16 MiB] 硬上限
-			const rawMax = Number(p.maxBytes);
-			const maxBytes = Number.isFinite(rawMax) ? Math.min(Math.max(Math.floor(rawMax), 1), 16 * 1024 * 1024) : undefined;
+			// maxBytes 非有限数（NaN/Infinity/null→0）会让 files.read 的 size>maxBytes 恒 false 或恒 true
+			//   → 整文件入内存 / 读取必然失败。统一用 clampNumeric：非法值回落缺省并夹到 [1, 16 MiB]
+			const maxBytes = clampNumeric(p.maxBytes, 2 * 1024 * 1024, 1, 16 * 1024 * 1024);
 			const text = await ops.files.read(path, { maxBytes, signal });
 			return { content: [{ type: "text", text }], details: { authz } };
 		},
@@ -88,7 +110,8 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			const authz = assertAuthorized("ops_file_ls", p, ctx.authzView);
 			const ops = ctx.forHost(typeof p.host === "string" ? p.host : undefined);
 			if (ops.host === undefined) ctx.pathGuard.assertReadable(path);
-			const result = await ops.shell.exec(["ls", "-lh", "--time-style=full-iso", path], { signal, timeoutMs: 10_000 });
+			// `--` 结束选项解析：path 以 "-" 开头时不得被 ls 当选项（如 --all）
+			const result = await ops.shell.exec(["ls", "-lh", "--time-style=full-iso", "--", path], { signal, timeoutMs: 10_000 });
 			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz } };
 		},
 	});
@@ -107,13 +130,7 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			const p = params as Record<string, unknown>;
 			const ops = ctx.forHost(typeof p.hostname === "string" ? p.hostname : undefined);
 			const authz = assertAuthorized("ops_health_check", p, ctx.authzView);
-			const commands = [
-				"echo '=== CPU ===' && uptime && mpstat 1 1 2>/dev/null | tail -1 || top -bn1 | head -3",
-				"echo '=== MEMORY ===' && free -h | head -3",
-				"echo '=== DISK ===' && df -h / 2>/dev/null | tail -1",
-				"echo '=== TOP PROCESSES ===' && ps aux --sort=-%cpu | head -6",
-			].join(" && ");
-			const result = await ops.shell.exec(["sh", "-c", commands], { signal, timeoutMs: 30_000 });
+			const result = await ops.shell.exec(["sh", "-c", healthProbeScript("full")], { signal, timeoutMs: 30_000 });
 			return {
 				content: [{ type: "text", text: fmtExecResult(result) }],
 				details: { authz, host: ops.host ?? LOCAL_HOST },
@@ -135,13 +152,7 @@ export function registerReadOnlyTools(pi: ExtensionAPI, ctx: OpsContext): void {
 			const p = params as Record<string, unknown>;
 			const ops = ctx.forHost(typeof p.hostname === "string" ? p.hostname : undefined);
 			const authz = assertAuthorized("ops_health_poll", p, ctx.authzView);
-			const commands = [
-				"echo '=== LOAD ===' && uptime",
-				"echo '=== MEM ===' && free -h | head -3",
-				"echo '=== DISK ===' && df -h / 2>/dev/null | tail -1",
-				"echo '=== TOP3 ===' && ps aux --sort=-%cpu | head -4",
-			].join(" && ");
-			const result = await ops.shell.exec(["sh", "-c", commands], { signal, timeoutMs: 30_000 });
+			const result = await ops.shell.exec(["sh", "-c", healthProbeScript("slim")], { signal, timeoutMs: 30_000 });
 			return { content: [{ type: "text", text: fmtExecResult(result) }], details: { authz, host: ops.host ?? LOCAL_HOST } };
 		},
 	});

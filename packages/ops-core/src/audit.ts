@@ -34,6 +34,10 @@ export interface AuditVerifyResult {
 
 export const AUDIT_GENESIS = "GENESIS";
 
+/** 跨进程锁：轮询间隔与陈旧锁超时（毫秒） */
+const LOCK_POLL_MS = 5;
+const LOCK_TIMEOUT_MS = 2_000;
+
 /**
  * 独立审计存储（append-only JSONL + 哈希链）。
  * 动机：宿主 `pi.appendEntry` 只写会话；`--no-session`（README 的无人值守标准用法）下会话为
@@ -46,7 +50,10 @@ export class AuditLog {
 	#seq = 0;
 	#prev = AUDIT_GENESIS;
 	#loaded = false;
+	/** 最近一次写入失败的原因（成功写入**不清除**——运维需知道链路曾中断，见 append 注释） */
 	lastError: string | undefined;
+	/** 最近一次写入失败的时间（成功不清除） */
+	lastErrorAt: string | undefined;
 
 	constructor(path: string) {
 		this.path = path;
@@ -56,18 +63,32 @@ export class AuditLog {
 	append(data: AuditData): AuditRecord | undefined {
 		try {
 			this.#ensureLoaded();
-			const seq = this.#seq + 1;
-			const body = { ...data, seq, prev: this.#prev };
-			const hash = hashRecord(body);
-			const record: AuditRecord = { ...body, hash };
-			fs.mkdirSync(nodePath.dirname(this.path), { recursive: true, mode: 0o700 });
-			fs.appendFileSync(this.path, `${JSON.stringify(record)}\n`, { mode: 0o600 });
-			this.#seq = seq;
-			this.#prev = hash;
-			this.lastError = undefined;
-			return record;
+			// 跨进程互斥：多个 omo 进程（serve + 交互会话 / 定时同步）可能同时追加同一文件。
+			// 不加锁时各自的 seq/prev 基于同一基点计算 → 哈希链分叉，verify() 报断链但
+			// 成因是并发而非篡改，与安全语义混淆（审查 3.8）。锁失败按 best-effort 继续，
+			// 但记录到 lastError 让 /ops-status 可见。
+			const release = this.#acquireLock();
+			try {
+				// 拿到锁后**重新**读取尾部：等锁期间其他进程可能已追加（#loaded 缓存已过期）
+				this.#loaded = false;
+				this.#ensureLoaded();
+				const seq = this.#seq + 1;
+				const body = { ...data, seq, prev: this.#prev };
+				const hash = hashRecord(body);
+				const record: AuditRecord = { ...body, hash };
+				fs.mkdirSync(nodePath.dirname(this.path), { recursive: true, mode: 0o700 });
+				fs.appendFileSync(this.path, `${JSON.stringify(record)}\n`, { mode: 0o600 });
+				this.#seq = seq;
+				this.#prev = hash;
+				return record;
+			} finally {
+				release();
+			}
 		} catch (error) {
+			// ★ 失败信息只记不清：清掉会让「曾失败」这个事实消失（审查 3.9 / 4.1）
+			//   ——运维需要知道审计链路曾经中断过，而非只看最后一次是否成功。
 			this.lastError = error instanceof Error ? error.message : String(error);
+			this.lastErrorAt = new Date().toISOString();
 			return undefined;
 		}
 	}
@@ -114,6 +135,64 @@ export class AuditLog {
 			this.#prev = last.hash;
 		}
 		this.#loaded = true;
+	}
+
+	/**
+	 * 跨进程互斥：`<path>.lock` 以 O_EXCL 原子创建（POSIX/Windows 均为原子操作）。
+	 * 拿不到锁则短暂轮询重试；超时（LOCK_TIMEOUT_MS）视为陈旧锁（持有者已崩溃）→ 强拆后自持。
+	 * 返回释放函数；获取失败不抛（审计不得阻断业务，调用方 best-effort 继续）。
+	 */
+	#acquireLock(): () => void {
+		const lockPath = `${this.path}.lock`;
+		const deadline = Date.now() + LOCK_TIMEOUT_MS;
+		let warned = false;
+		for (;;) {
+			try {
+				const fd = fs.openSync(lockPath, "wx", 0o600);
+				fs.closeSync(fd);
+				return () => {
+					try {
+						fs.unlinkSync(lockPath);
+					} catch {
+						/* 已释放或被强拆 */
+					}
+				};
+			} catch (error) {
+				const code = (error as NodeJS.ErrnoException).code;
+				// EEXIST = 锁被他人持有；其余（EACCES/EROFS 等）= 本进程无法建锁
+				if (code !== "EEXIST") {
+					if (!warned) {
+						this.lastError = `审计文件锁不可用（${String((error as Error).message ?? error)}）——并发追加可能造成链分叉`;
+						this.lastErrorAt = new Date().toISOString();
+						warned = true;
+					}
+					return () => {};
+				}
+				if (Date.now() >= deadline) {
+					// 陈旧锁：持有者崩溃遗留，强拆后自持（否则审计永久停写）
+					try {
+						fs.unlinkSync(lockPath);
+					} catch {
+						/* 已被他人释放 */
+					}
+					continue;
+				}
+				sleepSync(LOCK_POLL_MS);
+			}
+		}
+	}
+}
+
+/** 同步短睡（毫秒）：Atomics.wait 在主线程可用，无需 busy-loop 耗 CPU */
+function sleepSync(ms: number): void {
+	try {
+		Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+	} catch {
+		// 退化：极窄环境不支持 Atomics.wait（不影响正确性，仅退化为忙等）
+		const until = Date.now() + ms;
+		while (Date.now() < until) {
+			/* busy wait */
+		}
 	}
 }
 

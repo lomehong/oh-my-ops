@@ -168,7 +168,7 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 			actions.push(integrated);
 			if (integrated.includes("冲突已中止")) failed = true;
 
-			// ── // ── KBORG-1：机械归并（域活档案）——任何失败都降级为原样提交，绝不阻塞同步 ──
+			// ── KBORG-1：机械归并（域活档案）——任何失败都降级为原样提交，绝不阻塞同步 ──
 			if (process.env.OMO_KB_ORGANIZE !== "off") {
 				try {
 					const domains = await loadDomains(opts.kbDir, (p) => fs.readFile(p, "utf8"));
@@ -197,15 +197,15 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 						);
 						if (lsMain.exitCode !== 0) {
 							throw new Error(`无法读取 origin/${mainBranch} 树（exit ${lsMain.exitCode}）——为防误归并存量，本轮跳过组织`);
-							}
-							for (const l of lsMain.stdout.split("\n")) {
-								const f = l.trim();
-								if (f !== "") mainTree.add(f);
-								}
 						}
-						const rootNames = (await fs.readdir(opts.kbDir)).filter(
-							(f) => f.endsWith(".md") && !rootAllow.has(f) && !f.startsWith(".") && !mainTree.has(f),
-						);
+						for (const l of lsMain.stdout.split("\n")) {
+							const f = l.trim();
+							if (f !== "") mainTree.add(f);
+						}
+					}
+					const rootNames = (await fs.readdir(opts.kbDir)).filter(
+						(f) => f.endsWith(".md") && !rootAllow.has(f) && !f.startsWith(".") && !mainTree.has(f),
+					);
 				const entries: { name: string; text: string }[] = [];
 					for (const n of rootNames) entries.push({ name: n, text: await fs.readFile(path.join(opts.kbDir, n), "utf8") });
 					// 现存活档案作归并基底（integrate 刚带下来的远端内容不能被覆盖——真机回归抓到）
