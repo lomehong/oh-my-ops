@@ -39,7 +39,20 @@ REPO_SLUG="lomehong/oh-my-ops"
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 # 秘密文件权限：能力探测 + 断言（POSIX 硬拦；无法表达 0600 的文件系统降级并告警）
 . "$SELF_DIR/lib/secret-perm.sh"
-DIR="${OMO_KB_DIR:-$HOME/.omo-kb}"
+
+# 落盘路径取「双端可读」形态（Windows/Git Bash 下为 C:/…，而非 /tmp/…）：
+# MSYS 的 argv 路径转换只发生在 bash 拉起原生程序时；bun/node **从配置文件里读到的** /tmp/… 会被原生
+# Windows 解析成 <盘符>:\tmp\…（真机踩到：/ui 改配置的预检 --check 读证书 ENOENT，配置回滚）。C:/… 在
+# MSYS bash（tail/rm/[ -f ]）与原生程序下都直接可用；POSIX 上 cygpath 不存在，原样返回。
+# ★ 定义必须早于 DIR：DIR 也要归一（见下方注释）。
+native_path() { [ -n "${1:-}" ] || return 0; if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; else printf '%s' "$1"; fi; }
+
+# ★ DIR 必须经 native_path 归一（真机踩到：Git Bash 下 `mktemp -d` 返回**混合路径**
+#   `C:\Users\…\Temp/tmp.XXXX`——原生盘符 + 残留正斜杠。直接拼进 DIR 后，后续 `rm -f "$DIR/…"`
+#   会被安全删除层判定为「内嵌盘符」而拒绝（SAFE_DELETE_INVALID_PATH），安装中断在 openssl
+#   之后、config.env 写出之前 ⇒ 表现为「安装失败」且目录里只剩 tls/logs，没有 config.env。
+#   归一后为纯 C:/… 形态，既满足「双端可读」又能通过路径校验。
+DIR="$(native_path "${OMO_KB_DIR:-$HOME/.omo-kb}")"
 API="" REPO="" ADMIN_USER="" ADMIN_PW_FILE="" ADMIN_TOKEN_FILE=""
 TEAM="" PERMISSION="write" GRANT="team" HOST="0.0.0.0" PORT="8787"
 SELF_SIGNED="" TLS_CERT="" TLS_KEY="" VERSION="" USE_SYSTEM=false NO_START=false
@@ -82,11 +95,7 @@ ok()   { echo "  ✓ $1"; }
 info() { echo "    $1"; }
 die()  { echo "✗ $1" >&2; exit 1; }
 
-# 落盘路径取「双端可读」形态（Windows/Git Bash 下为 C:/…，而非 /tmp/…）：
-# MSYS 的 argv 路径转换只发生在 bash 拉起原生程序时；bun/node **从配置文件里读到的** /tmp/… 会被原生
-# Windows 解析成 <盘符>:\tmp\…（真机踩到：/ui 改配置的预检 --check 读证书 ENOENT，配置回滚）。C:/… 在
-# MSYS bash（tail/rm/[ -f ]）与原生程序下都直接可用；POSIX 上 cygpath 不存在，原样返回。
-native_path() { [ -n "${1:-}" ] || return 0; if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; else printf '%s' "$1"; fi; }
+# native_path() 已在文件头（DIR 计算之前）定义并注释。
 
 # ── 守卫：启动器会把 HOME 重定向到 <私有域>/home；在那个环境里跑安装器会错位（真机踩过）
 case "${HOME:-}" in
@@ -347,7 +356,9 @@ cat > "$LAUNCHER_TMP" <<'LAUNCHER_EOF'
 #!/usr/bin/env bash
 # omo-kb —— 知识库自注册服务的运维入口（由安装器生成）
 set -euo pipefail
-DIR="$HOME/.omo-kb"
+# ★ 与安装器同因：Git Bash 下 HOME 可能是混合路径（原生盘符 + 残留正斜杠），
+#   直接拼进 DIR 会让后续 rm/文件操作被安全删除层判为「内嵌盘符」而拒绝。归一取纯 C:/… 形态。
+if command -v cygpath >/dev/null 2>&1; then DIR="$(cygpath -m "$HOME/.omo-kb" 2>/dev/null || printf '%s' "$HOME/.omo-kb")"; else DIR="$HOME/.omo-kb"; fi
 [ -f "$DIR/config.env" ] && . "$DIR/config.env"
 UNIT="omo-kb.service"
 UNIT_PATH="$HOME/.config/systemd/user/$UNIT"
