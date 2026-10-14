@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { rmTempSync } from "./tmp-cleanup.ts";
+import { GIT_SETUP_TIMEOUT_MS, GIT_TIMEOUT_MS } from "./git-fixture.ts";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -75,7 +76,7 @@ describe("gitSync（工具层包装：本地模式 + 分支纪律）", () => {
 		const base = fs.mkdtempSync(path.join(os.tmpdir(), "omo-kb-git-"));
 		const remote = path.join(base, "remote.git");
 		fs.mkdirSync(remote, { recursive: true });
-		await new ShellExec().exec(["git", "init", "--bare", "--initial-branch=main", remote], { timeoutMs: 15_000 });
+		await new ShellExec().exec(["git", "init", "--bare", "--initial-branch=main", remote], { timeoutMs: GIT_SETUP_TIMEOUT_MS });
 		const node = path.join(base, "node-a");
 		const kbDir = path.join(node, "knowledge");
 		fs.mkdirSync(kbDir, { recursive: true });
@@ -88,7 +89,7 @@ describe("gitSync（工具层包装：本地模式 + 分支纪律）", () => {
 			const r = await gitSync(node, kbDir, remote, "main", new ShellExec());
 			expect(r.actions.join(" ")).toContain("push instance/node-a ✓");
 			expect(r.actions.join(" ")).not.toContain("push main");
-			const branches = await new ShellExec().exec(["git", "--git-dir", remote, "branch", "--list", "--format=%(refname:short)"], { timeoutMs: 15_000 });
+			const branches = await new ShellExec().exec(["git", "--git-dir", remote, "branch", "--list", "--format=%(refname:short)"], { timeoutMs: GIT_TIMEOUT_MS });
 			expect(branches.stdout).toContain("instance/node-a");
 			expect(branches.stdout).not.toContain("main");
 		} finally {

@@ -39,14 +39,26 @@ function nestedTestFiles(): string[] {
 }
 
 describe("测试清单守护（防止新增测试被 CI 静默跳过）", () => {
-	test("test:l2 走目录 glob，新增 *.test.ts 自动纳入（package.json 不得回退为文件清单）", () => {
-		const pkg = JSON.parse(fs.readFileSync(path.join(TEST_DIR, "..", "..", "..", "package.json"), "utf8")) as {
+	test("test:l2 走目录 glob，新增 *.test.ts 自动纳入（不得回退为逐文件清单）", () => {
+		const repoRoot = path.join(TEST_DIR, "..", "..", "..");
+		const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")) as {
 			scripts: Record<string, string>;
 		};
 		const cmd = pkg.scripts["test:l2"] ?? "";
-		expect(cmd).toContain("packages/ops-extension/test/");
 		// 逐文件列举是漏测的根因：一旦出现 "test/xxx.test.ts" 形式的硬编码清单即判失败
 		expect(cmd).not.toMatch(/test\/[\w-]+\.test\.ts/);
+
+		// test:l2 允许两种形态：① 直接 `bun test … <目录>`；② 委派给脚本
+		//（后者用于规避 Windows 上 cmd.exe 不展开 $(...) 的问题，见 scripts/test-l2.mjs）。
+		// 两种形态都必须最终落到**目录** glob 上——只看 package.json 会漏判委派形态。
+		const scriptMatch = /scripts\/[\w-]+\.mjs/.exec(cmd);
+		if (scriptMatch !== null) {
+			const script = fs.readFileSync(path.join(repoRoot, scriptMatch[0]), "utf8");
+			expect(script).toContain("packages/ops-extension/test/");
+			expect(script).not.toMatch(/test\/[\w-]+\.test\.ts/);
+		} else {
+			expect(cmd).toContain("packages/ops-extension/test/");
+		}
 	});
 
 	test("顶层测试文件非空，且命名均以 .test.ts 结尾", () => {

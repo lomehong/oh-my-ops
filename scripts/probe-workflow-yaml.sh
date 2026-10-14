@@ -45,7 +45,10 @@ for f in .github/workflows/*.yml .github/workflows/*.yaml; do
   #   ⇒ LISTED 读空 ⇒ 指纹抽验误判「不符」⇒ 打包红、Release 未发布（清单本身没问题）。
   for r in /tmp/omo-wf-runs.*; do
     [ -e "$r" ] || continue
-    cdn="$(grep -nE '(^|[^[:alnum:]_$])cd[[:space:]]+' "$r" | head -1 | cut -d: -f1)"
+    # ★ 管道加 `|| true`：无匹配时 grep 返回 1，在 `set -o pipefail` 下会让整个赋值语句
+    #   返回非零，`set -e` 随即终止脚本——而「run 块内没有 cd」是完全正常的情形
+    #   （如 ci.yml 的「台账校验」块）。原实现因此在本地稳定失败且无任何输出。
+    cdn="$(grep -nE '(^|[^[:alnum:]_$])cd[[:space:]]+' "$r" | head -1 | cut -d: -f1 || true)"
     [ -n "$cdn" ] || continue
     bad="$(tail -n +"$cdn" "$r" | grep -nE '(^|[^/[:alnum:]_.$-])(scripts|vendor|packages|types|docs|bin|dist)/|(^|[^/[:alnum:]_.$-])README\.md' || true)"
     if [ -n "$bad" ]; then

@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { detectGitCaps, GitCompat } from "@ops-pi/core";
+import { defaultGitTimeoutMs, detectGitCaps, GitCompat } from "@ops-pi/core";
 import { loadDomains, organizeEntries, parseEntry } from "./kb-org.js";
 import type { Runner } from "@ops-pi/core";
 import { redactUrl, saveKbState } from "./kb-credential.ts";
@@ -181,19 +181,19 @@ export async function syncKb(opts: KbSyncOptions): Promise<KbSyncReport> {
 					// 老 git（1.8.x）`fetch origin main` 只写 FETCH_HEAD 不建跟踪引用 ⇒ 显式 refspec 物化
 					await opts.runner.exec(
 						["git", "fetch", "origin", `+refs/heads/${mainBranch}:refs/remotes/origin/${mainBranch}`],
-						{ cwd: opts.kbDir, timeoutMs: 30_000 },
+						{ cwd: opts.kbDir, timeoutMs: defaultGitTimeoutMs() },
 					);
 					// 老 git 不支持 -C ⇒ 走 cwd 形态（与 GitCompat 兼容路径一致）
 					const refCheck = await opts.runner.exec(
 						["git", "show-ref", "--verify", "--quiet", `refs/remotes/origin/${mainBranch}`],
-						{ cwd: opts.kbDir, timeoutMs: 30_000 },
+						{ cwd: opts.kbDir, timeoutMs: defaultGitTimeoutMs() },
 					);
 					if (refCheck.exitCode === 0) {
 						// 引用存在才按 main 树判存量；读树失败 ⇒ 显式抛错（外层兜底跳过组织），
 						// 绝不静默当作「main 为空」而把存量全量归并（.122 真机事故）
 						const lsMain = await opts.runner.exec(
 							["git", "ls-tree", "-r", "--name-only", `origin/${mainBranch}`],
-							{ cwd: opts.kbDir, timeoutMs: 30_000 },
+							{ cwd: opts.kbDir, timeoutMs: defaultGitTimeoutMs() },
 						);
 						if (lsMain.exitCode !== 0) {
 							throw new Error(`无法读取 origin/${mainBranch} 树（exit ${lsMain.exitCode}）——为防误归并存量，本轮跳过组织`);

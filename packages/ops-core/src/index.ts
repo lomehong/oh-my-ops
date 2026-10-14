@@ -19,7 +19,7 @@ export type { LintFinding, LintLevel, LintOptions, ActionVocabulary } from "./po
 export { READ, WRITE, EXEC, byAction, tierOf, needsOwnerAuth, createAuthorizedExec, evaluateAuthorization } from "./approvals.ts";
 export type { Tier, ApprovalDecision, AuthzSource, AuthorizationVerdict } from "./approvals.ts";
 export { SshPool, normalizeTargetHost, type SshConfig } from "./ssh.ts";
-export { parseGitVersion, versionAtLeast, capsFor, detectGitCaps, GitCompat } from "./git-compat.ts";
+export { parseGitVersion, versionAtLeast, capsFor, detectGitCaps, GitCompat, defaultGitTimeoutMs } from "./git-compat.ts";
 export type { GitCaps, GitStep } from "./git-compat.ts";
 export type { Runner } from "./runner.ts";
 export { CredentialVault } from "./vault.ts";

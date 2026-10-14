@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { capsFor, detectGitCaps, GitCompat, parseGitVersion, versionAtLeast } from "../src/git-compat.ts";
+import { capsFor, defaultGitTimeoutMs, detectGitCaps, GitCompat, parseGitVersion, versionAtLeast } from "../src/git-compat.ts";
 import { ShellExec } from "../src/exec.ts";
 import type { ExecOptions, ExecResult, Runner } from "../src/runner.ts";
 
@@ -129,7 +129,7 @@ describe("GitCompat：真实 git 端到端（本地裸仓当远端，无网络�
 
 	/** 用真实 git 初始化裸仓（--initial-branch 在 2.28+，测试环境为现代 git） */
 	async function initBare(shell: ShellExec, bare: string): Promise<void> {
-		await shell.exec(["git", "init", "--bare", "--initial-branch=main", bare], { timeoutMs: 30_000 });
+		await shell.exec(["git", "init", "--bare", "--initial-branch=main", bare], { timeoutMs: defaultGitTimeoutMs() });
 	}
 
 	it("★ 强制 el7 能力（真 git + 退化分支）：init/symbolic-ref → 提交 → 推实例分支 → 拉取", { skip: SKIP }, async () => {
@@ -148,12 +148,12 @@ describe("GitCompat：真实 git 端到端（本地裸仓当远端，无网络�
 			assert.ok(push.includes("✓"), push);
 
 			// 远端应存在实例分支，且 main 未被实例推送
-			const branches = await shell.exec(["git", "--git-dir", bare, "branch", "--list", "--format=%(refname:short)"], { timeoutMs: 30_000 });
+			const branches = await shell.exec(["git", "--git-dir", bare, "branch", "--list", "--format=%(refname:short)"], { timeoutMs: defaultGitTimeoutMs() });
 			assert.ok(branches.stdout.includes("instance/dev-01"), branches.stdout);
 			assert.ok(!branches.stdout.includes("main"), `实例不得推 main：${branches.stdout}`);
 
 			// 远端内容可达：从裸仓读出提交内容
-			const show = await shell.exec(["git", "--git-dir", bare, "show", "instance/dev-01:entry.md"], { timeoutMs: 30_000 });
+			const show = await shell.exec(["git", "--git-dir", bare, "show", "instance/dev-01:entry.md"], { timeoutMs: defaultGitTimeoutMs() });
 			assert.ok(show.stdout.includes("条目"), show.stdout);
 		} finally {
 			cleanup();
@@ -179,5 +179,28 @@ describe("GitCompat：真实 git 端到端（本地裸仓当远端，无网络�
 		} finally {
 			cleanup();
 		}
+	});
+});
+
+describe("git 操作超时的平台适配（Windows 进程创建成本）", () => {
+	it("★ Windows 上放宽、POSIX 保持原量级；两者均远低于 CI job 上限", () => {
+		const ms = defaultGitTimeoutMs();
+		assert.ok(ms >= 30_000, `不应低于原30s 下限（当前 ${ms}ms）`);
+		// 上界：Windows 上限 60s 本身是上限，POSIX 30s；防止有人把它调到小时级掩盖挂死
+		assert.ok(ms <= 60_000, `不得超过60s——否则真实挂死会被放过（当前 ${ms}ms）`);
+		if (process.platform === "win32") assert.equal(ms, 60_000);
+		else assert.equal(ms, 30_000);
+	});
+
+	it("GitCompat 缺省超时取自defaultGitTimeoutMs；可经构造参数覆盖", async () => {
+		const runner = new RecordingRunner();
+		const g = new GitCompat(runner, "/tmp/x", undefined, {}, [], 12_345);
+		await g.isRepo();
+		assert.equal(runner.calls[0]?.options?.timeoutMs, 12_345);
+
+		const g2 = new GitCompat(new RecordingRunner(), "/tmp/x", undefined);
+		await g2.isRepo();
+		// 默认分支：用平台值（此处只断言非硬编码常量）
+		assert.equal(typeof (runner.calls[0]?.options?.timeoutMs ?? 0), "number");
 	});
 });

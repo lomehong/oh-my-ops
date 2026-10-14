@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { rmTempSync } from "./tmp-cleanup.ts";
+import { GIT_SETUP_TIMEOUT_MS, GIT_TIMEOUT_MS } from "./git-fixture.ts";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -12,6 +13,11 @@ import { expectSecret0600 } from "./runtime/perm-mode.ts";
  * OMO-KB-SYNC P1 守卫：分支纪律 + 凭据文件（真 git、file:// 裸仓，无网络）。
  *
  * 分支纪律（主人决策）：实例**只 pull main**、**只推 instance/<device>**；`main` 由中心合流（PR）。
+ *
+ * 【跨平台】Windows 上每个新进程创建约 1.3–2.5 秒（Defender 实时扫描；实测 `node -e "0"`
+ * 同等耗时 ⇒ 非 git 内部开销），单用例 spawn 20–30 次 git 必然突破 60s 超时。本文件所有
+ * git 调用统一走 GIT_TIMEOUT_MS / GIT_SETUP_TIMEOUT_MS（按平台取值，见 git-fixture.ts）。
+ * 只放宽超时，不放宽断言。
  */
 
 function fixture(): { bare: string; dirs: { a: string; b: string; coord: string }; cleanup: () => void } {
@@ -28,11 +34,13 @@ function fixture(): { bare: string; dirs: { a: string; b: string; coord: string 
 }
 
 async function initBare(shell: ShellExec, bare: string): Promise<void> {
-	await shell.exec(["git", "init", "--bare", "--initial-branch=main", bare], { timeoutMs: 30_000 });
+	await shell.exec(["git", "init", "--bare", "--initial-branch=main", bare], { timeoutMs: GIT_SETUP_TIMEOUT_MS });
 }
 
 async function branchesOf(shell: ShellExec, bare: string): Promise<string> {
-	const r = await shell.exec(["git", "--git-dir", bare, "branch", "--list", "--format=%(refname:short)"], { timeoutMs: 30_000 });
+	const r = await shell.exec(["git", "--git-dir", bare, "branch", "--list", "--format=%(refname:short)"], {
+		timeoutMs: GIT_TIMEOUT_MS,
+	});
 	return r.stdout;
 }
 
@@ -43,15 +51,19 @@ describe("KBORG-1：main 有存量 + 本地新知 ⇒ 归并（.122 真机场景
 		const remote = path.join(root, "remote.git");
 		const clone = path.join(root, "clone");
 		try {
-			await shell.exec(["git", "init", "--bare", "-b", "main", remote], { timeoutMs: 30_000 });
-			await shell.exec(["git", "clone", remote, clone], { timeoutMs: 30_000 });
-			await shell.exec(["git", "-C", clone, "config", "user.email", "t@t"], { timeoutMs: 30_000 });
-			await shell.exec(["git", "-C", clone, "config", "user.name", "t"], { timeoutMs: 30_000 });
+			await shell.exec(["git", "init", "--bare", "-b", "main", remote], { timeoutMs: GIT_SETUP_TIMEOUT_MS });
+			await shell.exec(["git", "clone", remote, clone], { timeoutMs: GIT_SETUP_TIMEOUT_MS });
 			// 存量：先入 origin/main 树（模拟 pull 下来的 32 篇平铺）
 			fs.writeFileSync(path.join(clone, "legacy-main-doc.md"), "# main 存量\n");
-			await shell.exec(["git", "-C", clone, "add", "legacy-main-doc.md"], { timeoutMs: 30_000 });
-			await shell.exec(["git", "-C", clone, "commit", "-m", "legacy"], { timeoutMs: 30_000 });
-			await shell.exec(["git", "-C", clone, "push", "origin", "main"], { timeoutMs: 30_000 });
+			await shell.exec(["git", "-C", clone, "add", "legacy-main-doc.md"], { timeoutMs: GIT_TIMEOUT_MS });
+			// 身份经环境变量注入（见 git-fixture.ts）：省掉两次 `git config`
+			// （Windows 上每次 spawn 约 1.5 秒），且不留多余提交污染被测场景
+			await shell.exec(["git", "-C", clone, "commit", "-m", "legacy"], {
+				cwd: clone,
+				timeoutMs: GIT_TIMEOUT_MS,
+				env: { GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" },
+			});
+			await shell.exec(["git", "-C", clone, "push", "origin", "main"], { timeoutMs: GIT_SETUP_TIMEOUT_MS });
 			// 本地新知：带「系统」头的未跟踪条目
 			fs.writeFileSync(path.join(clone, "kborg1-accept.md"), "系统: runbooks\n类型: 事件\n主题: KBORG-1 验收\n\n归并目标验证。\n");
 
@@ -59,7 +71,7 @@ describe("KBORG-1：main 有存量 + 本地新知 ⇒ 归并（.122 真机场景
 			expect(r.ok).toBe(true);
 			expect(r.actions.join(" ")).toContain("归并：1 条并入域活档案");
 			// 存量原地保留（未被归并/移除）
-			const tracked = await shell.exec(["git", "ls-files"], { cwd: clone, timeoutMs: 30_000 });
+			const tracked = await shell.exec(["git", "ls-files"], { cwd: clone, timeoutMs: GIT_TIMEOUT_MS });
 			expect(tracked.stdout).toContain("legacy-main-doc.md");
 			// 新知并入活档案
 			const living = fs.readFileSync(path.join(clone, "runbooks", "README.md"), "utf8");
@@ -105,12 +117,12 @@ describe("syncKb：分支纪律（真 git + file:// 裸仓）", () => {
 			// 中心合流：把 A 的实例分支合进 main（模拟 Owner/协调者审阅后的 PR 合并）
 			// 克隆到**全新空目录**（fixture 里的 coord 目录已含 knowledge/，非空 → clone 会失败）
 			const coordClone = path.join(path.dirname(bare), "coordinator-clone");
-			const cloned = await shell.exec(["git", "clone", bare, coordClone], { timeoutMs: 30_000 });
+			const cloned = await shell.exec(["git", "clone", bare, coordClone], { timeoutMs: GIT_SETUP_TIMEOUT_MS });
 			expect(cloned.exitCode).toBe(0);
-			const fetched = await shell.exec(["git", "fetch", "origin", "instance/node-a"], { cwd: coordClone, timeoutMs: 30_000 });
+			const fetched = await shell.exec(["git", "fetch", "origin", "instance/node-a"], { cwd: coordClone, timeoutMs: GIT_TIMEOUT_MS });
 			expect(fetched.exitCode).toBe(0);
 			// 直接把取到的提交推进 main（等价于 PR 合并；空裸仓克隆无本地分支，避免 checkout 分支纠缠）
-			const pushMain = await shell.exec(["git", "push", "origin", "FETCH_HEAD:refs/heads/main"], { cwd: coordClone, timeoutMs: 30_000 });
+			const pushMain = await shell.exec(["git", "push", "origin", "FETCH_HEAD:refs/heads/main"], { cwd: coordClone, timeoutMs: GIT_TIMEOUT_MS });
 			expect(pushMain.exitCode).toBe(0);
 
 			// B 再同步 → 见到条目（KBORG-1 语义：A 的条目已归并为域活档案 runbooks/README.md）
@@ -208,7 +220,7 @@ describe("凭据绝不入库（含 kbDir 与 $OMO_DIR/kb 误配的场景）", ()
 			// 故意把 kbDir 配成私有域根（最坏误配）
 			const r = await syncKb({ omoDir: omo, kbDir: omo, repo: bare, branch: "main", device: "node-nested", runner: shell, push: true });
 			expect(r.ok).toBe(true);
-			const tracked = await shell.exec(["git", "ls-files"], { cwd: omo, timeoutMs: 30_000 });
+			const tracked = await shell.exec(["git", "ls-files"], { cwd: omo, timeoutMs: GIT_TIMEOUT_MS });
 			// KBORG-1：无头条目归并进 runbooks/README.md（仍被 track）；凭据三件套依旧必须不在
 			expect(tracked.stdout).toContain("runbooks/README.md");
 			expect(tracked.stdout).not.toContain("real-entry.md");

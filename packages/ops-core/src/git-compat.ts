@@ -44,16 +44,40 @@ export function capsFor(version: string): GitCaps {
 	};
 }
 
-/** 探测本机 git 能力；git 不可用/输出异常 → undefined（调用方按「无 git」降级） */
+/**
+ * 探测本机 git 能力；git 不可用/输出异常 → undefined（调用方按「无 git」降级）。
+ *
+ * 缺省超时按平台取值（`defaultGitTimeoutMs`）：Windows 上任何新进程创建需1.3–2.5 秒
+ * （Defender 实时扫描；实测 `node -e "0"` 同等耗时 ⇒ 非 git 内部开销），
+ * 固定 10 秒在慢机器/容器里会误判「git 不可用」而静默降级成本地模式——
+ * 那比失败更危险（凭据存在却不生效）。调用方可经 execOpts.timeoutMs 覆盖。
+ */
 export async function detectGitCaps(runner: Runner, execOpts: ExecOptions = {}): Promise<GitCaps | undefined> {
 	try {
-		const r = await runner.exec(["git", "--version"], { timeoutMs: 10_000, ...execOpts });
+		const r = await runner.exec(["git", "--version"], { timeoutMs: defaultGitTimeoutMs(), ...execOpts });
 		if (r.exitCode !== 0) return undefined;
 		const version = parseGitVersion(`${r.stdout}${r.stderr}`);
 		return version === undefined ? undefined : capsFor(version);
 	} catch {
 		return undefined;
 	}
+}
+
+/**
+ * git 操作的缺省超时（毫秒），按平台取值。
+ *
+ * 为什么按平台：Windows 上**任何**新进程创建都需 1.3–2.5 秒（Defender 实时扫描 +
+ * DLL 加载）。实测 `node -e "0"` 同样耗时 ⇒ 开销在 OS 进程创建，与 git 内部实现无关；
+ * `GIT_OPTIONAL_LOCKS` / 隔离 HOME / `core.fsmonitor` 等开关最多只省 10%，git 侧无优化空间。
+ * 因此固定小超时在 Windows 上会稳定触发，表现为「git 不可用」或中途超时——
+ * 后者对 KB 同步尤其危险：syncKb 是 best-effort设计，超时会被当作「无 git」
+ * 而静默降级成本地模式（凭据在、却不生效）。
+ *
+ * 取值偏保守但有界：POSIX 保持原量级（快环境下的挂死仍能被及时发现），
+ * Windows 放宽到足以覆盖进程创建开销。
+ */
+export function defaultGitTimeoutMs(): number {
+	return process.platform === "win32" ? 60_000 : 30_000;
 }
 
 /** 单条 git 命令的结果（兼容层统一出口，供动作报告与测试断言） */
@@ -76,18 +100,22 @@ export class GitCompat {
 	private readonly baseEnv: Record<string, string>;
 	/** 每条 git 命令的 argv 前缀（如 `-c credential.helper=...`；**只放非秘密参数**） */
 	private readonly argsPrefix: string[];
+	/** 单条命令的缺省超时（按平台取值；可在构造时覆盖） */
+	private readonly timeoutMs: number;
 	constructor(
 		runner: Runner,
 		dir: string,
 		caps: GitCaps | undefined,
 		baseEnv: Record<string, string> = {},
 		argsPrefix: readonly string[] = [],
+		timeoutMs?: number,
 	) {
 		this.runner = runner;
 		this.dir = dir;
 		this.caps = caps;
 		this.baseEnv = baseEnv;
 		this.argsPrefix = [...argsPrefix];
+		this.timeoutMs = timeoutMs ?? defaultGitTimeoutMs();
 	}
 
 	/** 执行一条 git 子命令（args 不含 `git` 本身） */
@@ -101,7 +129,7 @@ export class GitCompat {
 			res = await this.runner.exec(argv, {
 				cwd: this.dir,
 				env: { ...this.baseEnv, ...(opts.env ?? {}) },
-				timeoutMs: opts.timeoutMs ?? 60_000,
+				timeoutMs: opts.timeoutMs ?? this.timeoutMs,
 			});
 		} catch (err) {
 			// spawn 层失败（多为 cwd 不存在或 git 不在 PATH）——补上下文后上抛，避免「命令失败：git」这种无信息报错
