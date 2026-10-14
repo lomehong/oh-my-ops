@@ -86,7 +86,12 @@ done
 
 SERVICE_DIR="$DIR/service"
 UNIT_NAME="omo-kb.service"
-LAUNCHER="$HOME/.local/bin/omo-kb"
+# ★ LAUNCHER 也要归一：卸载时 `rm -f "$LAUNCHER"` 会碰到与 DIR 相同的混合路径问题
+#   （Git Bash 的 $HOME 形如 C:\…\Temp/tmp.XXXX，未归一会被判「内嵌盘符」而拒绝，
+#     导致卸载中断、私有域与启动器残留）。归一后为纯 C:/… 形态。
+#   注意 BINDIR **故意保持未归一**：下方要与 $PATH 做字符串精确比对（grep -qx），
+#   归一成C:/… 会与 PATH 里的 /c/… 不匹配。
+LAUNCHER="$(native_path "$HOME/.local/bin/omo-kb")"
 BINDIR="$HOME/.local/bin"
 if [ "$USE_SYSTEM" = true ]; then UNIT_PATH="/etc/systemd/system/$UNIT_NAME"; else UNIT_PATH="$HOME/.config/systemd/user/$UNIT_NAME"; fi
 systemctl_cmd() { if [ "$USE_SYSTEM" = true ]; then systemctl "$@"; else systemctl --user "$@"; fi; }
