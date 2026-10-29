@@ -218,14 +218,27 @@ async function handleKbWebhook(req, ip) {
 		const warnings = [...struct.warnings, ...sim.warnings];
 		const blocked = LINT_MODE === "strict" && hard.length > 0;
 		const comment = buildComment({ mode: LINT_MODE, hard, warnings });
-		await api.post(`/repos/${args.repo}/statuses/${sha}`, {
+		const statusRes = await api.post(`/repos/${args.repo}/statuses/${sha}`, {
 			state: blocked ? "failure" : "success",
 			context: "kb-lint",
 			description: (blocked ? `✗ ${hard.length} 条违规` : warnings.length > 0 ? `⚠ ${warnings.length} 条提示` : "✓ 合规").slice(0, 200),
 		});
-		if (comment !== "") await api.post(`/repos/${args.repo}/issues/${number}/comments`, { body: comment });
-		audit.append({ event: `lint.${blocked ? "blocked" : "passed"}`, ts: new Date().toISOString(), pr: number, sha: sha.slice(0, 8), mode: LINT_MODE, hard: hard.length, warnings: warnings.length, actor: "webhook", ip });
-		return json(200, { ok: true, blocked, hard: hard.length, warnings: warnings.length });
+		if (!statusRes.ok) {
+			audit.append({ event: "lint.status-write-failed", ts: new Date().toISOString(), pr: number, sha: sha.slice(0, 8), mode: LINT_MODE, httpStatus: statusRes.status, detail: String(statusRes.text ?? "").slice(0, 300), actor: "webhook", ip });
+			return json(200, { ok: false, gateApplied: false, blocked, hard: hard.length, warnings: warnings.length, error: `status 回写失败 HTTP ${statusRes.status}（已入审计）` });
+		}
+		let commentWritten;
+		let commentError;
+		if (comment !== "") {
+			const commentRes = await api.post(`/repos/${args.repo}/issues/${number}/comments`, { body: comment });
+			commentWritten = commentRes.ok;
+			if (!commentRes.ok) {
+				commentError = `HTTP ${commentRes.status}`;
+				audit.append({ event: "lint.comment-write-failed", ts: new Date().toISOString(), pr: number, sha: sha.slice(0, 8), mode: LINT_MODE, httpStatus: commentRes.status, detail: String(commentRes.text ?? "").slice(0, 300), actor: "webhook", ip });
+			}
+		}
+		audit.append({ event: `lint.${blocked ? "blocked" : "passed"}`, ts: new Date().toISOString(), pr: number, sha: sha.slice(0, 8), mode: LINT_MODE, hard: hard.length, warnings: warnings.length, statusWritten: true, commentWritten: comment === "" ? "skipped" : commentWritten, actor: "webhook", ip });
+		return json(200, { ok: true, gateApplied: true, blocked, hard: hard.length, warnings: warnings.length, statusWritten: true, ...(comment === "" ? { commentSkipped: true } : { commentWritten, ...(commentWritten ? {} : { commentError }) }) });
 	} catch (err) {
 		audit.append({ event: "lint.error", ts: new Date().toISOString(), reason: String(err?.message ?? err), ip });
 		return json(200, { ok: false, error: `lint 执行失败（已入审计）：${String(err?.message ?? err)}` });

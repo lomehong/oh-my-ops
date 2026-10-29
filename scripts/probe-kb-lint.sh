@@ -45,11 +45,13 @@ Bun.serve({ port: $STUB_PORT, async fetch(req) {
   const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { "Content-Type": "application/json" } });
   const b64 = (t) => Buffer.from(t, "utf8").toString("base64");
   if (u.pathname.endsWith("/statuses/$SHA") && req.method === "POST") {
+    if (fs.existsSync(path.join(OUT, "reject-status"))) return json({ message: "status endpoint unavailable" }, 500);
     statuses.push(await req.json());
     fs.writeFileSync(path.join(OUT, "statuses.json"), JSON.stringify(statuses));
     return json({ ok: true }, 201);
   }
   if (u.pathname.endsWith("/issues/7/comments") && req.method === "POST") {
+    if (fs.existsSync(path.join(OUT, "reject-comment"))) return json({ message: "comment endpoint unavailable" }, 500);
     comments.push(await req.json());
     fs.writeFileSync(path.join(OUT, "comments.json"), JSON.stringify(comments));
     return json({ ok: true }, 201);
@@ -139,6 +141,44 @@ HOME="$H" "$H/.local/bin/omo-kb" restart >>"$TMP/start.log" 2>&1
 for _ in $(seq 1 20); do curl -sk --max-time 2 "https://127.0.0.1:$PORT/healthz" 2>/dev/null | grep -q '"ok":true' && break; sleep 0.5; done
 C5="$(post_webhook "X-Gitea-Signature" "$SIG" "$BODY")"
 [ "$C5" = "503" ] && pass "lint off ⇒ 503（门禁明确不可用）" || fail "off 应 503（$C5）"
+
+echo "[6] 写回失败：Gitea 拒绝 status / comment ⇒ 不得假绿"
+# 恢复 strict（上一节为 off）
+sed -i 's/^OMO_KB_LINT_MODE=off/OMO_KB_LINT_MODE=strict/' "$H/.omo-kb/config.env"
+HOME="$H" "$H/.local/bin/omo-kb" restart >>"$TMP/start.log" 2>&1
+for _ in $(seq 1 20); do curl -sk --max-time 2 "https://127.0.0.1:$PORT/healthz" 2>/dev/null | grep -q '"ok":true' && break; sleep 0.5; done
+B_BLOCKED="$(grep -c '"event":"lint.blocked"' "$H/.omo-kb/audit.jsonl" 2>/dev/null || true)"
+B_PASSED="$(grep -c '"event":"lint.passed"' "$H/.omo-kb/audit.jsonl" 2>/dev/null || true)"
+B_STATUS="$(grep -o '"context":"kb-lint"' "$TMP/statuses.json" 2>/dev/null | wc -l || true)"
+B_COMMENT="$(grep -o '"body"' "$TMP/comments.json" 2>/dev/null | wc -l || true)"
+
+# 6a：status 写回被拒
+touch "$TMP/reject-status"
+C6="$(post_webhook "X-Gitea-Signature" "$SIG" "$BODY")"
+[ "$C6" = "200" ] && pass "status 失败仍 200（避免 Gitea 重试风暴）" || fail "status 失败应 200（$C6）"
+grep -q '"gateApplied":false' /tmp/kbwb-body.json && pass "响应明确 gateApplied=false" || fail "未标 gateApplied=false：$(head -c 160 /tmp/kbwb-body.json)"
+grep -q 'status 回写失败' /tmp/kbwb-body.json && pass "响应含 status 失败原因" || fail "响应缺失败原因"
+grep -q '"event":"lint.status-write-failed"' "$H/.omo-kb/audit.jsonl" && pass "审计落 lint.status-write-failed" || fail "审计缺 status 失败事件"
+A_BLOCKED="$(grep -c '"event":"lint.blocked"' "$H/.omo-kb/audit.jsonl" 2>/dev/null || true)"
+A_PASSED="$(grep -c '"event":"lint.passed"' "$H/.omo-kb/audit.jsonl" 2>/dev/null || true)"
+[ "$A_BLOCKED" = "$B_BLOCKED" ] && [ "$A_PASSED" = "$B_PASSED" ] && pass "失败不得写 lint.blocked/passed 成功审计" || fail "失败仍写成功审计（blocked $B_BLOCKED→$A_BLOCKED / passed $B_PASSED→$A_PASSED）"
+A_STATUS="$(grep -o '"context":"kb-lint"' "$TMP/statuses.json" 2>/dev/null | wc -l || true)"
+[ "$A_STATUS" = "$B_STATUS" ] && pass "status 失败不产生 status 记录" || fail "status 失败仍写记录（$B_STATUS→$A_STATUS）"
+A_COMMENT="$(grep -o '"body"' "$TMP/comments.json" 2>/dev/null | wc -l || true)"
+[ "$A_COMMENT" = "$B_COMMENT" ] && pass "status 失败时不发评论" || fail "status 失败仍发评论（$B_COMMENT→$A_COMMENT）"
+rm -f "$TMP/reject-status"
+
+# 6b：status 成功但 comment 被拒
+touch "$TMP/reject-comment"
+C6B="$(post_webhook "X-Gitea-Signature" "$SIG" "$BODY")"
+[ "$C6B" = "200" ] && pass "comment 失败仍 200" || fail "comment 失败应 200（$C6B）"
+grep -q '"ok":true' /tmp/kbwb-body.json && grep -q '"commentWritten":false' /tmp/kbwb-body.json && pass "comment 失败如实回报（ok=true / commentWritten=false）" || fail "comment 失败未如实回报：$(head -c 200 /tmp/kbwb-body.json)"
+grep -q '"event":"lint.comment-write-failed"' "$H/.omo-kb/audit.jsonl" && pass "审计落 lint.comment-write-failed" || fail "审计缺 comment 失败事件"
+A_STATUS2="$(grep -o '"context":"kb-lint"' "$TMP/statuses.json" 2>/dev/null | wc -l || true)"
+[ "$A_STATUS2" -gt "$A_STATUS" ] && pass "status 仍成功回写" || fail "comment 失败连带 status 未写（$A_STATUS→$A_STATUS2）"
+A_BLOCKED2="$(grep -c '"event":"lint.blocked"' "$H/.omo-kb/audit.jsonl" 2>/dev/null || true)"
+[ "$A_BLOCKED2" -gt "$A_BLOCKED" ] && pass "comment 失败仍记 lint.blocked 成功审计" || fail "comment 失败未记 lint.blocked"
+rm -f "$TMP/reject-comment"
 
 echo "结果：$FAILED 项失败"
 exit $([ "$FAILED" -eq 0 ] && echo 0 || echo 1)
