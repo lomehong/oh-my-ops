@@ -3,7 +3,7 @@
 ```yaml
 ---
 title: omo — 基于 oh-my-pi（omp, pi 血统 harness）的运维智能体扩展
-status: 已落定          # 草稿 → 已评审 → 已落定 → 已执行（主人 2026-09-12 确认）
+status: 已执行          # 草稿 → 已评审 → 已落定（主人 2026-09-12 确认）→ 已执行（P0–P5 已落定；开放项见 §1 To Confirm / §6；P16/P17 为后续独立任务，不属本设计 P0–P5 范围）
 requirement: docs/requirements/ops-pi-requirement-package.md
 author: 架构师会话（2026-09-12）
 created: 2026-09-12
@@ -33,7 +33,7 @@ review:
 | 为什么改？ | 运维依赖人工与散落脚本，缺统一 Agent 化能力；可验收判据 = 需求包 §1 A1–A5 |
 | 影响谁？ | omp 的工具注册面、**原生审批面**、会话审计面、输出 spill 面；共载的 Yuyi 适配器；被运维的目标主机/集群；Owner（审批责任） |
 | 如何验证？ | §5 六手段，核心是**拒绝路径负测**与**平台能力契约断言**（含 `loadMode`、`approval` 档位、spill 行为） |
-| 还有什么没有确认？ | 4 项：B1 Yuyi 身份接口（跨团队，阻断）、B2 目标仓/git、B3 目录命名、B4 Yuyi 适配器实际接口面 |
+| 还有什么没有确认？ | 2 项：B4 Yuyi 适配器实际接口面（Unknown）、omp 最低版本承诺。B1 已撤销（身份归 Yuyi 插件自治）；B2/B3 已解决 |
 
 ---
 
@@ -47,7 +47,7 @@ review:
 | 2 | 无人值守完成只读巡检 | 只读工具声明 `approval: "read"` → **三模式均自动放行**（含最严 `always-ask`），实测 X1/X8 | 需求包 A1 |
 | 3 | 对「指定服务」执行重启 | 函数式 `approval` 按 `action` 返档 + L1 `targetPolicy` 校验「主机+服务名」允许清单 | 需求包 A2 |
 | 4 | 高危敏感操作须 Owner 明示批准 | 函数式 `approval`：命中预授权 → `{policy:"allow"}`（任何模式放行）；生产目标 → `{policy:"deny"}`（任何模式硬拒，实测 X3/X8）；其余未授权 → **①-b 模式无关兜底拒绝**（无人值守，实测 X10）+ 交互态交平台弹窗 | 需求包 A3 |
-| 5 | 全过程留审计 | `tool_result` 钩子强制 `pi.appendEntry("ops_audit", …)`，含授权来源 | 需求包 A4 |
+| 5 | 全过程留审计 | `tool_execution_end` 钩子强制双写 `ops_audit`（会话条目 + 独立 append-only 文件），含授权来源；被阻断调用同样留痕 | 需求包 A4 |
 | 6 | 增强缺席不阻断核心 | 每项外部增强（Yuyi/御符/vault）有显式降级分支，降级收敛保守侧；平台能力缺失则**启动期硬失败**（非静默） | 需求包 A5 |
 | 7 | 共载 Yuyi 官方适配器，不自研通信 | L2 不注册 `yuyi_*`；同进程共载，工具名前缀不相交（启动期断言，防静默覆盖） | 需求包 N3 |
 | 8 | 沙箱隔离弥补 harness 无内建权限系统 | 容器 + 挂载/网络策略；生产 docker.sock 不挂控制节点 | pi README「no built-in permission system」+ omp 同源 |
@@ -62,10 +62,10 @@ review:
 
 | # | 待确认项 | 问谁 | 状态 |
 |---|---|---|---|
-| 1 | Yuyi 是否提供「查询调用方御符身份/权限」的受支持接口（B1） | 主人中转向 Yuyi 方 | **阻断（跨团队）** |
-| 2 | 目标仓库位置与 git 化（B2） | 主人 | 延后；先落 `/workspace` |
+| 1 | ~~Yuyi 是否提供「查询调用方御符身份/权限」的受支持接口（B1）~~ | — | **已撤销**（2026-09-12 主人指示：身份/鉴权归 Yuyi 插件自治；见 §7.6 / 附录 C） |
+| 2 | ~~目标仓库位置与 git 化（B2）~~ | — | **已解决**：`github.com/lomehong/oh-my-ops`，分支 `main`（见 §9 决策门） |
 | 3 | ~~目录命名统一（B3）~~ | — | **已解决**：统一为 `docs/designs/`（适配层标准）；6 份文档交叉引用已同步更新 |
-| 4 | Yuyi 适配器实际接口面与 `@qianji/core` 依赖（B4） | 共载冒烟 | Unknown |
+| 4 | Yuyi 适配器实际接口面与 `@qianji/core` 依赖（B4） | 共载冒烟 | Unknown（U1；真实适配器共载冒烟未完成） |
 | 5 | omp 最低版本承诺（本方案按 18.1.18 验证） | 主人/运维 | 待定；见 §4 兼容风险 |
 
 ---
@@ -84,7 +84,7 @@ review:
 | 沙箱运行时（容器） | 增 | Docker | 缺席降级为「进程级隔离」并在 UI 显式标注（不静默） |
 | 目标主机/集群 | 被操作方 | SSH / kubeconfig | 不可达 → `CONNECTION_REFUSED` |
 
-- **范围外参与方**：Yuyi 团队（需交付身份接口，B1）；omp 升级节奏（18.1.10→18.1.18 为本机实测跨距，升级后须按矩阵复核）。
+- **范围外参与方**：Yuyi 团队（身份/鉴权归其插件自治，B1 已撤销）；omp 升级节奏（18.1.10→18.1.18 为本机实测跨距，升级后须按矩阵复核）。
 - **对照 `architect-knowledge/reference/dsh-suite-architecture-map.md`**：本方案**不属 dsh 套件成员**，不引入套件包依赖，不受联邦四原则的**成员准入**约束；但**适用其显式降级三要素**（可发现/安全收敛/可恢复），见 §7.4.3。无遗漏声明。
 
 ---
@@ -196,14 +196,14 @@ review:
 
 | # | 类型 | 描述 | 处置 |
 |---|---|---|---|
-| 1 | **Blocked（跨团队）** | Yuyi 需提供「查询调用方御符身份/权限」的受支持接口（B1） | 已登记；请求书见附录 C；主人中转向 Yuyi 方。未落地前跨 Agent 路径保守降级（§7.6） |
+| 1 | **已撤销（历史）** | 原 B1：Yuyi 需提供「查询调用方御符身份/权限」的受支持接口 | **2026-09-12 主人指示撤销**：身份/鉴权归 Yuyi 插件自治；跨 Agent 请求走同一安全三层（§7.6），P5 已按验证类任务落定 |
 | 2 | Unknown | omp 未来版本对 `approval`/`loadMode`/spill 的兼容承诺（U2） | 已登记；以启动期平台探针 + §5 回归清单对冲；不依赖未承诺行为 |
 | 3 | Unknown | Yuyi 适配器实际接口面（U1） | 已登记；共载冒烟时核实 |
 | 4 | Conflict（已处置） | v3.0 假设「核心基于上游 pi 契约、宿主能力为增强」 ⨯ 主人 2026-09-12 决策「运行时目标 = omp」 | **已按主人决策修方案**：本版撤销适配层、直接依赖 omp 平台（§1 Don't 合规说明） |
 | 5 | Conflict（已处置，历史） | v1.4 自研 `authorize()` ⨯ 评审 v2.0 判「与宿主重复」 | **v3.0 已澄清**：pi 无原生审批 → 该判基于错误基准；本版回到「直接使用 omp 原生审批」，但**不是**因自研有错，而是因宿主已选 omp |
 | 6 | Human Decision（已决） | 授权边界/档位表/生产禁止无人值守 | 主人 2026-09-12 决策 D4 + 需求包 A1–A4 |
-| 7 | Human Decision（待） | 目标仓/git 化（B2）、目录命名（B3）、omp 最低版本承诺（B5） | 待主人确认；当前产出落 `/workspace` |
-| 8 | **Residual Risk（显式登记）** | RR-1：交互态 + 显式 yolo + 未预授权 → `exec` 档会执行（②残留）；RR-2：审计可读范围为当前分支 leaf 路径 | RR-1：要求部署禁止 yolo；生产由 `policy:"deny"` 独立兜住（yolo 下仍拒，X3/X8）。RR-2：v1 接受，跨会话审计另案 |
+| 7 | Human Decision（待） | omp 最低版本承诺（B5） | B2/B3 已解决；B5 仍待主人/运维确认 |
+| 8 | **Residual Risk（显式登记）** | RR-1：交互态 + 显式 yolo + 未预授权 → `exec` 档会执行（②残留）；RR-2：会话分支审计可读范围为当前 leaf 路径 | RR-1：要求部署禁止 yolo；生产由 `policy:"deny"` 独立兜住（yolo 下仍拒，X3/X8）。RR-2：已部分闭环——独立 append-only 审计文件（P18）支持跨会话回看（`/ops-audit file`）；会话分支内仍仅当前 leaf |
 | 9 | **宿主已知限制（登记 + 已部分闭环）** | ①`event.input` 共享可变，共载扩展可改写入参；②`approval` 被求值 3 次（纯函数要求）；③扩展无法从会话分支回溯模型原始入参；④工具重名静默 last-wins，断言只能后移到 `session_start` | ①三种改写方向均有拦截层（§7.4.4 矩阵，X17/X19/X20 实测），根治需平台侧支持 → **建议上游反馈**；②`authorizedExec` 定为纯函数，令牌消费移至 execute（§7.4.4 规范 2/3）；③真值只来自审批层首评（X20/X24），故预授权必须在审批层表达；④`session_start` 断言 + `throw`，README 标注 |
 
 ---
@@ -290,11 +290,13 @@ packages/ops-extension/src/
     shell.ts ssh.ts docker.ts k8s.ts process.ts log.ts file.ts health.ts vault.ts
   approvals.ts        # 审批档位/决策单一事实源（§7.4.1）
   content-guard.ts    # 第②层：内容级硬拒（纯同步正则）
-  hooks.ts            # tool_result 审计 + session_start 提示 + 轮询
+  hooks.ts            # tool_execution_end 审计 + session_start 提示 + 轮询
   commands.ts         # 斜杠命令（只读或经工具转交，§7.7）
   setup.ts            # 配置加载（policy / 目标允许清单 / vault 口令来源）
   index.ts
 ```
+
+> **as-built 说明（2026-10-29）**：上树为设计期命名；实际 `tools/` 已拆分为 `shell.ts`、`read-only.ts`、`log.ts`、`docker-k8s.ts`、`service.ts`、`write.ts`、`knowledge.ts`、`web-verify.ts`，并新增 `guards.ts`、`request.ts`、`sandbox.ts`、`redact.ts`、`audit-sink.ts`、`audit-view.ts`、`kb-*.ts`、`policy-*.ts`、`web/`。以 `packages/ops-extension/src` 为准。
 
 ```ts
 // packages/ops-extension/src/extension.ts
@@ -320,6 +322,8 @@ export default function (pi: ExtensionAPI): void {
 ```
 
 **schema 取用点**：使用宿主注入的 `pi.zod`（原生 Zod 门面，O14；官方示例统一用法）。**不用** `pi.typebox`（官方注释标 legacy/compat，O15）。
+
+> **as-built 说明（2026-10-29）**：`ops_ssh_exec` 未单独实现；远程执行统一走 `ops_shell_exec` 的 `host` 参数（`packages/ops-extension/src/tools/shell.ts`）。下例保留为设计期 schema/档位示例。
 
 ```ts
 // packages/ops-extension/src/tools/ssh.ts
@@ -441,11 +445,13 @@ export function criticalReason(cmd: string): string | null {
 
 #### 7.4.1 档位表（决策 D4，主人已同意）
 
+> **as-built 2026-10-29**：以 `packages/ops-extension/src/approvals.ts` 的 `TIER_TABLE` 为准。`ops_ssh_exec` / `ops_ssh_upload` / `ops_ssh_download` / `ops_process_kill` 未实现（远程操作统一走 `ops_shell_exec(host)` / `ops_file_*` 的 `host` 参数）；`ops_deploy_*` 为预留，不在此表。
+
 | 档位 | 工具 | 无人值守行为 |
 |---|---|---|
-| `read` | `ops_docker_ps` `ops_docker_logs` `ops_k8s_pods` `ops_k8s_logs` `ops_process_list` `ops_log_tail` `ops_log_journalctl` `ops_log_grep` `ops_file_read` `ops_file_ls` `ops_health_check` `ops_health_poll` `ops_vault_list` `ops_docker_compose(ps\|logs)` `ops_k8s_rollout(status)` `ops_service(status)` | `approval:"read"` → **三模式自动放行**，无需交互（X1） |
-| `write` | `ops_file_write` `ops_ssh_upload` `ops_ssh_download` `ops_vault_store` | 需人点头；无人值守默认**失败**（O4） |
-| `exec` | `ops_shell_exec` `ops_shell_script` `ops_ssh_exec` `ops_docker_exec` `ops_k8s_exec` `ops_process_kill` `ops_docker_compose(up\|down\|restart)` `ops_k8s_rollout(restart\|undo)` `ops_service(非 status)` `ops_deploy_*`（预留） | 需 Owner 预授权才在无人值守放行（§7.4.2） |
+| `read` | `ops_docker_ps` `ops_docker_logs` `ops_k8s_pods` `ops_k8s_logs` `ops_process_list` `ops_log_tail` `ops_log_journalctl` `ops_log_grep` `ops_file_read` `ops_file_ls` `ops_health_check` `ops_health_poll` `ops_vault_list` `ops_kb_list` `ops_kb_search` `ops_kb_status` `ops_web_verify` `ops_docker_compose(ps\|logs)` `ops_k8s_rollout(status)` `ops_service(status)` | `approval:"read"` → **三模式自动放行**，无需交互（X1） |
+| `write` | `ops_file_write` `ops_vault_store` `ops_vault_rekey` `ops_kb_save` `ops_kb_sync` | 需人点头；无人值守默认**失败**（O4） |
+| `exec` | `ops_shell_exec` `ops_shell_script` `ops_docker_exec` `ops_k8s_exec` `ops_docker_compose(up\|down\|restart)` `ops_k8s_rollout(restart\|undo)` `ops_service(非 status)` | 需 Owner 预授权才在无人值守放行（§7.4.2） |
 
 参数多态工具用 `byAction`：
 
@@ -754,7 +760,7 @@ export function setupOpsHooks(pi: ExtensionAPI, ctx: OpsToolContext, config: Ops
 | **P2 指定服务重启** | `ops_service` + `targetPolicy`（P2 目标级预授权）；负测集 | 需求包 **A2** |
 | **P3 高危批准 + 容器/K8s** | 批准令牌（P3）；Docker/K8s/Health；Owner 预授权文档 | 需求包 **A3** |
 | **P4 编排 + 跨 Agent** | 巡检/诊断/自愈提示词；跨 Agent 只读降级路径 | §7.6 降级表 |
-| **P5 B1 落地后** | 接入 Yuyi 身份接口，开放跨 Agent 写路径（需 Owner 逐项确认） | 待 B1 |
+| **P5 跨 Agent 同一安全三层** | 验证跨 Agent 请求无旁路、默认拒绝、只读放行、负测留痕（B1 已撤销；身份归 Yuyi 插件自治） | §7.6 降级表 |
 
 ### 任务拆解（落定后填）
 
@@ -765,10 +771,10 @@ export function setupOpsHooks(pi: ExtensionAPI, ctx: OpsToolContext, config: Ops
 | **OPSP-P2** | 指定服务重启 + 目标策略 | 5 条（见台账） | L2 |
 | **OPSP-P3** | 高危批准令牌 + Docker/K8s/Health | 4 条（见台账） | L2 |
 | **OPSP-P4** | 编排模式 + 跨 Agent 只读降级路径 | 4 条（见台账） | L2 |
-| **OPSP-P5** | 接入 Yuyi 身份接口开放跨 Agent 写路径（**依赖 B1，阻断**） | 3 条（见台账） | L3 |
+| **OPSP-P5** | 跨 Agent 请求走同一安全三层（不依赖身份接口；身份由 Yuyi 插件自治） | 4 条（见台账） | L2 |
 
 > **任务面落点（已补齐机制）**：台账 `<目标项目>/docs/tasks/<taskId>.yaml`，操作入口 `scripts/task-ledger.mjs`（本次落定后新实现，符合 `principle/task-and-memory-surface.md` 五操作 + 四态状态机 + 四不变量 + `rescope`；`--selftest` 10 项 / `--validate` 通过）。目标仓 `github.com/lomehong/oh-my-ops`，分支 `main`；台账不持久化设备路径（随项目版本化）。
-> 任务已立项（`create`），全部处于「待执行」；执行方按分工 `claim` 认领，完成后 `report` 自报，**`confirm` 只能由主人发起且必须带来源**（脚本级拒绝无来源确认、非法跳步、未落定归档）。
+> 任务状态以 `docs/tasks/*.yaml` 为准（截至 2026-10-29：48 项中 38 项已落定、8 项待确认、2 项待执行）；执行方按分工 `claim` 认领，完成后 `report` 自报，**`confirm` 只能由主人发起且必须带来源**（脚本级拒绝无来源确认、非法跳步、未落定归档）。
 
 ---
 
@@ -779,7 +785,7 @@ export function setupOpsHooks(pi: ExtensionAPI, ctx: OpsToolContext, config: Ops
 | **平台决策（最新，覆盖 v3.0）** | 运行时目标 = **oh-my-pi（omp）**；理由：pi 平台能力过于简陋（无审批子系统/受管定时器/输出 spill，schema 偏 legacy） | 主人 2026-09-12 |
 | Conflict（方案 vs 事实） | 撤销 v3.0 的宿主中立适配层，直接依赖 omp 平台（依据：联邦原则「宿主平台注入不受限」） | 本版 §7.2 + §1 Don't 说明 |
 | Business Trade-off | schema 用 `pi.zod`（原生）而非 `pi.typebox`（legacy/compat） | 本版 §7.3（O14/O15） |
-| Cross-team Commitment | 走 Yuyi 受支持身份接口（B1，**阻断**，需主人中转） | 主人 2026-09-12 |
+| Cross-team Commitment | ~~走 Yuyi 受支持身份接口（B1，阻断，需主人中转）~~ → **2026-09-12 主人指示撤销**：身份/鉴权归 Yuyi 插件自治 | 主人 2026-09-12 |
 | High-risk Change | 档位表 + 生产变更禁止无人值守 + 高危需 Owner 明示批准 | 主人 2026-09-12 |
 | Unknown（需求来源） | 验收标准 A1–A4 由主人口述确认 | 主人 2026-09-12 |
 | 环境（仓库/git） | 目标仓 `github.com/lomehong/oh-my-ops`（分支 `main`）；目录按适配层标准 `docs/designs\|reports\|tasks` | 主人 2026-09-12 |
@@ -806,7 +812,7 @@ export function setupOpsHooks(pi: ExtensionAPI, ctx: OpsToolContext, config: Ops
 | P2-2 | 文档写 `pi -p` vs 实际 `omp` | 全文改 `omp` |
 | P2-3 | 无依赖清单 | 本版明确：L1 仅 Node + CLIs；L2 依赖 omp 平台注入面（`pi.zod`）+ 宿主包类型；**无第三方 schema 包** |
 | P2-4 | 结构不符模板 | 本版按 `templates/executable-design.md` 重排 |
-| P2-5 | 目录命名漂移 | 登记 B3 待确认 |
+| P2-5 | 目录命名漂移 | 登记 B3 待确认（已于 v4.3 解决：统一 `docs/designs/`） |
 | **新增** | `loadMode` 默认 discoverable → 工具 `approval` 声明失效 | **§7.3 必修 + §5 Contract ③ + 负测 ⑤**（X4–X6 实证） |
 
 ## 附录 B：变更记录

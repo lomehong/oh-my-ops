@@ -27,6 +27,10 @@ events:
     op: 'confirm'
     by: '主人'
     note: '落地经 CI 真跑闭环：run #90 首跑暴露打包门路径缺陷（已修 a606729），重推同名 tag 后 run #91 双 job 全绿、Release v0.16.0 5 产物已发布；执行记录 §5.7 留档'
+  - ts: '2026-10-29T12:45:00.000Z'
+    op: 'note'
+    by: 'qoder-architect(qoder-cli)'
+    note: '状态校准（2026-10-29）：pending 中「webhook 写回未检查 resp.ok」（缺陷 #7）已由 KBHOOK-1 修复并验证（probe-kb-lint 6a/6b 全绿）；从 pending 移除。'
 branch: 'feature/CIPORT-1'
 report:
   summary: 'CIPORT-1 落地（自报）：Windows/Git Bash 下 test:ci 13 步全绿、可推。① 枚举先行：13 步逐项独立执行，红 8 步 / 绿 5 步、≈788s 落档（/e/tmp/ciport-enum/）；② 平台语义类修复 8 项：L1 ssh 受管路径断言、L2 预算 60s（11 文件）、探针 0600 能力分级 ×4、bootstrap 假代理换 bun、探针 EXIT-trap + set -e 缺陷（新 proc.sh 双命名空间进程库）、MSYS 路径归一、口径漂移四处；③ 真实缺陷 7 项：kb-sync 凭据 helper 链重置（安全面）、hostname -I GNU-only 静默失败、config.env MSYS 路径、接班进程静默消失、0600 硬拦锁死、--outfile /dev/null 落 nul、selftest 负例默认路径污染仓库根（run #3 指纹漂移根因）；另登记 1 待决（webhook 写回未查 resp.ok）；④ 连续两次全绿严格对：#4 22:06:20–22:20:23、#5 22:20:33–22:34:39，起点=终点指纹 74f3b320…，两次 TEST_CI_EXIT=0、✗=0；⑤ 判据未弱化自证：0600 探测强制置位负例（bash 644 / mjs 666 双双抛出）+ 污染护栏变异负例（撤销修复 → 13/14 且污染复现）；⑥ 打 tag 触发 CI 路径保持：release.yml 触发与打包三处闸门原样，test:workflow 绿。'
@@ -43,7 +47,6 @@ report:
     - 'CI（release.yml）本身尚未真跑过：本地为结构守卫 + 逐字模拟；打 tag 后首次真跑（结果并入 confirm 前留档）'
     - 'POSIX 严格分支与 test:install / enroll-install 的 Linux 语义未在 Linux 真机复跑（本机以强制置位负例自证）'
     - 'test:web-verify 本机 SKIP（无 Chrome）；test:l2 的 60000ms 预算未在慢盘/冷缓存机器验证'
-    - 'webhook 写回未检查 resp.ok（真实缺陷 #7）登记待决，不在本次范围'
   at: '2026-09-26T14:35:39.000Z'
   by: 'qoder-architect(qoder-cli)'
 confirmedBy: '主人'

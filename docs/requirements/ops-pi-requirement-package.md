@@ -3,7 +3,7 @@
 > 来源：主人 2026-09-12 决策回复（决策简报 `docs/reports/ops-pi-decision-brief-2026-09-12.md` D1–D6）
 > 产出：architect-prd-digest 六项覆盖检查
 > 状态：**已确认**（主人 2026-09-12 确认 A0–A6；后经独立复评补入 A6）
-> 关联方案：`docs/designs/ops-pi-architecture-design.md`（v4.3，已落定）
+> 关联方案：`docs/designs/ops-pi-architecture-design.md`（v4.4，已执行）
 > 宿主能力矩阵（决策依据与升级复核清单）：`docs/reports/pi-vs-omp-host-capability-matrix.md`
 
 ---
@@ -83,7 +83,7 @@
 | # | 类型 | 内容 | 处置 |
 |---|---|---|---|
 | B1 | **已撤销** | 原「请 Yuyi 提供身份查询接口」（跨团队承诺） | **前提不成立**：主人 2026-09-12 指示 Yuyi 身份插件是 omp 插件、自治；ops-pi 不接管身份。授权改为**目标导向 defaultDeny**，与调用方身份解耦（方案 §7.6）。**P5 已重界定**为验证类任务 |
-| B2 | **待推送（需凭证）** | 目标仓库：`https://github.com/lomehong/oh-my-ops.git` | **本地已就绪**：`git init` + 分支 `main` + remote `origin` 已配置 + 首次提交（34 文件，工作区干净）。**待办**：环境无 GitHub 凭证（`gh auth status` 未登录、无 `GH_TOKEN`），`push` 无法认证 → 需主人提供 PAT 或自行推送 |
+| B2 | **已解决** | 目标仓库：`https://github.com/lomehong/oh-my-ops.git` | 已推送并持续演进：本地 `main` 当前 `9c16823`（2026-09-27）；后续发布与提交见 `git log` / Release 页 |
 | B3 | **已解决** | 目录命名统一 | **已统一为 `docs/designs/`**（适配层标准 designs/reports/tasks）；原 `docs/design/` 已改名，5 份文档交叉引用同步更新并校验无残留 |
 | B4 | 未知 | Yuyi 适配器实际接口面（本机无该文件，无法核对能力清单与 `@qianji/core` 依赖） | 标 Unknown；共载冒烟前不得视为已证实 |
 | B5 | 待确认 | omp 最低版本承诺（本方案按 18.1.18 验证）与升级兼容策略 | 由启动期平台探针（方案 §7.2）对冲**能探测到的**平台能力；但探针**读不到 `approvalMode`**（实测扩展 API 无 settings 访问器，X14），故审批模式违例须由**部署规范**约束 + 方案 §7.4 ①-b 模式无关兜底层保证安全属性不依赖它 |

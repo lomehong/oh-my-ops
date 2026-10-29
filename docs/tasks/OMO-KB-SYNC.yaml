@@ -83,6 +83,10 @@ events:
     op: 'repair'
     by: 'qoder-architect(qoder-cli)'
     note: '台账结构修复：14 条手工追加事件错位为孤儿（未挂 events: 键）致解析失败；现归位 events 列表末尾，内容零改动；--validate 由红转绿'
+  - ts: '2026-10-29T12:45:00.000Z'
+    op: 'note'
+    by: 'qoder-architect(qoder-cli)'
+    note: '状态校准（2026-10-29）：pending 中 P2 供给 CLI / P3 自注册服务已由本文件后续 report（2026-09-17）落地，代码见 scripts/ops-kb-provision.mjs、scripts/ops-kb-enroll-server.mjs、packages/ops-extension/src/kb-enroll.ts；两项已从 pending 移除，仅保留 el7 真机复验。任务仍为待确认（confirm 归主人）。'
 branch: 'feature/OMO-KB-SYNC'
 report:
   summary: 'OMO-KB-SYNC P1 落地（自报）：git 兼容层（探测+退化，修掉 el7 三处不兼容）+ KB 同步共享实现（只 pull main、只推 instance/<device>）+ 凭据存储/保护（0600、PathGuard 机密根、永不入库）+ omo kb sync|status|disable|loop 子命令 + serve 定时同步 + 守卫入 test:ci。已合并 main（e2917cb）。'
@@ -94,8 +98,6 @@ report:
     - 'K9：npm run test:ci 全绿（L1 150、L2 73 ×6 文件、typecheck、install/bootstrap 守卫）'
     - 'K10：沙箱 HOME 内真实跑 omo kb status / sync --push → 推 instance/PC-SZ-375 ✓，再 sync「无本地改动，无需提交」'
   pending:
-    - 'P2 供给 CLI（ops-kb-provision / ops-kb-rotate，E2）：代码+桩测试可先行，真机跑需 Owner 给 Gitea 管理 token'
-    - 'P3 自注册（omo kb enroll + /enroll//rotate//revoke 服务）：需部署决策（主人）+ Gitea 4 条待验证事实（代签 token / scope+expires_at / PR scope / SSH 端点）'
     - '真机复验：对端 el7 装下一版后跑 omo kb status，应显示 git 1.8.3.1 的退化说明'
   at: '2026-09-17T07:01:07.878Z'
   by: 'omp-architect'

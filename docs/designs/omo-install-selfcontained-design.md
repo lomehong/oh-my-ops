@@ -3,13 +3,13 @@
 ```yaml
 ---
 title: omo 自包含安装器——fork omp 定制单文件运行时 + ~/.omo 私有域 + bun 自动装
-status: 已执行        # 草稿 → 已评审 → 已落定（主人确认后） → 已执行（实现 OMOINSTALL-3 已落定）
+status: 已执行        # 草稿 → 已评审 → 已落定（主人 2026-09-14 确认）→ 已执行（OMOINSTALL-3 已落定）
 requirement: docs/requirements/omo-install-selfcontained-requirement-package.md（OMOINSTALL-1，已落定；T1–T5 已拍板）
 author: omp-architect（omp_1c3610f27a3f）
 created: 2026-09-14
 review:
-  score: 0
-  conclusion: 待评审
+  score: 60             # dsh 设计评审 60/60（OMOINSTALL-2 证据）；C1 体积取舍仍待主人
+  conclusion: 已执行（实现 OMOINSTALL-3 已落定；C1 体积取舍未决，不阻塞）
 ---
 ```
 

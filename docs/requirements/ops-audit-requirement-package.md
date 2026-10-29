@@ -2,8 +2,8 @@
 
 > 来源：主人 2026-09-14 试点需求「候选 A」——候选清单与踩点结论由本 Agent 于同日前置会话提出
 > 产出：architect-prd-digest 六项覆盖检查（本文件）
-> 状态：**待确认**（自报 ≠ 完成；本文件经主人确认后方可进入 architect-design）
-> 关联基线：`docs/requirements/ops-pi-requirement-package.md`（A0–A6）、`docs/designs/ops-pi-architecture-design.md` v4.3（已落定）
+> 状态：**已确认**（OPSAUDIT-1 主人确认 2026-09-14；后续 OPSAUDIT-2/3/4 已落定，/ops-audit 已执行）
+> 关联基线：`docs/requirements/ops-pi-requirement-package.md`（A0–A6）、`docs/designs/ops-pi-architecture-design.md` v4.4（已执行）
 > 台账任务：`OPSAUDIT-1`
 > 评审：已请求 dsh 侧 architect 会话独立窗口评审（互不通气，见 §9）
 
@@ -22,7 +22,7 @@
 | B1 | 命令可发现、可用 | 扩展加载后 `/ops-audit` 被注册（`pi.registerCommand("ops-audit", …)`）；交互会话内执行返回审计输出，**不是** unknown command |
 | B2 | 读取面正确 | 数据源 = `ctx.sessionManager.getBranch()` 中 `type === "custom" && customType === "ops_audit"` 的条目；按 `ts` **倒序**取最近 n 条（默认 n=20） |
 | B3 | 字段呈现完整且不臆造 | 每条输出含 `ts` / `tool` / `authz` / `isError`（以 `ok`/`blocked` 可辨）；有则显示 `reasonClass`、`host`，无则显示 `-`。**字段缺失不得补默认值语义** |
-| B4 | 参数处理明确 | 无参 → 默认 20；`/ops-audit 5` → 5 条；非正整数/非数字 → 明确错误提示且**不输出条目**；超过上限（待确认 T1，暂定 200）→ 截断到上限并提示已截断 |
+| B4 | 参数处理明确 | 无参 → 默认 20；`/ops-audit 5` → 5 条；非正整数/非数字 → 明确错误提示且**不输出条目**；超过上限（T1 已定案：200）→ 截断到上限并提示已截断 |
 | B5 | 只读、无副作用 | 命令可达的 L1 方法集合 ⊆ `read` 档（对照方案 §7.7 可验证断言）；不产生任何变更/审批/令牌消费 |
 | B6 | 自审计一致 | 命令自身落一条 `ops_audit`（`tool: "ops-audit"`，`authz: "read"`），与 `/ops-inspect`、`/ops-health` 先例一致（命令路径不产生 `tool_execution_end`，E2/E7） |
 | B7 | 空态与边界显式 | 分支内无 `ops_audit` 条目 → 输出「本会话无审计条目」；输出同时声明可读范围 = **当前会话分支 leaf 路径**（RR-2 边界，E5） |
@@ -65,7 +65,7 @@
 
 **无。**（本需求为纯新增只读命令，无跨团队承诺、无合规硬约束、无高风险变更面。）
 
-## 6. 待确认（需主人拍板；未清前不得进入 architect-design）
+## 6. 待确认（T1–T5 已于 2026-09-14 主人拍板闭合）
 
 | # | 待确认 | 建议默认（若主人不另指示即按此设计） | 影响 |
 |---|---|---|---|
@@ -114,7 +114,7 @@
 **有条件通过（Conditional Pass）。**
 
 - 六项覆盖齐备，无阻断项；五问通过；
-- **停止条件**：T1–T5 未清前**不得进入 architect-design**（按 `architect-prd-digest` 停止条件：不得带未知进入设计）。T1 直接决定验收判据 B4 的形状，须优先拍板；
+- **停止条件**：T1–T5 未清前**不得进入 architect-design**（按 `architect-prd-digest` 停止条件：不得带未知进入设计）。T1 直接决定验收判据 B4 的形状，须优先拍板；**已于 2026-09-14 清零，停止条件解除**；
 - 本文件为**自报**产出，落定以主人确认为准（AGENTS.md 纪律 1）。
 
 ## 10. 证据表（踩点回源）

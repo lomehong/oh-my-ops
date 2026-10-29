@@ -3,6 +3,7 @@
 > 产出方式：`codebase-graph-module-rules` 技能（Graphify 图谱 + 源码复核）
 > 目标模块：`omo kb sync --push` 的**域活档案机械归并**链路
 > 项目：oh-my-ops（`/workspace`）· 版本锚点：v0.14.3 · 产出日期：2026-09-22
+> 状态：**已实现**（KBORG-1 已落定，v0.14.2）；§8 保留 2 项未验证：老 git（<2.3）全交互面、`fs.readdir` 顺序稳定性。
 
 ## 0. 范围与证据边界
 

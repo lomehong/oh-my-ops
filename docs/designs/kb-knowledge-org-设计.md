@@ -1,15 +1,17 @@
 ---
 title: 知识库组织 reform——域活档案 + sync 机械归并 + 合流期 lint 门禁
-status: 草稿
+status: 已执行        # 草稿 → 已落定（KBORG-1 主人确认 2026-09-22）→ 已执行（v0.14.2）
 requirement: 会话讨论（2026-09-21）："以后的知识如何更合理地组织"，Owner 认可方向并要求**可确保的机制**（README 规范=建议，不算数）
 author: omp-architect（omp-docker）
 created: 2026-09-21
 review:
-  score: 0
-  conclusion: 待评审
+  score: 60             # 自检 60/60、评审 60/60（KBORG-1 evidence）
+  conclusion: 通过（KBORG-1 已落定；门禁运营项见 §6 / §8 与台账 pending）
 ---
 
 # 可执行技术方案：知识库组织 reform（KBORG-1）
+
+> 实现状态（2026-10-29 核验）：代码已落地并随 v0.14.2 发布；合流硬门禁仍待 Owner 完成 Gitea 分支保护/webhook 设置，warn→strict 未切换。webhook 写回失败路径已由 KBHOOK-1 修复（`gateApplied:false` + `lint.status-write-failed` 审计；comment 失败单独记审计）。
 
 ## 0. 一句话与五问速答
 

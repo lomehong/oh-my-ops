@@ -1,15 +1,17 @@
 ---
 title: kb 服务 Web 配置前端（一期：面板+签码+配置修改，认证预留 yufu）
-status: 草稿
+status: 已执行        # 一期：草稿 → 已落定（KBUI-1 主人确认 2026-09-21）→ 已执行（v0.13.0）；二期未开工
 requirement: docs/designs/omo-kb-web-ui-需求包.md
 author: omp-architect（omp-docker / PC-SZ-375）
 created: 2026-09-21
 review:
   score: 60
-  conclusion: 通过（architect_review 2026-09-21，待主人确认落定）
+  conclusion: 通过（architect_review 2026-09-21；KBUI-1 主人确认 2026-09-21）
 ---
 
 # 可执行技术方案：kb 服务 Web 配置前端（一期）
+
+> 实现状态（2026-10-29 核验）：一期已执行并随 v0.13.0 发布；二期（角色→页面能力映射、单点登出、enroll 迁 yufu）未开工。
 
 ## 0. 一句话与五问速答
 

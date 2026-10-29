@@ -25,6 +25,10 @@ events:
     op: 'confirm'
     by: '主人'
     note: '会话确认（2026-09-13）'
+  - ts: '2026-10-29T12:45:00.000Z'
+    op: 'note'
+    by: 'qoder-architect(qoder-cli)'
+    note: '状态校准（2026-10-29）：pending 中「ops_file_write 远程写入」已由 OPSP-P13 落定，「vault 口令轮换/备份」已由 OPSP-P14 落定；两项均从 pending 移除，本任务无剩余代码缺口。'
 branch: 'feature/OPSP-P8-write-vault'
 report:
   summary: 'P8 Write 档 + Vault 加密存储——实现完成，运行时验收 3/3 通过'
@@ -36,9 +40,7 @@ report:
     - 'vault 解锁：session_start + 工具内惰性解锁双路径，口令仅来自 OPS_VAULT_PASSPHRASE 环境变量（§7.7）'
     - '测试：core vault 5 用例（往返/错口令/篡改/锁定/权限）；tsc 0；node 88/88；bun 145/145'
     - 'runtime/10-write-vault.sh：3/3 通过（存入/密文落盘/见名不见文）'
-  pending:
-    - 'ops_file_write 远程写入（跟随 SshPool 后续版本）'
-    - 'vault 口令轮换（re-key）与备份策略未实现'
+  pending: []
   at: '2026-09-13T10:45:55.490Z'
   by: 'omp-architect-session'
 confirmedBy: '主人'

@@ -1,7 +1,7 @@
 # omo 知识库同步与凭据分发设计（ops-kb）
 
 > 来源需求：主人 2026-09-17 会话——内部 git 仓 `https://twin.hzins.com/git/hzins-ops/ops-kb` 已创建，用于 omo 实例间同步共享知识库；需**自动化**为每个 omo 实例分配可用账号/令牌，用于拉取与同步。
-> 状态：**待主人拍板**（本文件为设计产出，未进入编码）
+> 状态：**已实现（P1/P2/P3）**——台账 `OMO-KB-SYNC` 待主人确认；el7 真机退化说明复验未完成。实现与偏差见 §5.2″ / §5.6′（as-built）。
 > **服务器已确认（2026-09-17 主人）**：**Gitea 1.27.3**，根路径 `https://twin.hzins.com/git/`。
 > 我方对实例的只读探测（未持凭据）：
 > · `GET /git/` → 200（Gitea Web UI 正常）；`GET /git/api/v1/version` → **403 `Only signed in user is allowed to call APIs`**（该实例 API **禁止匿名**）；
@@ -24,7 +24,7 @@
 - 不允许实例直接推 `main`（保留知识库的「待审核」评审门）。
 - 不改动 dsh-architect / 大脑仓（本设计只落 omo 侧与 Git 服务器侧）。
 
-**To Confirm**：服务器产品与版本；账号模型；写入模型；Git 管理凭据归属与部署位置；TTL/轮换策略。
+**To Confirm（已闭环）**：服务器=Gitea 1.27.3；账号=每实例 bot 密码；写入=instance/<device> + PR 合流；凭据归属=Owner/供给服务；TTL/轮换=注册表强制 12 个月 + rotate。剩余：el7 真机复验（台账 pending）。
 
 ## 二、系统覆盖
 
@@ -131,9 +131,13 @@
 | `POST /rotate` | `{current_token}` | `{token, expires_at}` | 以现有 token 自证 → 签发新 token（旧的由服务在实例确认后吊销） |
 | `POST /revoke` | `{instance}` | `{ok}` | 仅 Owner 调用 |
 
+> as-built 修正（P3）：实际对外只有 `GET /healthz` 与 `POST /enroll {code, device, agent_id?}` → `{ok, op, credential?|revoked?}`；rotate/revoke 不是独立 HTTP 路由，而是通过 `ops-kb-provision.mjs code --op rotate|revoke` 签发的一次性码兑换。详见 §5.6′。
+
 **同一逻辑两种形态**（先在实例/运维机上以 CLI 形态跑通，再包成 HTTP 服务）：
-- **E2（先做，无新增常驻服务）**：`ops-kb-provision` / `ops-kb-rotate` CLI，由 Owner 在有机管理 token 的机器上执行；
-- **E1（后续）**：同一逻辑套 150 行 HTTP 暴露为自注册，供实例自助兑换。
+- **E2（已实现，P2）**：`ops-kb-provision` CLI，由 Owner 在有机管理 token 的机器上执行；
+- **E1（已实现，P3）**：同一逻辑套 HTTP 暴露为自注册，供实例自助兑换（as-built 见 §5.6′）。
+
+> as-built 修正：实际为单一 `scripts/ops-kb-provision.mjs`（create/rotate/revoke/grant/list），不存在独立 `ops-kb-rotate` 脚本。
 
 
 
@@ -294,4 +298,4 @@ bun scripts/ops-kb-enroll-server.mjs --api <gitea>/api/v1 --repo <owner>/<repo> 
 | 为什么改 | 共享 KB 需要**可单独吊销的每实例凭据**与**自动化发放**；现有 gitSync 既无凭据通路、也不兼容对端老 git，且直推 `main` 会绕过评审门 |
 | 影响谁 | 所有 omo 实例（读路径为增强、缺席降级）；Owner（授权与合流）；Git 服务器运维（token 生命周期） |
 | 如何验证 | §七：Unit/Contract/Regression/Monitoring/Rollback 五类；关键真机项=老 git 与内网 HTTPS 实跑 |
-| 未确认 | §八 四条 Unknown + 五条待拍板决策 |
+| 未确认 | §八 剩余 Unknown（el7 真机行为）；设计决策已由 2026-09-17 主人拍板，实现见 §5.2″ / §5.6′ |

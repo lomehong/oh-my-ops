@@ -4,6 +4,7 @@
 > 驱动指令（原文）：「系统性修复这些构建的问题，确保任何设备都可以正确的 git push，打tag触发CI。」
 > 依据：`docs/tasks/CIPORT-1.yaml`（accept 六条）；`docs/designs/omovendor-1-执行记录.md` §3.6（本记录收口的「三类环境限定红项」）；`.github/workflows/release.yml`（tag 触发与打包闸门必须保持）
 > 口径：只登记实测。未跑到的（Linux 真机）单独列在 §七，不与本机结论混报。
+> 后续状态（2026-10-29）：§3.2-7 的 webhook `resp.ok` 已由 **KBHOOK-1** 修复并验证（`probe-kb-lint.sh` 6a/6b 全绿）；本记录保留当时的“待决”快照。
 
 ## 一、测试清单（先有验收后有代码；对应 accept 六条）
 

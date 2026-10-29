@@ -188,6 +188,9 @@ omo kb disable     # 停用远端同步（删除凭据；本地知识库保留�
 - **凭据模型**：每实例一个 bot 账号 + 随机密码。凭据落 `$OMO_DIR/kb/credential.json`（0600），git 凭据落
   `$OMO_DIR/home/.git-credentials`（0600，`store` 格式）；两者均在 **PathGuard 机密根**内（Agent 经 `ops_file_*` 读不到），
   并写入 `.git/info/exclude` **永不入库**。凭据文件存在但不可用时**大声失败**（不静默降级为本地模式）。
+- **合流 lint 门禁**：kb 服务 `/kb/webhook`（HMAC）对 PR 做结构/相似度 lint 并回写 commit status `kb-lint`。
+  Gitea 拒写 status 时返回 `gateApplied:false` 并记 `lint.status-write-failed`，**不会假绿**；comment 写回失败记
+  `lint.comment-write-failed` 并回报 `commentWritten:false`，status 门禁仍生效（KBHOOK-1）。
 - **生命周期**：签发 / 轮换 / 吊销全部走 API。Owner 侧用 `scripts/ops-kb-provision.mjs`
   （`create | rotate | revoke | grant | list | code`），或常驻 `scripts/ops-kb-enroll-server.mjs`
   （一次性码授权、**TLS 默认强制**、哈希链审计、发放前自证）；实例侧只认 `omo kb enroll`。
@@ -280,7 +283,7 @@ omo 自包含安装器部署下由启动器注入 `OMO_POLICY_PATH=~/.omo/policy
 
 | 档位 | 工具 | 说明 |
 |---|---|---|
-| **read**（自动放行） | `ops_file_read` `ops_file_ls` `ops_process_list` `ops_log_tail` `ops_log_journalctl` `ops_log_grep` `ops_health_check` `ops_health_poll` `ops_vault_list` `ops_docker_ps` `ops_docker_logs` `ops_docker_compose(ps\|logs)` `ops_k8s_pods` `ops_k8s_logs` `ops_k8s_rollout(status)` `ops_service(status)` | 只读诊断 |
+| **read**（自动放行） | `ops_file_read` `ops_file_ls` `ops_process_list` `ops_log_tail` `ops_log_journalctl` `ops_log_grep` `ops_health_check` `ops_health_poll` `ops_vault_list` `ops_docker_ps` `ops_docker_logs` `ops_docker_compose(ps\|logs)` `ops_k8s_pods` `ops_k8s_logs` `ops_k8s_rollout(status)` `ops_service(status)` `ops_kb_list` `ops_kb_search` `ops_kb_status` `ops_web_verify` | 只读诊断 |
 | **write**（需批准） | `ops_file_write`（policy action=`file-write`，支持远程） `ops_vault_store`（`vault-write`） `ops_vault_rekey`（`vault-rekey`，P14 口令轮换） `ops_kb_save`（`kb-write`） `ops_kb_sync`（`kb-sync`） | 文件写入/凭据管理/知识库 |
 | **exec**（需批准） | `ops_shell_exec` `ops_shell_script` `ops_docker_exec` `ops_docker_compose(除 ps\|logs)` `ops_k8s_exec` `ops_k8s_rollout(除 status)` `ops_service(start\|stop\|restart\|enable\|disable)` | 变更/执行 |
 
@@ -347,13 +350,14 @@ bash packages/ops-extension/test/runtime/06-docker-k8s-acceptance.sh
 | 文档 | 内容 |
 |---|---|
 | [需求包](docs/requirements/ops-pi-requirement-package.md) | 可验收目标 A0–A6、范围、不做项 |
-| [设计方案](docs/designs/ops-pi-architecture-design.md) | 可执行技术方案 v4.3（已落定）+ v4.4 实现期补录（§7.4.6 路径守卫/独立审计） |
+| [设计方案](docs/designs/ops-pi-architecture-design.md) | 可执行技术方案 v4.4（已执行；v4.3 定案 + v4.4 实现期补录 §7.4.6 路径守卫/独立审计） |
 | [宿主能力矩阵](docs/reports/pi-vs-omp-host-capability-matrix.md) | 上游 pi ⨯ omp 逐条对照 |
 | [评审报告](docs/reports/ops-pi-review-v4-2026-09-12.md) | architect-review + 勘误 |
 | [独立复审①](docs/reports/independent-recheck-2026-09-12.md) | 三项绕过路径 + 审计覆盖 |
 | [独立复审②](docs/reports/independent-recheck-2-2026-09-12.md) | N-1 升级 / N-4 有解 |
 | [知识库同步与凭据分发设计](docs/designs/omo-kb-sync-credential-design.md) | P1/P2/P3 方案 + Gitea 1.27.3 实测事实 + as-built（§5.2″/§5.6′） |
 | [知识库同步执行记录](docs/designs/omo-kb-sync-执行记录.md) | 五轮落地与真机验收证据（含 8 个真机暴露缺陷的修复） |
+| [设计状态审计（2026-10-29）](docs/reports/design-audit-2026-10-29.md) | 设计文档状态核验、未完成项、状态回写记录与 L1/L2 实测证据 |
 
 ## 许可
 
