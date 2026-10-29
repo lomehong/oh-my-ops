@@ -14,15 +14,15 @@
 | 维度 | 数量 | 说明 |
 |---|---:|---|
 | 任务台账总数 | 48 | `docs/tasks/*.yaml`（审计时 47 + 新增 KBHOOK-1） |
-| 已落定 | 38 | 落定率 79.2%（38/48） |
-| 待确认 | 8 | 实现已自报，等待主人确认或真机验证（含 KBHOOK-1） |
+| 已落定 | 39 | 落定率 81.3%（39/48） |
+| 待确认 | 7 | 实现已自报，等待主人确认或真机验证（含 KBHOOK-1；WEBVERIFY-1 已由远端 b286cef 确认落定） |
 | 待执行 | 2 | OPSP-P16、OPSP-P17，代码中未找到实现 |
 | 设计类文档 | 8 | 状态已于 2026-10-29 核验回写；仍存开放项/二期项（见 §6） |
 | 真·未开工功能 | 2 | 定时巡检任务化；任务下发/认领/回执工具化 |
 | 设计承诺未完全生效 | 1 | KBORG-1 知识合流硬门禁（Owner 侧配置 + strict 未切换） |
 | 已登记未修缺陷/增强 | 2 | 7 条 `Custom tool load failed` 噪音；ssh-keyscan 指纹未入审计 |
 | 已修复（本轮） | 1 | webhook 写回 `resp.ok`（KBHOOK-1，2026-10-29） |
-| 已实现待确认/待验证 | 8 + 4 | 8 项待确认任务 + 4 项已落定但 pending 未关闭的任务 |
+| 已实现待确认/待验证 | 7 + 5 | 7 项待确认任务 + 5 项已落定但 pending 未关闭的任务 |
 
 **一句话结论**：核心安全三层、只读/写入工具链、审计双写、安装与发布链路已基本落地；真正没做完的是 **2 个已立项功能（定时巡检、任务下发/回执）**、**知识库合流硬门禁的运营启用**、**Web 管理后台二期**，以及若干已登记未修的缺陷和外部环境验证缺口。
 
@@ -78,15 +78,15 @@
 
 | 任务 | 实现证据 | 未兑现项 | 判定 |
 |---|---|---|---|
-| **OMO-KB-SYNC** | `kb-cli.ts`、`kb-enroll.ts`、`kb-sync.ts`、`scripts/ops-kb-provision.mjs`、`scripts/ops-kb-enroll-server.mjs` 均在；P1/P2/P3 报告已入台账 | 台账 pending 仍列 P2/P3（已被后续 report 覆盖，属**过期 pending**）；剩余真实项：el7 真机跑 `omo kb status` 验证 git 1.8.3.1 退化说明 | Implemented-unconfirmed；建议主人 confirm，并清理过期 pending |
+| **OMO-KB-SYNC** | `kb-cli.ts`、`kb-enroll.ts`、`kb-sync.ts`、`scripts/ops-kb-provision.mjs`、`scripts/ops-kb-enroll-server.mjs` 均在；P1/P2/P3 报告已入台账 | pending 已补记并清理 P2/P3；剩余真实项：el7 真机跑 `omo kb status` 验证 git 1.8.3.1 退化说明 | Implemented-unconfirmed；建议主人 confirm |
 | **OMO-REDACT** | `packages/ops-core/src/redact.ts`、`packages/ops-extension/src/redact.ts`；19 例测试 | 无 pending；仅缺主人 confirm | Implemented-unconfirmed |
 | **OMOVENDOR-1** | `scripts/probe-yuyi-reply-frame.mjs`、`scripts/probe-vendor-integrity.sh`、`vendor/yuyi-omp-extension.PROVENANCE.md` 均在；发布门三处已接 | ① 发布门仅在下一个 `v*` tag 真跑；② 上游 D1/D2/D3 未修，撤线需“上游件 md5 一致 + 本仓探针绿”双证 | Implemented-unconfirmed；上游依赖为主 |
 | **OPSP-P15** | KnowledgeStore、`ops_kb_list/search/save/sync`、gitSync 均在；台账 evidence 完整 | 无 pending；仅缺主人 confirm | Implemented-unconfirmed |
 | **OPSP-P19** | `policy-lint.ts`、`policy-explain.ts`、`policy-cli.ts`、`/ops-policy` 均在；单测 228 pass | 真机（Linux + omo 启动器）验证 `omo policy lint/explain` 与 `omo status` 策略路径 | Implemented-unconfirmed |
-| **OPSP-P23** | `fmtExecResult` 头 5/尾 3 已实现；`read-tier-structure.test.ts` 14 pass | 真机复验 compose v1 daemon 不可达场景；台账 pending 的“发布 v0.9.6”已过时（v0.16.1 已发布） | Implemented-unconfirmed |
-| **WEBVERIFY-1** | `ops_web_verify`、`web-verify.ts`、`probe-web-verify.sh` 均在；7 例测试 | 实例侧启用需 CDP 端点（el7 需 docker 浏览器镜像或集中式远程 CDP）；知识回灌两条待入 practice | Implemented-unconfirmed；部署前置未完成 |
+| **OPSP-P23** | `fmtExecResult` 头 5/尾 3 已实现；`read-tier-structure.test.ts` 14 pass | 真机复验 compose v1 daemon 不可达场景；发布 pending 已清理 | Implemented-unconfirmed |
+| **KBHOOK-1** | webhook status/comment 写回 `resp.ok` 修复；`probe-kb-lint.sh` 6a/6b 全绿；全量 `test:ci` exit 0 | 真实 Gitea 5xx 注入未做（stub 覆盖写回拒绝路径）；待主人 confirm | Implemented-unconfirmed |
 
-#### 2.3.2 台账 `已落定` 但 pending 未关闭（4 项）
+#### 2.3.2 台账 `已落定` 但 pending 未关闭（5 项）
 
 | 任务 | 未兑现项 | 判定 |
 |---|---|---|
@@ -94,6 +94,7 @@
 | **PUSHFLK-1** | `oh-my-ops-v0.16.1.tar.gz`（127MB）远端 sha256 复核“进行中”（`docs/tasks/PUSHFLK-1.yaml:43`） | 任务已落定；大包核验/补记待完成 |
 | **CIPORT-1** | Linux 语义未真机复跑、`test:web-verify` 本机 SKIP、`test:l2` 60s 预算未在慢盘验证；webhook #7 已由 KBHOOK-1 修复 | 任务已落定；验证类遗留，缺陷 #7 已闭环 |
 | **KBORG-1** | Gitea 分支保护/webhook 未设置、strict 未切换、`.122` 误归并分支待重推、实例侧需升级 omo 才生效 | 任务已落定；代码完成，运营启用未完成（见 CHK-005/006） |
+| **WEBVERIFY-1** | 实例侧 CDP 端点未启用；知识回灌两条待入 practice | 任务已于 2026-09-24 由主人确认落定（远端 b286cef）；部署前置未完成 |
 
 #### 2.3.3 外部环境验证缺口（非代码缺陷）
 
@@ -113,7 +114,7 @@
 |---|---|---|---|---|---|
 | **CHK-013** | 设计文档状态未回写 | 4 份文档 | ① `docs/designs/kb-knowledge-org-设计.md:3,9`：`status: 草稿` / `conclusion: 待评审`，但 KBORG-1 已落定；② `docs/designs/omo-kb-web-ui-design.md:3,9`：`status: 草稿` / 待主人确认，但 KBUI-1 已落定；③ `docs/designs/omo-kb-sync-credential-design.md:4`：`待主人拍板（未进入编码）`，但 P1/P2/P3 已实现（同文件 `:149`、`:243` 为 as-built）；④ `docs/designs/omo-install-selfcontained-design.md:6,12`：`status: 已执行` 但 `conclusion: 待评审` | **已回写（2026-10-29）** | 已按 §6 更新 status/conclusion；保留开放项说明 |
 | **CHK-014** | README 工具清单与 `TIER_TABLE` 不一致 | `README.md:285` vs `packages/ops-extension/src/approvals.ts:12-69` | README 声称“与 TIER_TABLE 一致”，但 read 行（`README.md:289`）未列 `ops_kb_list` / `ops_kb_search` / `ops_kb_status` / `ops_web_verify`；这四项在 `approvals.ts:37-43` 已登记，README 后文 `:201,203` 才补列 | **已回写（2026-10-29）** | read 行已补四项；工具清单仍为手工表，后续可改引用生成结果 |
-| **CHK-015** | 架构设计 §8 的任务状态说明已过时 | `docs/designs/ops-pi-architecture-design.md:771` | 文档写“任务已立项，全部处于「待执行」”，但当前 48 项中 38 项已落定、8 项待确认、2 项待执行 | **已回写（2026-10-29）** | 已改为“状态以 `docs/tasks/*.yaml` 为准”（§8） |
+| **CHK-015** | 架构设计 §8 的任务状态说明已过时 | `docs/designs/ops-pi-architecture-design.md:771` | 文档写“任务已立项，全部处于「待执行」”，但当前 48 项中 39 项已落定、7 项待确认、2 项待执行 | **已回写（2026-10-29）** | 已改为“状态以 `docs/tasks/*.yaml` 为准”（§8） |
 | **CHK-016** | 台账 `pending` 未随 report 收敛 | 3 个例子 | ① `OMO-KB-SYNC.yaml` 的 `report.pending` 曾列 P2/P3，但同文件后续 report 已实现 P2/P3 且脚本存在；② `OPSP-P8.yaml` 的 `report.pending` 曾写“远程写入 / vault re-key 未实现”，但 P13/P14 已落定；③ `OPSP-P23.yaml` 的 `report.pending` 曾写“发布 v0.9.6”，但 v0.16.1 已发布 | **已补记（2026-10-29）** | 三处 pending 已按台账 `note` 事件补记并清理：OMO-KB-SYNC 移除已落地 P2/P3；OPSP-P8 pending → `[]`；OPSP-P23 移除过时 v0.9.6 发布项。`state`/`confirmedBy` 未改（confirm 归主人） |
 
 ### 2.5 显式排除 / 条件项（不算未完成）
@@ -142,7 +143,7 @@
 
 ---
 
-## 4. 附录：非 `已落定` 任务清单（10 项）
+## 4. 附录：非 `已落定` 任务清单（9 项）
 
 | 任务 | 状态 | 核心缺口 |
 |---|---|---|
@@ -154,7 +155,6 @@
 | OPSP-P15 | 待确认 | 实现已完成；主人确认 |
 | OPSP-P19 | 待确认 | 实现已完成；Linux 真机验收 |
 | OPSP-P23 | 待确认 | 实现已完成；真机复验；发布 pending 已清理 |
-| WEBVERIFY-1 | 待确认 | 实现已完成；实例 CDP 端点未启用 + 知识回灌 |
 | KBHOOK-1 | 待确认 | webhook resp.ok 已修复并验证；待主人 confirm |
 
 ---
@@ -192,7 +192,7 @@
 | `docs/tasks/{OMO-KB-SYNC,OPSP-P8,OPSP-P23}.yaml` | 过期 pending | **已补记** | `op: note` 事件 + pending 清理；`--validate` 48/48、`--selftest` 12/0 | `state`/`confirmedBy` 未改（confirm 归主人） |
 | `docs/tasks/KBHOOK-1.yaml` | 新增修复任务 | **待确认** | webhook `resp.ok` 修复；6a/6b 负例先红后绿；`test:enroll-install` / `test:kb-ui` 回归全绿 | 待主人 confirm；全量 `test:ci` 已绿（web-verify SKIP） |
 | `README.md` 工具清单 read 行 | 与 `TIER_TABLE` 不一致 | **已对齐** | 补入 `ops_kb_list` / `ops_kb_search` / `ops_kb_status` / `ops_web_verify`；与 `approvals.ts:37-43` 一致 | 手工表仍有后续漂移风险，建议改为引用生成结果 |
-| `docs/designs/ops-pi-architecture-design.md` §8 任务状态说明 | 静态“全部待执行” | **已改为以台账为准** | 48 项：38 已落定 / 8 待确认 / 2 待执行（2026-10-29） | 台账数字会继续变化，已注明日期 |
+| `docs/designs/ops-pi-architecture-design.md` §8 任务状态说明 | 静态“全部待执行” | **已改为以台账为准** | 48 项：39 已落定 / 7 待确认 / 2 待执行（2026-10-29） | 台账数字会继续变化，已注明日期 |
 
 ### 6.1 回写清单（仅文档）
 

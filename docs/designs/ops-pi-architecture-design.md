@@ -774,7 +774,7 @@ export function setupOpsHooks(pi: ExtensionAPI, ctx: OpsToolContext, config: Ops
 | **OPSP-P5** | 跨 Agent 请求走同一安全三层（不依赖身份接口；身份由 Yuyi 插件自治） | 4 条（见台账） | L2 |
 
 > **任务面落点（已补齐机制）**：台账 `<目标项目>/docs/tasks/<taskId>.yaml`，操作入口 `scripts/task-ledger.mjs`（本次落定后新实现，符合 `principle/task-and-memory-surface.md` 五操作 + 四态状态机 + 四不变量 + `rescope`；`--selftest` 10 项 / `--validate` 通过）。目标仓 `github.com/lomehong/oh-my-ops`，分支 `main`；台账不持久化设备路径（随项目版本化）。
-> 任务状态以 `docs/tasks/*.yaml` 为准（截至 2026-10-29：48 项中 38 项已落定、8 项待确认、2 项待执行）；执行方按分工 `claim` 认领，完成后 `report` 自报，**`confirm` 只能由主人发起且必须带来源**（脚本级拒绝无来源确认、非法跳步、未落定归档）。
+> 任务状态以 `docs/tasks/*.yaml` 为准（截至 2026-10-29：48 项中 39 项已落定、7 项待确认、2 项待执行）；执行方按分工 `claim` 认领，完成后 `report` 自报，**`confirm` 只能由主人发起且必须带来源**（脚本级拒绝无来源确认、非法跳步、未落定归档）。
 
 ---
 
