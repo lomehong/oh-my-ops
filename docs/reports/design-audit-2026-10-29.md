@@ -14,15 +14,15 @@
 | 维度 | 数量 | 说明 |
 |---|---:|---|
 | 任务台账总数 | 48 | `docs/tasks/*.yaml`（审计时 47 + 新增 KBHOOK-1） |
-| 已落定 | 39 | 落定率 81.3%（39/48） |
-| 待确认 | 7 | 实现已自报，等待主人确认或真机验证（含 KBHOOK-1；WEBVERIFY-1 已由远端 b286cef 确认落定） |
+| 已落定 | 40 | 落定率 83.3%（40/48） |
+| 待确认 | 6 | 实现已自报，等待主人确认或真机验证（WEBVERIFY-1 已由远端 b286cef 确认落定；KBHOOK-1 已确认落定） |
 | 待执行 | 2 | OPSP-P16、OPSP-P17，代码中未找到实现 |
 | 设计类文档 | 8 | 状态已于 2026-10-29 核验回写；仍存开放项/二期项（见 §6） |
 | 真·未开工功能 | 2 | 定时巡检任务化；任务下发/认领/回执工具化 |
 | 设计承诺未完全生效 | 1 | KBORG-1 知识合流硬门禁（Owner 侧配置 + strict 未切换） |
 | 已登记未修缺陷/增强 | 2 | 7 条 `Custom tool load failed` 噪音；ssh-keyscan 指纹未入审计 |
-| 已修复（本轮） | 1 | webhook 写回 `resp.ok`（KBHOOK-1，2026-10-29） |
-| 已实现待确认/待验证 | 7 + 5 | 7 项待确认任务 + 5 项已落定但 pending 未关闭的任务 |
+| 已修复（本轮） | 1 | webhook 写回 `resp.ok`（KBHOOK-1，2026-10-29；已落定） |
+| 已实现待确认/待验证 | 6 + 6 | 6 项待确认任务 + 6 项已落定但 pending 未关闭的任务 |
 
 **一句话结论**：核心安全三层、只读/写入工具链、审计双写、安装与发布链路已基本落地；真正没做完的是 **2 个已立项功能（定时巡检、任务下发/回执）**、**知识库合流硬门禁的运营启用**、**Web 管理后台二期**，以及若干已登记未修的缺陷和外部环境验证缺口。
 
@@ -64,7 +64,7 @@
 | **CHK-005** | KBORG-1 合流硬门禁：Gitea main 分支保护（须 PR + 须 `kb-lint` status）+ webhook 指向 `/kb/webhook` | `docs/designs/kb-knowledge-org-设计.md:49,60,111`；`docs/tasks/KBORG-1.yaml:44` | 代码已有 `/kb/webhook`、HMAC 校验、lint 与 status 回写；但台账仍登记 Owner 侧设置未完成；默认 `LINT_MODE = "warn"`（`scripts/ops-kb-enroll-server.mjs:106`），只有 `strict` 才 `blocked`（:219）；未找到 Gitea 分支保护已配置的仓库内证据 | **Partial** | 设计核心承诺是“确保机制（非建议）”；未设置分支保护 + 未切 strict 时，合流门禁实际上不阻断。建议：① Owner 完成 Gitea 设置；② 增加 `omo kb doctor` 对“分支保护/webhook/密钥”的显式检查；③ 观察期后切 strict |
 | **CHK-006** | KBORG-1 阈值调参与 warn→strict 切换 | `docs/designs/kb-knowledge-org-设计.md:47-49`；`docs/tasks/KBORG-1.yaml:45` | 相似度阈值硬编码为 `0.9/0.5`（`scripts/ops-kb-enroll-server.mjs:216`）；生产默认 `warn`；台账明确“待真机调参/ Owner 拍板” | **Partial** | 阈值未按误报率调参，strict 未启用；门禁的“硬拦”语义尚未在生产生效 |
 | **CHK-007** | 老 git（<2.3）与 KB 归并模块全部交互面的兼容验证 | `docs/designs/kb-sync-organize-模块业务规则.md:18,266` | 仅 `.122`（git 1.8.3.1）验证过 sync 主链；`git ls-remote` / `show-ref` 组合未穷举；CI 用新版 git | **Partial** | el7 实例升级回归存在潜在兼容缺口；建议纳入实例升级检查单，补一轮组合矩阵 |
-| **CHK-008** | webhook 写回检查 `resp.ok`（CIPORT-1 登记的真实缺陷 #7） | `docs/tasks/CIPORT-1.yaml`；`docs/designs/ciport-1-执行记录.md:226` | 修复前 `scripts/ops-kb-enroll-server.mjs:221-226` 直接 `await api.post(...)`，未检查返回；`api.post` 返回 `{ok,status,text}`（`scripts/lib/kb-gitea.mjs:51`） | **已修复（KBHOOK-1，2026-10-29）** | status 失败 → HTTP 200 + `gateApplied:false` + `lint.status-write-failed` 审计，不写成功审计/不发评论；comment 失败 → `lint.comment-write-failed` + `commentWritten:false`。`probe-kb-lint.sh` 6a/6b 负例全绿 |
+| **CHK-008** | webhook 写回检查 `resp.ok`（CIPORT-1 登记的真实缺陷 #7） | `docs/tasks/CIPORT-1.yaml`；`docs/designs/ciport-1-执行记录.md:226` | 修复前 `scripts/ops-kb-enroll-server.mjs:221-226` 直接 `await api.post(...)`，未检查返回；`api.post` 返回 `{ok,status,text}`（`scripts/lib/kb-gitea.mjs:51`） | **已修复并落定（KBHOOK-1，2026-10-29）** | status 失败 → HTTP 200 + `gateApplied:false` + `lint.status-write-failed` 审计，不写成功审计/不发评论；comment 失败 → `lint.comment-write-failed` + `commentWritten:false`。`probe-kb-lint.sh` 6a/6b 负例全绿 |
 | **CHK-009** | 启动时 7 条 `Custom tool load failed: "Tool must export a default function"` 噪音 | `docs/tasks/OMOINSTALL-4.yaml:41`；`docs/tasks/OMOINSTALL-5.yaml:41`；`docs/tasks/OPSP-P20.yaml:40` | 台账跨任务登记“未修”；全仓搜索未找到修复提交或代码级抑制 | **Missing（未修）** | 宿主把 `$EXT/ops-pi/tools/*.ts` 当自定义工具扫描，产生 7 条噪音；会掩盖真实加载错误。建议确认宿主扫描规则后改包布局或加显式排除 |
 | **CHK-010** | 首连后 `ssh-keyscan` 指纹入审计 | `docs/tasks/OPSP-P21.yaml:37` | 台账明确“未实现（登记）”；代码搜索无 keyscan 相关实现 | **Missing（增强，已登记）** | 受管 `known_hosts` 已提供记录语义，风险较低；但首次信任的指纹不可追溯。建议作为 P3 增强 |
 | **CHK-011** | 远程主机侧 `PathGuard`（机密根拒读） | `docs/designs/ops-pi-architecture-design.md:586`；`packages/ops-core/src/path-guard.ts:19` | 注释明确“仅约束本机（远程主机文件系统不同，由其 host 规则负责）”；设计写明“远程侧机密性属后续任务” | **Deferred（设计已声明范围外）** | 远程读取机密文件不由本机 PathGuard 拦截，依赖目标 host 策略；这是已登记残余风险，不算隐藏缺口。建议在 README/安全模型里保持显式说明 |
@@ -74,7 +74,7 @@
 
 > 这些任务不是“代码没写”，而是“实现方已自报，台账仍待确认 / pending 未关闭”。按性质分成两组。
 
-#### 2.3.1 台账 `待确认`（7 项）
+#### 2.3.1 台账 `待确认`（6 项）
 
 | 任务 | 实现证据 | 未兑现项 | 判定 |
 |---|---|---|---|
@@ -84,9 +84,8 @@
 | **OPSP-P15** | KnowledgeStore、`ops_kb_list/search/save/sync`、gitSync 均在；台账 evidence 完整 | 无 pending；仅缺主人 confirm | Implemented-unconfirmed |
 | **OPSP-P19** | `policy-lint.ts`、`policy-explain.ts`、`policy-cli.ts`、`/ops-policy` 均在；单测 228 pass | 真机（Linux + omo 启动器）验证 `omo policy lint/explain` 与 `omo status` 策略路径 | Implemented-unconfirmed |
 | **OPSP-P23** | `fmtExecResult` 头 5/尾 3 已实现；`read-tier-structure.test.ts` 14 pass | 真机复验 compose v1 daemon 不可达场景；发布 pending 已清理 | Implemented-unconfirmed |
-| **KBHOOK-1** | webhook status/comment 写回 `resp.ok` 修复；`probe-kb-lint.sh` 6a/6b 全绿；全量 `test:ci` exit 0 | 真实 Gitea 5xx 注入未做（stub 覆盖写回拒绝路径）；待主人 confirm | Implemented-unconfirmed |
 
-#### 2.3.2 台账 `已落定` 但 pending 未关闭（5 项）
+#### 2.3.2 台账 `已落定` 但 pending 未关闭（6 项）
 
 | 任务 | 未兑现项 | 判定 |
 |---|---|---|
@@ -95,6 +94,7 @@
 | **CIPORT-1** | Linux 语义未真机复跑、`test:web-verify` 本机 SKIP、`test:l2` 60s 预算未在慢盘验证；webhook #7 已由 KBHOOK-1 修复 | 任务已落定；验证类遗留，缺陷 #7 已闭环 |
 | **KBORG-1** | Gitea 分支保护/webhook 未设置、strict 未切换、`.122` 误归并分支待重推、实例侧需升级 omo 才生效 | 任务已落定；代码完成，运营启用未完成（见 CHK-005/006） |
 | **WEBVERIFY-1** | 实例侧 CDP 端点未启用；知识回灌两条待入 practice | 任务已于 2026-09-24 由主人确认落定（远端 b286cef）；部署前置未完成 |
+| **KBHOOK-1** | 真实 Gitea 5xx 注入未做（stub 覆盖写回拒绝路径） | 任务已于 2026-10-29 由主人确认落定；全量 test:ci 绿 |
 
 #### 2.3.3 外部环境验证缺口（非代码缺陷）
 
@@ -143,7 +143,7 @@
 
 ---
 
-## 4. 附录：非 `已落定` 任务清单（9 项）
+## 4. 附录：非 `已落定` 任务清单（8 项）
 
 | 任务 | 状态 | 核心缺口 |
 |---|---|---|
@@ -155,7 +155,6 @@
 | OPSP-P15 | 待确认 | 实现已完成；主人确认 |
 | OPSP-P19 | 待确认 | 实现已完成；Linux 真机验收 |
 | OPSP-P23 | 待确认 | 实现已完成；真机复验；发布 pending 已清理 |
-| KBHOOK-1 | 待确认 | webhook resp.ok 已修复并验证；待主人 confirm |
 
 ---
 
@@ -190,9 +189,9 @@
 | `docs/requirements/ops-pi-requirement-package.md` | 已确认 | **已确认**（无需改） | 主人 2026-09-12 确认 A0–A6 | 无 |
 | `docs/designs/2026-09-14-阶段3试点-OPSAUDIT-1-评审记录.md` | 评审通过，待确认 | **已确认** | OPSAUDIT-1 主人确认 2026-09-14 | 无 |
 | `docs/tasks/{OMO-KB-SYNC,OPSP-P8,OPSP-P23}.yaml` | 过期 pending | **已补记** | `op: note` 事件 + pending 清理；`--validate` 48/48、`--selftest` 12/0 | `state`/`confirmedBy` 未改（confirm 归主人） |
-| `docs/tasks/KBHOOK-1.yaml` | 新增修复任务 | **待确认** | webhook `resp.ok` 修复；6a/6b 负例先红后绿；`test:enroll-install` / `test:kb-ui` 回归全绿 | 待主人 confirm；全量 `test:ci` 已绿（web-verify SKIP） |
+| `docs/tasks/KBHOOK-1.yaml` | 新增修复任务 | **已落定** | webhook `resp.ok` 修复；6a/6b 负例先红后绿；`test:enroll-install` / `test:kb-ui` 回归全绿 | 真实 Gitea 5xx 注入未做；全量 `test:ci` 已绿（web-verify SKIP） |
 | `README.md` 工具清单 read 行 | 与 `TIER_TABLE` 不一致 | **已对齐** | 补入 `ops_kb_list` / `ops_kb_search` / `ops_kb_status` / `ops_web_verify`；与 `approvals.ts:37-43` 一致 | 手工表仍有后续漂移风险，建议改为引用生成结果 |
-| `docs/designs/ops-pi-architecture-design.md` §8 任务状态说明 | 静态“全部待执行” | **已改为以台账为准** | 48 项：39 已落定 / 7 待确认 / 2 待执行（2026-10-29） | 台账数字会继续变化，已注明日期 |
+| `docs/designs/ops-pi-architecture-design.md` §8 任务状态说明 | 静态“全部待执行” | **已改为以台账为准** | 48 项：40 已落定 / 6 待确认 / 2 待执行（2026-10-29） | 台账数字会继续变化，已注明日期 |
 
 ### 6.1 回写清单（仅文档）
 
@@ -218,7 +217,7 @@
 - `docs/tasks/OPSP-P23.yaml`：新增 `op: note` 事件；pending 移除过时的“发布 v0.9.6”，仅保留对端真机复验。state 仍为 `待确认`。
 - 校验：`node scripts/task-ledger.mjs --validate` → 48/48 通过；`--selftest` → 12/0 通过。`state` / `confirmedBy` 未改（confirm 归主人）。
 
-### 6.3 代码修复：KBHOOK-1（2026-10-29）
+### 6.3 代码修复：KBHOOK-1（2026-10-29，已落定）
 
 - 修复：`scripts/ops-kb-enroll-server.mjs` 的 `/kb/webhook` 现在检查 status 与 comment 两处 `api.post` 的 `resp.ok`。
 - status 失败：HTTP 200 + `gateApplied:false` + `lint.status-write-failed` 审计；不写 `lint.blocked/passed` 成功审计、不发评论。
