@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
-import { bigrams, buildComment, jaccard, lintSimilarity, lintStructure, parseDomainsYml, verifyHmac } from "../../../scripts/lib/kb-lint.mjs";
+import { bigrams, buildComment, jaccard, lintSimilarity, lintStructure, parseDomainsYml, verifyHmac, verifyHmacWithRotation } from "../../../scripts/lib/kb-lint.mjs";
 
 /**
  * KBORG-1 守卫：合流期 lint 规则引擎（scripts/lib/kb-lint.mjs）。
@@ -88,5 +88,40 @@ describe("buildComment", () => {
 		expect(bad).toContain("⚠ 提示 1 条");
 		const good = buildComment({ mode: "strict", hard: [], warnings: [] });
 		expect(good).toContain("✓ 未发现违规");
+	});
+});
+
+describe("verifyHmacWithRotation（webhook secret 轮换双密钥）", () => {
+	const body = '{"action":"opened"}';
+	const sign = (secret: string) => createHmac("sha256", secret).update(body).digest("hex");
+	const now = Date.parse("2026-10-30T12:00:00Z");
+
+	test("current 始终接受；tampered 拒绝", () => {
+		expect(verifyHmacWithRotation({ current: "new" }, body, sign("new"), now)).toEqual({ via: "current" });
+		expect(verifyHmacWithRotation({ current: "new" }, body, sign("old"), now)).toEqual({ via: "none" });
+		expect(verifyHmacWithRotation({ current: "new" }, body, "deadbeef", now).via).toBe("none");
+	});
+
+	test("★ previous 仅在 24h 宽限内接受；到期拒绝", () => {
+		const within = verifyHmacWithRotation(
+			{ current: "new", previous: "old", rotatedAt: new Date(now - 23 * 3600_000).toISOString() },
+			body,
+			sign("old"),
+			now,
+		);
+		expect(within.via).toBe("previous");
+		expect(within.previousExpiresAt).toBe(new Date(now - 23 * 3600_000 + 24 * 3600_000).toISOString());
+
+		const expired = verifyHmacWithRotation(
+			{ current: "new", previous: "old", rotatedAt: new Date(now - 25 * 3600_000).toISOString() },
+			body,
+			sign("old"),
+			now,
+		);
+		expect(expired.via).toBe("none");
+	});
+
+	test("无 rotatedAt/无 previous ⇒ 仅 current 有效", () => {
+		expect(verifyHmacWithRotation({ current: "new", previous: "old" }, body, sign("old"), now).via).toBe("none");
 	});
 });

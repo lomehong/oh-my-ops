@@ -4,7 +4,7 @@ import { rm, stat } from "node:fs/promises";
 import { ShellExec } from "@ops-pi/core";
 import { loadConfig } from "./setup.ts";
 import { syncKb, deviceName } from "./kb-sync.ts";
-import { enroll, parseEnrollArgs } from "./kb-enroll.ts";
+import { enroll, parseEnrollArgs, loadKbInstallState, reportInstallStatus } from "./kb-enroll.ts";
 import {
 	daysUntilExpiry,
 	omoHomeDir,
@@ -91,13 +91,17 @@ async function runSync(env: KbCliEnv, opts: { push: boolean; quiet: boolean }): 
 	return report.ok ? 0 : 1;
 }
 
-export async function runStatus(env: KbCliEnv): Promise<number> {
+export async function runStatus(env: KbCliEnv, options: { report?: boolean; caFile?: string; allowInsecureHttp?: boolean; allowInsecureTls?: boolean } = {}): Promise<number> {
 	const credential = await loadCredentialOrExit(env.omoDir);
 	const state = await loadKbState(env.omoDir);
+	const install = await loadKbInstallState(env.omoDir);
 	const repo = credential?.repo ?? env.repo;
 	console.log(`远端：${repo === undefined ? "（未配置 → 本地模式）" : redactUrl(repo)}`);
 	console.log(`分支：主线 ${env.branch}｜实例分支 instance/<device>（device=${process.env.YUYI_DEVICE ?? os.hostname()}）`);
 	console.log(`知识库目录：${env.kbDir}`);
+	if (install !== undefined) {
+		console.log(`控制面：${install.controlPlane}｜实例 ${install.installId}${install.reportToken === undefined ? "（无上报令牌）" : "（可 --report 上报）"}`);
+	}
 	if (credential === undefined) {
 		console.log("凭据：未配置（本地模式）");
 		// 曾同步过却丢了凭据 ⇒ 必须显式告警（今日多次踩到「静默降级比报错危险」）
@@ -116,6 +120,28 @@ export async function runStatus(env: KbCliEnv): Promise<number> {
 		if (hint !== undefined) console.log(`⚠ ${hint}`);
 	}
 	console.log(state === undefined ? "最后同步：（无记录）" : `最后同步：${state.lastSyncAt} ${state.ok ? "✓" : `✗ ${state.error ?? ""}`}`);
+	if (options.report === true) {
+		if (install === undefined || install.reportToken === undefined) {
+			console.error("✗ 本机没有实例上报令牌：需经控制面安装/接入一次（或手动写入 $OMO_DIR/kb/install.json）");
+			return 1;
+		}
+		const r = await reportInstallStatus(
+			install,
+			{
+				device: deviceName(),
+				ok: state === undefined ? true : state.ok,
+				lastSync: state?.lastSyncAt,
+				reason: state?.error,
+				version: install.version,
+			},
+			{ caFile: options.caFile, allowInsecureHttp: options.allowInsecureHttp, allowInsecureTls: options.allowInsecureTls },
+		);
+		if (!r.ok) {
+			console.error(`✗ 上报失败${r.status === 0 ? "" : `（HTTP ${r.status}）`}：${r.message}`);
+			return 1;
+		}
+		console.log(`✓ ${r.message}`);
+	}
 	return 0;
 }
 
@@ -178,14 +204,21 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 			const sec = i >= 0 ? Number(argv[i + 1]) : Number(process.env.OMO_KB_INTERVAL ?? 900);
 			return await runLoop(env, sec);
 		}
-		case "status":
-			return await runStatus(env);
+		case "status": {
+			const i = argv.indexOf("--ca-file");
+			return await runStatus(env, {
+				report: argv.includes("--report"),
+				caFile: i >= 0 ? argv[i + 1] : undefined,
+				allowInsecureHttp: argv.includes("--allow-insecure-http"),
+				allowInsecureTls: argv.includes("--allow-insecure-tls"),
+			});
+		}
 		case "disable":
 			return await runDisable(env);
 		case "enroll":
 			return await runEnroll(env, argv);
 		default:
-			console.log("用法：omo kb <sync [--push] [--quiet] | status | disable | loop [--interval 秒] | enroll --server <url> --code-file <0600> [--device 名]>");
+			console.log("用法：omo kb <sync [--push] [--quiet] | status [--report] [--ca-file <pem>] | disable | loop [--interval 秒] | enroll --server <url> --code-file <0600> [--device 名] | enroll --server <url> --install-token-file <0600> [--ca-file <pem>] [--device 名] | enroll --server <url> --response-file <json> [--device 名]>");
 			return 2;
 	}
 }

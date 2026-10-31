@@ -29,6 +29,7 @@ HDR="X-Auth-Username: tester"
 
 PORT=$(( (RANDOM % 2000) + 19000 ))
 STUB_PORT=$(( PORT + 1 ))
+UI_PORT=$(( PORT + 2 ))
 H="$TMP/home"; mkdir -p "$H/.local/bin"
 
 echo "installer: $INSTALLER"
@@ -111,30 +112,34 @@ curl -sk --max-time 3 "https://127.0.0.1:$PORT/healthz" | grep -q '"ok":true' &&
 [ "$(curl -sk -o /dev/null -w '%{http_code}' --max-time 3 "https://127.0.0.1:$PORT/ui")" = "404" ] && pass "UI off ⇒ /ui 404" || fail "/ui 未按默认关闭"
 [ "$(curl -sk -o /dev/null -w '%{http_code}' --max-time 3 "https://127.0.0.1:$PORT/ui/api/state")" = "404" ] && pass "UI off ⇒ /ui/api 404" || fail "/ui/api 未关闭"
 
-echo "[2] 开启 UI：身份头门禁"
+echo "[2] 开启 UI：管理 token 门禁"
 sed -i 's/^OMO_KB_UI=off/OMO_KB_UI=on/' "$H/.omo-kb/config.env"
+sed -i "s/^OMO_KB_UI_PORT=.*/OMO_KB_UI_PORT=$UI_PORT/" "$H/.omo-kb/config.env"
 HOME="$H" "$H/.local/bin/omo-kb" restart >>"$TMP/start.log" 2>&1
 for _ in $(seq 1 20); do curl -sk --max-time 2 "https://127.0.0.1:$PORT/healthz" 2>/dev/null | grep -q '"ok":true' && break; sleep 0.5; done
-C0="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 3 "https://127.0.0.1:$PORT/ui")"
-C1="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 3 "https://127.0.0.1:$PORT/ui/api/state")"
-[ "$C0" = "401" ] && [ "$C1" = "401" ] && pass "无身份头 ⇒ 401（页面与 API）" || fail "无身份头应 401（/ui=$C0 /api=$C1）"
-C301="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 3 "https://127.0.0.1:$PORT/ui" -H "$HDR")"
+TOKEN="$(cat "$H/.omo-kb/control-plane/admin.token")"
+AUTH="Authorization: Bearer $TOKEN"
+UI="http://127.0.0.1:$UI_PORT"
+C0="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 "$UI/ui")"
+C1="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 "$UI/ui/api/state")"
+[ "$C0" = "301" ] && [ "$C1" = "401" ] && pass "页面可载入、无 token ⇒ API 401" || fail "管理面门禁异常（/ui=$C0 /api=$C1）"
+C301="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 "$UI/ui" -H "$AUTH" -H "$HDR")"
 [ "$C301" = "301" ] && pass "带头 ⇒ /ui 301 → /ui/" || fail "/ui 应 301（$C301）"
-curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/" -H "$HDR" | grep -q "omo-kb 管理后台" && pass "带头 ⇒ 页面 200（中文后台）" || fail "带头访问页面失败"
-curl -skI --max-time 3 "https://127.0.0.1:$PORT/ui/" -H "$HDR" | grep -qi "cache-control:.*no-store" && pass "页面响应 no-store（防升级后旧页缓存）" || fail "页面缺 no-store"
-PAGE="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/" -H "$HDR")"
+curl -sk --max-time 3 "$UI/ui/" -H "$AUTH" -H "$HDR" | grep -q "omo-kb 管理后台" && pass "带头 ⇒ 页面 200（中文后台）" || fail "带头访问页面失败"
+curl -skI --max-time 3 "$UI/ui/" -H "$AUTH" -H "$HDR" | grep -qi "cache-control:.*no-store" && pass "页面响应 no-store（防升级后旧页缓存）" || fail "页面缺 no-store"
+PAGE="$(curl -sk --max-time 3 "$UI/ui/" -H "$AUTH" -H "$HDR")"
 echo "$PAGE" | grep -q 'location.pathname.endsWith("/")' && pass "页面含前缀挂载 BASE 归一化（网关 /omo-kb 无斜杠场景安全）" || fail "页面缺 BASE 归一化"
 echo "$PAGE" | grep -qE "fetch\(BASE \+ url" && pass "API 调用统一走 BASE 前缀" || fail "API 调用未走 BASE"
-HOME="$H" "$H/.local/bin/omo-kb" logs 2>/dev/null | grep -q "auth=identity-header" && pass "LISTEN 行标注 auth=identity-header" || fail "LISTEN 行缺 auth 标注"
+HOME="$H" "$H/.local/bin/omo-kb" logs 2>/dev/null | grep -q "auth=control-token" && pass "LISTEN 行标注 auth=control-token" || fail "LISTEN 行缺 auth 标注"
 
 echo "[3] state 脱敏（秘密不回显）"
-STATE="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/state" -H "$HDR")"
+STATE="$(curl -sk --max-time 3 "$UI/ui/api/state" -H "$AUTH" -H "$HDR")"
 echo "$STATE" | grep -q "good-token" && fail "state 泄漏令牌值" || pass "state 不含令牌值"
 echo "$STATE" | grep -q '"pid"' && pass "state 含健康信息（pid/repo）" || fail "state 缺健康信息"
 echo "$STATE" | grep -q '"actor":"tester"' && pass "actor=身份头值" || fail "actor 缺失"
 
 echo "[4] 页面签码 → 真实兑换闭环"
-CODE_RES="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/code" -H "$HDR" -H 'Content-Type: application/json' -d '{"device":"probe-node","ttlMin":5}')"
+CODE_RES="$(curl -sk --max-time 3 "$UI/ui/api/code" -H "$AUTH" -H "$HDR" -H 'Content-Type: application/json' -d '{"device":"probe-node","ttlMin":5}')"
 CODE="$(printf '%s' "$CODE_RES" | grep -o '"code":"[A-Za-z0-9_-]\{32\}"' 2>/dev/null | cut -d'"' -f4 || true)"
 [ -n "$CODE" ] && pass "签码成功（32 位，一次性返回）" || fail "签码失败：$(printf '%s' "$CODE_RES" | head -c 160)"
 grep -q '"probe-node"' "$H/.omo-kb/registry.json" && pass "登记表落码记录" || fail "registry 无码记录"
@@ -145,40 +150,40 @@ echo "$ENROLL" | grep -q '"ok":true' && pass "UI 签的码真实兑换成功（/
 echo "[3b] 登记表不可读必须显式暴露（不静默空表）"
 cp "$H/.omo-kb/registry.json" "$TMP/registry.bak"
 printf '{ 坏 JSON' > "$H/.omo-kb/registry.json"
-STATE_ERR="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/state" -H "$HDR")"
+STATE_ERR="$(curl -sk --max-time 3 "$UI/ui/api/state" -H "$AUTH" -H "$HDR")"
 cp "$TMP/registry.bak" "$H/.omo-kb/registry.json"
 echo "$STATE_ERR" | grep -q '"error"' && pass "登记表读取失败 ⇒ state 带 error（不静默）" || fail "空表无原因（静默降级）"
 echo "$STATE_ERR" | grep -q '"file":"' && pass "state 回传登记表文件路径（可定位）" || fail "缺登记表路径"
-curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/" -H "$HDR" | grep -q "登记表读取失败" && pass "页面展示登记表错误文案" || fail "页面未展示登记表错误"
+curl -sk --max-time 3 "$UI/ui/" -H "$AUTH" -H "$HDR" | grep -q "登记表读取失败" && pass "页面展示登记表错误文案" || fail "页面未展示登记表错误"
 echo "$STATE_ERR" | grep -q '"entries":\[\]' && pass "失败态回退空表（不崩）" || fail "失败态异常"
-STATE_OK="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/state" -H "$HDR")"
+STATE_OK="$(curl -sk --max-time 3 "$UI/ui/api/state" -H "$AUTH" -H "$HDR")"
 echo "$STATE_OK" | grep -q '"probe-node"' && pass "恢复后登记表数据回来（对照）" || fail "恢复后仍空"
 
 echo "[5] 配置校验失败：硬停不写盘"
 OLD_PID="$(echo "$STATE" 2>/dev/null | grep -o '"pid":[0-9]*' | cut -d: -f2 || true)"
-CFG_BAD="$(curl -sk --max-time 5 "https://127.0.0.1:$PORT/ui/api/config" -H "$HDR" -H 'Content-Type: application/json' -d '{"values":{"OMO_KB_REPO":"bad repo!!"}}')"
+CFG_BAD="$(curl -sk --max-time 5 "$UI/ui/api/config" -H "$AUTH" -H "$HDR" -H 'Content-Type: application/json' -d '{"values":{"OMO_KB_REPO":"bad repo!!"}}')"
 echo "$CFG_BAD" | grep -q '"校验失败"' && pass "坏值被 400 拒绝" || fail "坏值未被拒：$(printf '%s' "$CFG_BAD" | head -c 120)"
-NEW_PID="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/state" -H "$HDR" 2>/dev/null | grep -o '"pid":[0-9]*' | cut -d: -f2 || true)"
+NEW_PID="$(curl -sk --max-time 3 "$UI/ui/api/state" -H "$AUTH" -H "$HDR" 2>/dev/null | grep -o '"pid":[0-9]*' | cut -d: -f2 || true)"
 [ "$OLD_PID" = "$NEW_PID" ] && pass "进程未重启（PID $OLD_PID）" || fail "坏值竟触发了重启"
 grep -q "^OMO_KB_REPO=acme/kb" "$H/.omo-kb/config.env" && pass "config.env 未被改写" || fail "config.env 被污染"
 
 echo "[6] 非白名单键拒绝"
-W8="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "https://127.0.0.1:$PORT/ui/api/config" -H "$HDR" -H 'Content-Type: application/json' -d '{"values":{"OMO_KB_ADMIN_TOKEN_FILE":"/x"}}')"
+W8="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "$UI/ui/api/config" -H "$AUTH" -H "$HDR" -H 'Content-Type: application/json' -d '{"values":{"OMO_KB_ADMIN_TOKEN_FILE":"/x"}}')"
 [ "$W8" = "400" ] && pass "凭据键混入 ⇒ 400 整单拒绝" || fail "非白名单未拒（$W8）"
 
 echo "[7] 合法改配 → 预检 → 自动重启生效"
-RESP7="$(curl -sk --max-time 20 "https://127.0.0.1:$PORT/ui/api/config" -H "$HDR" -H 'Content-Type: application/json' -d '{"values":{"OMO_KB_TEAM":"new-team"}}')"
+RESP7="$(curl -sk --max-time 20 "$UI/ui/api/config" -H "$AUTH" -H "$HDR" -H 'Content-Type: application/json' -d '{"values":{"OMO_KB_TEAM":"new-team"}}')"
 echo "$RESP7" | grep -q '"restarting":true' && pass "保存通过预检并触发切换" || fail "合法保存未触发重启：$(printf '%s' "$RESP7" | head -c 700)"
 sleep 2
 for _ in $(seq 1 20); do curl -sk --max-time 2 "https://127.0.0.1:$PORT/healthz" 2>/dev/null | grep -q '"ok":true' && break; sleep 0.5; done
-STATE2="$(curl -sk --max-time 3 "https://127.0.0.1:$PORT/ui/api/state" -H "$HDR")"
+STATE2="$(curl -sk --max-time 3 "$UI/ui/api/state" -H "$AUTH" -H "$HDR")"
 NEW_PID2="$(echo "$STATE2" 2>/dev/null | grep -o '"pid":[0-9]*' | cut -d: -f2 || true)"
 [ -n "$NEW_PID2" ] && [ "$NEW_PID2" != "$OLD_PID" ] && pass "服务已切换到新进程（PID $NEW_PID2）" || fail "PID 未变化（$OLD_PID → $NEW_PID2）"
 echo "$STATE2" | grep -q '"OMO_KB_TEAM":"new-team"' && pass "新配置值回读生效" || fail "新值未生效"
 [ "$(cat "$H/.omo-kb/service.pid")" = "$NEW_PID2" ] && pass "pid 文件指向新进程（stop 不断链）" || fail "pid 文件未更新"
 
 echo "[8] 预检失败：回滚不重启"
-curl -sk --max-time 15 "https://127.0.0.1:$PORT/ui/api/config" -H "$HDR" -H 'Content-Type: application/json' -d '{"values":{"OMO_KB_API":"http://127.0.0.1:1/api/v1"}}' >"$TMP/pre.log" 2>&1
+curl -sk --max-time 15 "$UI/ui/api/config" -H "$AUTH" -H "$HDR" -H 'Content-Type: application/json' -d '{"values":{"OMO_KB_API":"http://127.0.0.1:1/api/v1"}}' >"$TMP/pre.log" 2>&1
 grep -q "预检失败" "$TMP/pre.log" && pass "预检失败被拦（HTTP 层报错）" || fail "预检失败未被拦：$(head -c 160 "$TMP/pre.log")"
 sleep 1
 grep -q "^OMO_KB_API=http://127.0.0.1:$STUB_PORT/api/v1" "$H/.omo-kb/config.env" && pass "config.env 已回滚到改前内容" || fail "回滚失败"

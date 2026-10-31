@@ -89,7 +89,8 @@ jobs:
           grep -qa 'OMO_APP_NAME' dist/omp-single || { echo "✗ 二进制未见品牌 patch 痕迹（OMO_APP_NAME）"; exit 1; }
           for f in "scripts/install.sh" "scripts/bootstrap.sh" "omp-single" "README.md" "packages/ops-extension/src/index.ts" \
                    "vendor/yuyi-omp-extension.js" "vendor/yuyi-omp-extension.sha256" "vendor/yuyi-omp-extension.PROVENANCE.md" \
-                   "scripts/ops-kb-provision.mjs" "scripts/ops-kb-enroll-server.mjs" \
+                   "scripts/ops-kb-provision.mjs" "scripts/ops-kb-enroll-server.mjs" "scripts/install-remote.sh" \
+                   "scripts/lib/kb-control-plane.mjs" \
                    "scripts/install-enroll-service.sh" "scripts/probe-install-enroll-service.sh" "scripts/omo-kb-doctor.sh" \
                    "scripts/omo-kb-fleet.sh" "scripts/ui/index.html" "scripts/lib/kb-auth.mjs" "scripts/lib/kb-ui-config.mjs" \
                    "scripts/probe-kb-ui-render.mjs" "scripts/probe-kb-lint.sh" \
@@ -125,13 +126,13 @@ jobs:
           PKG="omo-kb-service-${VERSION}"
           mkdir -p "/tmp/${PKG}/lib"
           cp scripts/install-enroll-service.sh "/tmp/${PKG}/install.sh"
-          cp scripts/ops-kb-enroll-server.mjs scripts/ops-kb-provision.mjs "/tmp/${PKG}/"
+          cp scripts/ops-kb-enroll-server.mjs scripts/ops-kb-provision.mjs scripts/install-remote.sh "/tmp/${PKG}/"
           cp scripts/omo-kb-fleet.sh "/tmp/${PKG}/"
           mkdir -p "/tmp/${PKG}/ui"
           cp scripts/ui/index.html "/tmp/${PKG}/ui/index.html"
-          cp scripts/lib/kb-gitea.mjs scripts/lib/kb-registry.mjs scripts/lib/kb-audit.mjs scripts/lib/kb-auth.mjs scripts/lib/kb-ui-config.mjs scripts/lib/kb-lint.mjs scripts/lib/secret-perm.mjs scripts/lib/bun.sh "/tmp/${PKG}/lib/"
+          cp scripts/lib/kb-gitea.mjs scripts/lib/kb-registry.mjs scripts/lib/kb-audit.mjs scripts/lib/kb-auth.mjs scripts/lib/kb-ui-config.mjs scripts/lib/kb-lint.mjs scripts/lib/kb-control-plane.mjs scripts/lib/secret-perm.mjs scripts/lib/bun.sh "/tmp/${PKG}/lib/"
           # 清单断言：服务包缺任一关键文件即红（服务零外部依赖，lib/ 必须齐全）
-          for f in install.sh ops-kb-enroll-server.mjs ops-kb-provision.mjs omo-kb-fleet.sh ui/index.html lib/kb-gitea.mjs lib/kb-registry.mjs lib/kb-audit.mjs lib/kb-auth.mjs lib/kb-ui-config.mjs lib/kb-lint.mjs lib/secret-perm.mjs lib/bun.sh; do
+          for f in install.sh ops-kb-enroll-server.mjs ops-kb-provision.mjs install-remote.sh omo-kb-fleet.sh ui/index.html lib/kb-gitea.mjs lib/kb-registry.mjs lib/kb-audit.mjs lib/kb-auth.mjs lib/kb-ui-config.mjs lib/kb-lint.mjs lib/kb-control-plane.mjs lib/secret-perm.mjs lib/bun.sh; do
             [ -e "/tmp/${PKG}/${f}" ] || { echo "✗ 服务包缺文件：${f}"; exit 1; }
           done
           # 零依赖自检：服务在无 monorepo 的目录下也必须能加载（真机曾 Cannot find module）

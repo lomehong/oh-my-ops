@@ -1,0 +1,33 @@
+id: 'KBCP-P0-1'
+title: 'KB 控制面 P0-1：数据模型与存储（installers/install-tokens/instances/audit）'
+state: '待确认'
+level: 'L1'
+created: '2026-10-29T15:27:45.670Z'
+accept:
+  - 'installers/install-tokens/instances JSON 0600、原子写、revision 乐观锁；并发冲突返回 409'
+  - '安装令牌 256bit、只存哈希、issued→active→completed/expired/revoked 状态机'
+  - '损坏/缺失/旧格式兼容且不静默降级；单测覆盖'
+  - 'ledger:validate 与相关 test:ci 回归全绿'
+events:
+  - ts: '2026-10-29T15:27:45.671Z'
+    op: 'create'
+    by: 'qoder-architect(qoder-cli)'
+    note: 'KB 控制面 P0-1：数据模型与存储（installers/install-tokens/instances/audit）'
+  - ts: '2026-10-29T15:30:22.276Z'
+    op: 'claim'
+    by: 'qoder-architect(qoder-cli)'
+    note: 'branch=main'
+  - ts: '2026-10-29T15:31:47.425Z'
+    op: 'report'
+    by: 'qoder-architect(qoder-cli)'
+    note: '控制面数据模型与存储已落地：新增 scripts/lib/kb-control-plane.mjs（installers/install-tokens/instances JSON、0600 原子写、revision 串行写、256bit 安装令牌、状态机、admin token）；新增 L2 单测 9 例全绿。'
+branch: 'main'
+report:
+  summary: '控制面数据模型与存储已落地：新增 scripts/lib/kb-control-plane.mjs（installers/install-tokens/instances JSON、0600 原子写、revision 串行写、256bit 安装令牌、状态机、admin token）；新增 L2 单测 9 例全绿。'
+  evidence:
+    - 'bun test --timeout 60000 packages/ops-extension/test/kb-control-plane.test.ts → 9 pass / 0 fail / 36 expect'
+    - '覆盖：缺失/损坏/旧版本、0600+revision、令牌哈希/过期/吊销/设备/完成重放、20 并发签发、installer upsert、instance installId 唯一/stale、admin token'
+  pending:
+    - '尚未接线到 ops-kb-enroll-server 路由/UI（由 P0-2/P0-6 完成）'
+  at: '2026-10-29T15:31:47.424Z'
+  by: 'qoder-architect(qoder-cli)'

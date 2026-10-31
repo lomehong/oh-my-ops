@@ -1,4 +1,6 @@
 import * as fs from "node:fs/promises";
+import * as http from "node:http";
+import * as https from "node:https";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
@@ -34,6 +36,14 @@ export interface EnrollOptions {
 	/** 跳过 TLS 校验（自签证书自建服务时使用；默认关闭） */
 	allowInsecureTls?: boolean;
 	timeoutMs?: number;
+	/** install-remote.sh 用：服务端 /install/enroll 的 JSON 响应（已由受 pin 保护的 curl 取得） */
+	responseFile?: string;
+	/** 安装令牌模式：端点为 /install/enroll，Bearer 鉴权 */
+	installToken?: string;
+	endpoint?: string;
+	bearer?: string;
+	/** 可选 CA PEM（直接模式；也可用 NODE_EXTRA_CA_CERTS） */
+	caFile?: string;
 }
 
 export interface EnrollResult {
@@ -46,6 +56,49 @@ export interface EnrollResult {
 }
 
 /**
+ * 安装态（控制面来源）：用于 `omo kb status --report` 上报实例最近状态。
+ * 不含任何凭据秘密；reportToken 是**实例上报令牌**（安装时一次性下发，服务端只存哈希）。
+ */
+export interface KbInstallState {
+	controlPlane: string;
+	installId: string;
+	version?: string;
+	reportToken?: string;
+	/** 自签 CA PEM 路径（安装时保存；上报时作为信任锚） */
+	caFile?: string;
+	enrolledAt: string;
+}
+
+export function kbInstallStatePath(omoDir: string): string {
+	return path.join(omoDir, "kb", "install.json");
+}
+
+export async function loadKbInstallState(omoDir: string): Promise<KbInstallState | undefined> {
+	try {
+		const raw = JSON.parse(await fs.readFile(kbInstallStatePath(omoDir), "utf8")) as Partial<KbInstallState>;
+		if (typeof raw.controlPlane !== "string" || typeof raw.installId !== "string") return undefined;
+		return {
+			controlPlane: raw.controlPlane,
+			installId: raw.installId,
+			version: raw.version,
+			reportToken: raw.reportToken,
+			caFile: raw.caFile,
+			enrolledAt: raw.enrolledAt ?? new Date().toISOString(),
+		};
+	} catch {
+		return undefined;
+	}
+}
+
+export async function saveKbInstallState(omoDir: string, state: KbInstallState): Promise<string> {
+	const dir = path.join(omoDir, "kb");
+	await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+	const file = kbInstallStatePath(omoDir);
+	await fs.writeFile(file, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+	return file;
+}
+
+/**
  * 由命令行参数解析 enroll 选项（--server/--code/--code-file/--device + 环境变量兜底）。
  * 兑换码优先序：--code-file（0600，推荐）→ --code → env OMO_KB_ENROLL_CODE。
  */
@@ -55,6 +108,38 @@ export async function parseEnrollArgs(argv: string[], env: NodeJS.ProcessEnv = p
 		return i >= 0 ? argv[i + 1] : undefined;
 	};
 	const server = val("server") ?? env.OMO_KB_SERVER;
+	const installTokenFile = val("install-token-file");
+	if (installTokenFile !== undefined) {
+		if (server === undefined || server === "") throw new Error("--install-token-file 需要 --server");
+		const installToken = await readCodeFile(installTokenFile);
+		return {
+			server,
+			code: "",
+			device: val("device") ?? "",
+			agentId: val("agent-id"),
+			installToken,
+			endpoint: "/install/enroll",
+			bearer: installToken,
+			caFile: val("ca-file"),
+			allowInsecureHttp: argv.includes("--allow-insecure-http"),
+			allowInsecureTls: argv.includes("--allow-insecure-tls"),
+			timeoutMs: 20_000,
+		};
+	}
+	const responseFile = val("response-file");
+	if (responseFile !== undefined) {
+		if (server === undefined || server === "") throw new Error("--response-file 仍需要 --server（用于校验响应来源展示）");
+		return {
+			server,
+			code: "",
+			device: val("device") ?? "",
+			agentId: val("agent-id"),
+			responseFile,
+			allowInsecureHttp: argv.includes("--allow-insecure-http"),
+			allowInsecureTls: argv.includes("--allow-insecure-tls"),
+			timeoutMs: 20_000,
+		};
+	}
 	if (server === undefined || server === "") throw new Error("缺少 --server（或环境变量 OMO_KB_SERVER）");
 	const codeFile = val("code-file");
 	const code = codeFile !== undefined ? await readCodeFile(codeFile) : (val("code") ?? env.OMO_KB_ENROLL_CODE ?? "");
@@ -108,20 +193,6 @@ export async function readCodeFile(file: string): Promise<string> {
 	return (await fs.readFile(file, "utf8")).trim();
 }
 
-/**
- * 构造「跳过 TLS 校验」的 undici Agent（仅绑定到本次 fetch）。
- * undici 不可用（bun 原生 fetch / 老 Node）→ 返回 undefined，由调用方回退到进程级开关 + 立即恢复。
- */
-function insecureDispatcher(): unknown {
-	try {
-		const undici = (globalThis as { Agent?: new (o: unknown) => unknown }).Agent;
-		if (typeof undici !== "function") return undefined;
-		return new undici({ connect: { rejectUnauthorized: false } });
-	} catch {
-		return undefined;
-	}
-}
-
 function failMessageFor(status: number, body: { error?: string }): string {
 	switch (status) {
 		case 400:
@@ -142,48 +213,151 @@ function failMessageFor(status: number, body: { error?: string }): string {
 }
 
 /**
+ * 带显式 CA 的 JSON POST（node:https/http 实现）。
+ * 不用 NODE_EXTRA_CA_CERTS 的原因：该变量只在进程启动时生效，运行时设置不保证被 fetch 采用
+ * （真机上表现为「CA 明明存在却仍验证失败」）。这里把 CA 直接绑到本次连接。
+ */
+function postJsonWithTrust(
+	url: string,
+	bodyText: string,
+	headers: Record<string, string>,
+	opts: { caPem?: string; rejectUnauthorized?: boolean; timeoutMs?: number } = {},
+): Promise<{ status: number; text: string }> {
+	return new Promise((resolve, reject) => {
+		const u = new URL(url);
+		const secure = u.protocol === "https:";
+		const mod = secure ? https : http;
+		const req = mod.request(
+			{
+				protocol: u.protocol,
+				hostname: u.hostname,
+				port: u.port === "" ? (secure ? 443 : 80) : Number(u.port),
+				path: `${u.pathname}${u.search}`,
+				method: "POST",
+				headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(bodyText), ...headers },
+				...(secure ? { ca: opts.caPem, rejectUnauthorized: opts.rejectUnauthorized !== false } : {}),
+				timeout: opts.timeoutMs ?? 20_000,
+			},
+			(res) => {
+				const chunks: Buffer[] = [];
+				res.on("data", (c: Buffer) => chunks.push(c));
+				res.on("end", () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf8") }));
+			},
+		);
+		req.on("timeout", () => req.destroy(new Error(`请求超时（${opts.timeoutMs ?? 20_000}ms）`)));
+		req.on("error", reject);
+		req.end(bodyText);
+	});
+}
+
+/**
+ * 实例状态上报（`omo kb status --report`）：不引入常驻心跳，只在人工/运维动作时推一次最近状态。
+ * 认证用安装时下发的实例上报令牌（Bearer）；服务端按哈希校验，吊销即失效。
+ */
+export interface ReportStatusResult {
+	ok: boolean;
+	status: number;
+	message: string;
+}
+
+export async function reportInstallStatus(
+	install: KbInstallState,
+	payload: { device: string; ok: boolean; lastSync?: string; reason?: string; version?: string; configRevision?: string; appliedRevision?: string },
+	opts: { allowInsecureHttp?: boolean; allowInsecureTls?: boolean; caFile?: string; timeoutMs?: number } = {},
+): Promise<ReportStatusResult> {
+	if (install.reportToken === undefined || install.reportToken === "") {
+		return { ok: false, status: 0, message: "本机没有实例上报令牌（需经控制面安装/接入一次）" };
+	}
+	const base = install.controlPlane.replace(/\/+$/, "");
+	const url = `${base}/install/report`;
+	if (base.startsWith("http://") && opts.allowInsecureHttp !== true) {
+		return { ok: false, status: 0, message: "拒绝以明文 HTTP 上报：控制面请配 TLS，或显式 --allow-insecure-http（仅限受信内网）" };
+	}
+	const caFile = opts.caFile ?? install.caFile;
+	const caPem = caFile === undefined ? undefined : await fs.readFile(caFile, "utf8").catch(() => undefined);
+	if (caFile !== undefined && caPem === undefined) {
+		return { ok: false, status: 0, message: `CA 文件不可读：${caFile}（可用 --ca-file 指定）` };
+	}
+	let res: { status: number; text: string };
+	try {
+		res = await postJsonWithTrust(
+			url,
+			JSON.stringify({
+				stage: "status",
+				device: payload.device,
+				ok: payload.ok,
+				...(payload.lastSync === undefined ? {} : { lastSync: payload.lastSync }),
+				...(payload.reason === undefined ? {} : { reason: payload.reason }),
+				...(payload.version === undefined ? {} : { version: payload.version }),
+				...(payload.configRevision === undefined ? {} : { configRevision: payload.configRevision }),
+				...(payload.appliedRevision === undefined ? {} : { appliedRevision: payload.appliedRevision }),
+			}),
+			{ Authorization: `Bearer ${install.reportToken}` },
+			{ caPem, rejectUnauthorized: opts.allowInsecureTls !== true, timeoutMs: opts.timeoutMs ?? 15_000 },
+		);
+	} catch (err) {
+		return { ok: false, status: 0, message: `无法连接控制面（${base}）：${String((err as Error)?.message ?? err)}` };
+	}
+	let body: { error?: string } = {};
+	try {
+		body = JSON.parse(res.text) as typeof body;
+	} catch {
+		// 非 JSON 应答按状态码处理
+	}
+	if (res.status < 200 || res.status >= 300) {
+		const hint = res.status === 401 || res.status === 403 ? "上报令牌无效/已吊销" : res.status === 409 ? "该实例已撤销上报" : body.error ?? "服务侧失败";
+		return { ok: false, status: res.status, message: hint };
+	}
+	return { ok: true, status: res.status, message: `已上报实例状态（installId=${install.installId}）` };
+}
+
+/**
  * 兑换凭据并落盘自证。
  * @param opts 选项（server/code/device）
  * @param omoDir omo 私有域根（凭据落 `$OMO_DIR/kb/credential.json`）
  */
 export async function enroll(opts: EnrollOptions, omoDir: string): Promise<EnrollResult> {
-	const url = `${opts.server.replace(/\/+$/, "")}/enroll`;
-	if (url.startsWith("http://") && opts.allowInsecureHttp !== true) {
-		throw new Error("拒绝以明文 HTTP 兑换凭据（会经网络明文传输）：服务请配 TLS，或显式 --allow-insecure-http（仅限受信内网）");
-	}
+	const url = `${opts.server.replace(/\/+$/, "")}${opts.endpoint ?? "/enroll"}`;
+	let body: { ok?: boolean; op?: string; credential?: KbCredential; revoked?: boolean; error?: string; installId?: string; control_plane?: string; report_token?: string; version?: string } = {};
 
-	let res: Response;
-	// ★ 跳过 TLS 校验必须**限定在本次请求**：此前写 process.env.NODE_TLS_REJECT_UNAUTHORIZED="0"
-	//   会污染整个进程的后续所有 HTTPS（含 KB 同步的凭据交换），且无恢复机制。
-	//   现用 undici Agent 绑定到单次 fetch 的 dispatcher；非 undici 运行时（bun 原生 fetch）
-	//   回退为「设置后立即恢复」，作用域收敛到本函数执行期。
-	const dispatcher = opts.allowInsecureTls === true ? insecureDispatcher() : undefined;
-	const prevTlsEnv = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-	if (dispatcher === undefined && opts.allowInsecureTls === true) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-	try {
+	if (opts.responseFile !== undefined) {
+		// install-remote.sh 路径：响应已由受 cacert+pin 保护的 curl 取得；这里只做落盘，不再发网络请求。
+		let text: string;
 		try {
-			res = await fetch(url, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ code: opts.code, device: opts.device, agent_id: opts.agentId }),
-				signal: AbortSignal.timeout(opts.timeoutMs ?? 20_000),
-				...(dispatcher !== undefined ? { dispatcher } : {}),
-			} as RequestInit & { dispatcher?: unknown });
+			text = await fs.readFile(opts.responseFile, "utf8");
+		} catch (err) {
+			throw new Error(`安装响应不可读（${opts.responseFile}）：${String((err as Error)?.message ?? err)}`);
+		}
+		try {
+			body = JSON.parse(text) as typeof body;
+		} catch {
+			throw new Error(`安装响应不是合法 JSON：${opts.responseFile}`);
+		}
+	} else {
+		if (url.startsWith("http://") && opts.allowInsecureHttp !== true) {
+			throw new Error("拒绝以明文 HTTP 兑换凭据（会经网络明文传输）：服务请配 TLS，或显式 --allow-insecure-http（仅限受信内网）");
+		}
+		// CA 与「跳过校验」都绑定到本次连接（node:https），不污染进程级 TLS 开关。
+		const caPem = opts.caFile === undefined ? undefined : await fs.readFile(opts.caFile, "utf8").catch(() => undefined);
+		if (opts.caFile !== undefined && caPem === undefined) throw new Error(`CA 文件不可读：${opts.caFile}`);
+		let res: { status: number; text: string };
+		try {
+			res = await postJsonWithTrust(
+				url,
+				JSON.stringify(opts.installToken === undefined ? { code: opts.code, device: opts.device, agent_id: opts.agentId } : { device: opts.device, agent_id: opts.agentId }),
+				{ ...(opts.bearer === undefined ? {} : { Authorization: `Bearer ${opts.bearer}` }) },
+				{ caPem, rejectUnauthorized: opts.allowInsecureTls !== true, timeoutMs: opts.timeoutMs ?? 20_000 },
+			);
 		} catch (err) {
 			throw new Error(`无法连接自注册服务（${opts.server}）：${String((err as Error)?.message ?? err)}`);
 		}
-	} finally {
-		// 恢复进程级开关：不得让「一次性自签证书信任」泄漏到后续请求
-		if (prevTlsEnv === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-		else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTlsEnv;
+		try {
+			body = JSON.parse(res.text) as typeof body;
+		} catch {
+			body = {};
+		}
+		if (res.status < 200 || res.status >= 300) throw new Error(failMessageFor(res.status, body));
 	}
-	let body: { ok?: boolean; op?: string; credential?: KbCredential; revoked?: boolean; error?: string } = {};
-	try {
-		body = (await res.json()) as typeof body;
-	} catch {
-		body = {};
-	}
-	if (!res.ok) throw new Error(failMessageFor(res.status, body));
 
 	if (body.revoked === true) {
 		// 吊销：删除本地凭据与 git store 文件（保留本地知识库内容）
@@ -198,6 +372,16 @@ export async function enroll(opts: EnrollOptions, omoDir: string): Promise<Enrol
 	}
 	await saveKbCredential(omoDir, cred);
 	await ensureGitCredentialsFile(omoDir, cred);
+	if (typeof body.report_token === "string" && typeof body.control_plane === "string" && typeof body.installId === "string") {
+		await saveKbInstallState(omoDir, {
+			controlPlane: body.control_plane,
+			installId: body.installId,
+			version: body.version,
+			reportToken: body.report_token,
+			caFile: opts.caFile ?? process.env.OMO_KB_CA_FILE,
+			enrolledAt: new Date().toISOString(),
+		});
+	}
 	return {
 		ok: true,
 		credential: cred,

@@ -1,0 +1,14 @@
+id: 'KBCP-P2-1'
+title: 'KB 控制面 P2-1：GitLab 管理适配器（后续）'
+state: '待执行'
+level: 'L2'
+created: '2026-10-29T15:27:46.843Z'
+accept:
+  - 'GitLab 管理 API 能力矩阵与探针；未验证不提供自动建号/授权'
+  - '内容同步保持；管理自动化独立设计/评审'
+  - '不与首期 Gitea 路径耦合'
+events:
+  - ts: '2026-10-29T15:27:46.844Z'
+    op: 'create'
+    by: 'qoder-architect(qoder-cli)'
+    note: 'KB 控制面 P2-1：GitLab 管理适配器（后续）'

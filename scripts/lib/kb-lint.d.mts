@@ -25,3 +25,9 @@ export declare function lintSimilarity(p: {
 }): { hard: LintViolation[]; warnings: string[]; pairs: { a: string; b: string; score: number }[] };
 export declare function buildComment(p: { mode: string; hard: LintViolation[]; warnings: string[] }): string;
 export declare function verifyHmac(secret: string, body: string, signatureHex: string): boolean;
+export declare function verifyHmacWithRotation(
+	secrets: { current?: string; previous?: string; rotatedAt?: string; graceMs?: number },
+	body: string,
+	signatureHex: string,
+	now?: number,
+): { via: "current" | "previous" | "none"; previousExpiresAt?: string };

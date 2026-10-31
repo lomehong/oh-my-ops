@@ -180,3 +180,18 @@ export function verifyHmac(secret, body, signatureHex) {
 	const b = Buffer.from(signatureHex.toLowerCase());
 	return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
+
+/**
+ * 双密钥验签（webhook secret 轮换）：current 优先；previous 仅在 rotatedAt + grace 内接受。
+ * 返回 {via: "current"|"previous"|"none", previousExpiresAt?}。
+ */
+export function verifyHmacWithRotation({ current, previous, rotatedAt, graceMs = 24 * 3600_000 } = {}, body, signatureHex, now = Date.now()) {
+	if (typeof current === "string" && current !== "" && verifyHmac(current, body, signatureHex)) return { via: "current" };
+	if (typeof previous === "string" && previous !== "") {
+		const t = Date.parse(String(rotatedAt ?? ""));
+		if (Number.isFinite(t) && now - t <= graceMs && verifyHmac(previous, body, signatureHex)) {
+			return { via: "previous", previousExpiresAt: new Date(t + graceMs).toISOString() };
+		}
+	}
+	return { via: "none" };
+}

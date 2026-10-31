@@ -15,7 +15,7 @@
   nav { display:flex; gap:4px; padding:8px 20px; border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
   nav button { background:none; border:1px solid transparent; color:var(--dim); padding:6px 14px; cursor:pointer; font:inherit; border-radius:6px; }
   nav button.on { color:var(--fg); border-color:var(--acc); background:#1b2530; }
-  main { padding:20px; max-width:1080px; margin:0 auto; }
+  main { padding:20px; max-width:1180px; margin:0 auto; }
   section { display:none; }  section.on { display:block; }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:16px; }
   .card h2 { margin:0 0 12px; font-size:13px; color:var(--dim); font-weight:600; letter-spacing:.08em; }
@@ -28,47 +28,97 @@
   input:focus,select:focus { outline:none; border-color:var(--acc); }
   button.act { background:#1f6feb22; border:1px solid var(--acc); color:var(--acc); padding:7px 18px; border-radius:6px; cursor:pointer; font:inherit; }
   button.act:hover { background:#1f6feb44; }
-  button.copy { background:none; border:1px solid var(--line); color:var(--dim); padding:3px 10px; border-radius:5px; cursor:pointer; font-size:12px; }
+  button.copy, button.mini { background:none; border:1px solid var(--line); color:var(--dim); padding:3px 10px; border-radius:5px; cursor:pointer; font-size:12px; }
   .kv { display:grid; grid-template-columns: 260px 1fr; gap:6px 16px; font-size:13px; }
   .kv .k { color:var(--dim); }
-  pre { background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:12px; overflow:auto; max-height:420px; font-size:12px; color:#9fb3c8; }
-  .codebox { font-size:20px; letter-spacing:.12em; background:#0d1117; border:1px dashed var(--warn); color:var(--warn); border-radius:8px; padding:14px; word-break:break-all; user-select:all; }
+  pre { background:#0d1117; border:1px solid var(--line); border-radius:8px; padding:12px; overflow:auto; max-height:420px; font-size:12px; color:#9fb3c8; white-space:pre-wrap; word-break:break-word; }
+  .codebox { font-size:18px; letter-spacing:.08em; background:#0d1117; border:1px dashed var(--warn); color:var(--warn); border-radius:8px; padding:14px; word-break:break-all; user-select:all; }
   .row { display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; }
-  .row > div { flex:1; min-width:180px; }
+  .row > div { flex:1; min-width:160px; }
   .msg { margin-top:10px; font-size:13px; white-space:pre-wrap; }
   .overlay { position:fixed; inset:0; background:#0f1419ee; display:flex; align-items:center; justify-content:center; z-index:9; }
-  .overlay .card { max-width:520px; }
+  .overlay .card { max-width:560px; width:calc(100% - 40px); }
   .hidden { display:none; }
+  .pill { border:1px solid var(--line); border-radius:999px; padding:1px 8px; font-size:11px; color:var(--dim); }
 </style>
 </head>
 <body>
 <header>
   <h1>omo-kb 管理后台</h1>
-  <span class="sub" id="hdr-sub">知识库凭据自注册服务</span>
+  <span class="sub" id="hdr-sub">KB 控制面</span>
   <span id="actor"></span>
 </header>
 
 <div class="overlay hidden" id="auth-overlay">
   <div class="card">
-    <h2>401 · 需经 yufu 网关访问</h2>
-    <p>服务未在请求中见到 yufu 注入的身份头。<br>请从御符网关认证后的入口进入本后台；直连服务端口无法使用。</p>
-    <button class="act" onclick="location.reload()">重试</button>
+    <h2>本机管理 token</h2>
+    <p>管理 API 需要 <code>control-plane/admin.token</code>。在服务机执行：<br>
+      <code id="token-path">cat ~/.omo-kb/control-plane/admin.token</code></p>
+    <input id="token-input" type="password" placeholder="粘贴 admin token（仅保存在本页 sessionStorage）">
+    <p><button class="act" id="token-save">进入</button> <span class="dim">不要通过聊天/URL 传递</span></p>
+    <div class="msg" id="token-msg"></div>
   </div>
 </div>
 
 <nav>
   <button data-tab="status" class="on">状态</button>
+  <button data-tab="install">安装</button>
+  <button data-tab="instances">实例</button>
   <button data-tab="code">签发兑换码</button>
   <button data-tab="registry">登记表</button>
   <button data-tab="audit">审计</button>
   <button data-tab="config">配置</button>
+  <button data-tab="content">内容</button>
   <button onclick="loadState()" style="margin-left:auto">刷新</button>
 </nav>
 
 <main>
   <section id="tab-status" class="on">
     <div class="card"><h2>服务</h2><div class="kv" id="st-svc"></div></div>
-    <div class="card"><h2>管理后台</h2><div class="kv" id="st-ui"></div></div>
+    <div class="card"><h2>控制面</h2><div class="kv" id="st-ui"></div></div>
+    <div class="card"><h2>门禁</h2><div class="kv" id="st-gate"></div></div>
+  </section>
+
+  <section id="tab-install">
+    <div class="card">
+      <h2>生成安装命令（后台发布脚本；目标机主动执行）</h2>
+      <div class="row">
+        <div><label class="dim">版本<br><input id="ins-version" placeholder="例：v0.17.0"></label></div>
+        <div><label class="dim">渠道<br><select id="ins-channel"><option>stable</option><option>beta</option></select></label></div>
+        <div><label class="dim">设备名（可选）<br><input id="ins-device" placeholder="留空由目标机 hostname"></label></div>
+        <div><button class="act" id="ins-generate">生成</button></div>
+      </div>
+      <div id="ins-result" class="hidden">
+        <p class="warn" style="margin-bottom:6px">⚠ 安装令牌只显示这一次；先写入 0600 文件，再执行命令。</p>
+        <div class="codebox" id="ins-token"></div>
+        <p style="margin-top:8px"><button class="copy" id="ins-copy-token">复制令牌</button>
+          <span class="dim" id="ins-meta"></span></p>
+        <p class="dim">命令（先保存令牌到 <code id="ins-token-file">$HOME/.omo-install.token</code>）：</p>
+        <pre id="ins-command"></pre>
+        <button class="copy" id="ins-copy-command">复制命令</button>
+        <p class="dim">安装完成后：<code>omo kb status --report</code> 可把本机最近同步状态上报到「实例」页（无常驻心跳）。</p>
+      </div>
+      <div class="msg" id="ins-msg"></div>
+    </div>
+    <div class="card"><h2>安装令牌</h2><div id="ins-tokens"></div></div>
+    <div class="card">
+      <h2>安装版本与制品</h2>
+      <div id="ins-installers"></div>
+      <div class="row" style="margin-top:12px">
+        <div><label class="dim">版本<br><input id="up-version" placeholder="v0.17.0"></label></div>
+        <div><label class="dim">渠道<br><input id="up-channel" value="stable"></label></div>
+        <div><label class="dim">OS<br><input id="up-os" value="linux"></label></div>
+        <div><label class="dim">Arch<br><input id="up-arch" value="x86_64"></label></div>
+        <div><label class="dim">制品文件<br><input id="up-file" type="file"></label></div>
+        <div><button class="act" id="up-upload">登记并上传</button></div>
+      </div>
+      <div class="msg" id="up-msg"></div>
+    </div>
+    <div class="card"><h2>安装历史</h2><div id="ins-history"></div></div>
+  </section>
+
+  <section id="tab-instances">
+    <div class="card"><h2>实例（以 installId 唯一；只显示最近上报，不宣称实时在线）</h2><div id="instances-table"></div></div>
   </section>
 
   <section id="tab-code">
@@ -95,7 +145,20 @@
   </section>
 
   <section id="tab-audit">
-    <div class="card"><h2>审计日志（尾部 50 条 · append-only 哈希链）</h2><pre id="audit-pre">（空）</pre></div>
+    <div class="card">
+      <h2>审计过滤（append-only 哈希链 · 秘密不落审计）</h2>
+      <div class="row">
+        <div><label class="dim">事件前缀<br><input id="au-event" placeholder="install. / ui. / enroll."></label></div>
+        <div><label class="dim">actor<br><input id="au-actor" placeholder="admin / ui:xxx"></label></div>
+        <div><label class="dim">installId<br><input id="au-install" placeholder="ins_..."></label></div>
+        <div><label class="dim">关键字<br><input id="au-q" placeholder="device / reason"></label></div>
+        <div><label class="dim">条数<br><input id="au-limit" type="number" value="100" min="1" max="200"></label></div>
+        <div><button class="act" id="au-apply">查询</button></div>
+      </div>
+      <div class="msg" id="au-msg"></div>
+    </div>
+    <div class="card"><h2>事件（尾部）</h2><pre id="audit-pre">（空）</pre></div>
+    <div class="card"><h2>安装历史（按 installId 归组：manifest → script → artifact → enroll → report）</h2><div id="audit-installs"></div></div>
   </section>
 
   <section id="tab-config">
@@ -106,13 +169,17 @@
       <div class="msg" id="cfg-msg"></div>
     </div>
   </section>
+
+  <section id="tab-content">
+    <div class="card"><h2>内容面（复用 Gitea/GitLab）</h2><div id="content-links"></div></div>
+  </section>
 </main>
 
 <script>
 "use strict";
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
-let ACTOR = "";
+let ACTOR = "", STATE = {};
 
 document.querySelectorAll("nav button[data-tab]").forEach((b) =>
   b.addEventListener("click", () => {
@@ -122,33 +189,44 @@ document.querySelectorAll("nav button[data-tab]").forEach((b) =>
     $("#tab-" + b.dataset.tab).classList.add("on");
   }));
 
-/* 前缀挂载安全：页面可能被网关以 /omo-kb（无尾斜杠）暴露 ⇒ 统一按「当前路径 + /」拼 API，
-   避免相对路径解析到站点根（/api/... 而不是 /omo-kb/api/...）。 */
 const BASE = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
+function getToken() { return sessionStorage.getItem("omoKbToken") || ""; }
 
 async function jfetch(url, opts) {
-  const r = await fetch(BASE + url, opts);
+  const headers = new Headers((opts && opts.headers) || {});
+  const token = getToken();
+  if (token) headers.set("Authorization", "Bearer " + token);
+  const r = await fetch(BASE + url, { ...(opts || {}), headers });
   if (r.status === 401) { $("#auth-overlay").classList.remove("hidden"); throw new Error("401"); }
   const body = await r.json().catch(() => ({}));
   return { ok: r.ok, status: r.status, body };
 }
 
 async function loadState() {
+  if (!getToken()) { $("#auth-overlay").classList.remove("hidden"); return; }
   try {
     const { ok, status, body } = await jfetch("api/state");
     if (!ok) {
-      // 不静默：状态拉取失败必须可见（含网关 302/404 等非 JSON 应答）
-      $("#hdr-sub").innerHTML = `<span class="bad">状态接口异常：HTTP ${status}</span> <span class="dim">——多为网关路径映射（前缀/尾斜杠）问题</span>`;
+      $("#hdr-sub").innerHTML = `<span class="bad">状态接口异常：HTTP ${status}</span> <span class="dim">——检查 admin token 或服务日志</span>`;
       return;
     }
+    STATE = body;
     ACTOR = body.actor ?? "";
     $("#actor").textContent = ACTOR ? "操作者：" + ACTOR : "";
     $("#auth-overlay").classList.add("hidden");
     renderStatus(body);
+    renderInstall(body);
+    renderInstances(body);
     renderRegistry(body.registry ?? {});
     renderAudit(body.auditTail);
     renderConfig(body.config, body.ui);
-  } catch { /* 401 已处理 */ }
+    renderContent(body);
+    try {
+      const g = await jfetch("api/gate");
+      renderGate(g.ok ? { ...body, gate: g.body.gate ?? body.gate, observed: g.body.observed, observedError: g.body.observedError } : body);
+    } catch { renderGate(body); }
+    renderHistory(body);
+  } catch (err) { if (String(err.message) !== "401") console.error(err); }
 }
 
 function renderStatus({ health, ui, configPath }) {
@@ -161,11 +239,85 @@ function renderStatus({ health, ui, configPath }) {
   ].map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`).join("");
   $("#st-ui").innerHTML = [
     ["后台开关", ui.on ? '<span class="ok">on</span>' : '<span class="warn">off</span>'],
-    ["身份头（yufu）", esc(ui.identityHeader)],
-    ["认证模式", "网关信任（yufu 注入身份头，缺失 401）"],
-    ["配置文件", esc(configPath ?? "未指定（--config），无法在线改配置")],
+    ["管理监听", `${esc(ui.uiHost)}:${esc(ui.uiPort)}`],
+    ["认证模式", "本机 control-plane admin token；yufu 头仅作 actor"],
+    ["admin token 文件", `<code>${esc(ui.adminTokenFile)}</code>`],
+    ["安装公开地址", esc(ui.installBaseUrl)],
+    ["TLS SPKI pin", esc(ui.tlsPin ?? "（未启用 TLS）")],
+    ["配置文件", esc(configPath ?? ui.configPath ?? "未指定（--config），无法在线改配置")],
   ].map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`).join("");
 }
+
+function renderGate(body) {
+  const g = body.gate ?? {};
+  const o = body.observed ?? {};
+  const bp = o.branchProtection ?? {};
+  const wh = o.webhook ?? {};
+  $("#st-gate").innerHTML = [
+    ["lint 模式", esc(g.mode)],
+    ["主线", esc(g.mainBranch)],
+    ["webhook 密钥", g.webhookConfigured ? '<span class="ok">已配置</span>' : '<span class="warn">未配置</span>'],
+    ["双密钥宽限", g.webhookSecret?.previousActive ? `<span class="warn">旧密钥仍接受</span>（至 ${esc(g.webhookSecret.previousExpiresAt)}）` : '<span class="dim">无（单一密钥）</span>'],
+    ["最近成功验签", g.webhookSecret?.lastVerifiedAt ? esc(g.webhookSecret.lastVerifiedAt) : '<span class="dim">尚未观测</span>'],
+    ["上次轮换", esc(g.webhookSecret?.rotatedAt ?? "-")],
+    ["webhook URL", esc(g.webhookUrl ?? "-")],
+    ["分支保护", bp.configured ? `<span class="ok">已配置</span>（checks: ${esc((bp.statusChecks ?? []).join(", "))}）` : '<span class="warn">未检测到</span>'],
+    ["webhook 状态", wh.configured ? `<span class="ok">已配置</span>（active=${esc(wh.active)}）` : '<span class="warn">未检测到</span>'],
+    ["观测错误", body.observedError ? `<span class="bad">${esc(body.observedError)}</span>` : '<span class="dim">无</span>'],
+  ].map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`).join("") +
+    `<div class="k">操作</div><div><button class="act" data-action="gate-apply">应用分支保护 + webhook</button> <button class="copy" data-action="gate-rotate">轮换 webhook 密钥</button> ${g.webhookSecret?.previousActive ? '<button class="copy" data-action="gate-close-window">关闭旧密钥宽限</button>' : ""} <span class="dim">仅 Gitea；GitLab 首期仅内容同步</span></div>`;
+}
+
+function renderInstall(body) {
+  const cp = body.controlPlane ?? {};
+  if (cp.error) { $("#ins-msg").textContent = cp.error; return; }
+  const installers = cp.installers ?? [];
+  $("#ins-installers").innerHTML = installers.length === 0 ? '<span class="dim">（还没有登记安装版本；在下方登记并上传制品）</span>' :
+    `<table><tr><th>版本</th><th>渠道</th><th>状态</th><th>平台</th></tr>` +
+    installers.map((i) => `<tr><td>${esc(i.version)}</td><td>${esc(i.channel)}</td><td>${esc(i.status)}</td><td class="dim">${esc((i.manifest?.platforms ?? []).map((p) => `${p.os}/${p.arch}`).join(", ") || "无")}</td></tr>`).join("") + "</table>";
+  const tokens = cp.installTokens ?? [];
+  $("#ins-tokens").innerHTML = tokens.length === 0 ? '<span class="dim">（暂无安装令牌）</span>' :
+    `<table><tr><th>installId</th><th>版本</th><th>设备</th><th>状态</th><th>过期</th><th></th></tr>` +
+    tokens.map((t) => `<tr><td>${esc(t.installId)}</td><td>${esc(t.version)}</td><td>${esc(t.device ?? "-")}</td><td>${esc(t.state)}</td><td class="dim">${esc(t.expiresAt)}</td><td>${t.state === "completed" || t.state === "revoked" || t.state === "expired" ? "" : `<button class="mini" data-action="revoke-token" data-id="${esc(t.installId)}">吊销</button>`}</td></tr>`).join("") + "</table>";
+}
+
+function renderInstances(body) {
+  const list = body.controlPlane?.instances ?? [];
+  $("#instances-table").innerHTML = list.length === 0 ? '<span class="dim">（暂无实例上报；安装成功后才会出现在这里。登记表条目不算在线）</span>' :
+    `<table><tr><th>installId</th><th>设备</th><th>状态</th><th>版本</th><th>最近上报</th><th>最近同步</th><th>applied rev</th><th>上报令牌</th><th>最近错误</th><th>操作</th></tr>` +
+    list.map((x) => `<tr><td>${esc(x.installId)}</td><td>${esc(x.device)}</td><td>${esc(x.status)}${x.stale ? ' <span class="warn">stale</span>' : ""}</td><td>${esc(x.version)}</td><td class="dim">${esc(x.lastSeen ?? "-")}</td><td class="dim">${esc(x.lastSync ?? "-")}</td><td class="dim">${esc(x.appliedRevision ?? "-")}</td><td>${x.reportToken ? '<span class="ok">已签发</span>' : '<span class="warn">无</span>'}</td><td class="dim">${esc(x.lastError ? x.lastError.stage + ": " + x.lastError.reason : "-")}</td><td><button class="mini" data-action="rotate" data-id="${esc(x.installId)}">轮换</button> <button class="mini" data-action="revoke" data-id="${esc(x.installId)}">吊销</button></td></tr>`).join("") + "</table>";
+}
+
+function renderHistory(body) {
+  const list = body.controlPlane?.instances ?? [];
+  $("#ins-history").innerHTML = list.length === 0 ? '<span class="dim">（暂无安装历史）</span>' :
+    `<table><tr><th>installId</th><th>设备</th><th>状态</th><th>版本</th><th>最近上报</th><th>最近错误</th></tr>` +
+    list.map((x) => `<tr><td>${esc(x.installId)}</td><td>${esc(x.device)}</td><td>${esc(x.status)}</td><td>${esc(x.version)}</td><td class="dim">${esc(x.lastSeen ?? "-")}</td><td class="dim">${esc(x.lastError ? x.lastError.stage + ": " + x.lastError.reason : "-")}</td></tr>`).join("") + "</table>";
+}
+
+function renderContent({ health, content }) {
+  const url = content?.url ?? "";
+  const provider = content?.provider ?? "gitea";
+  const mgmt = content?.management === true;
+  $("#content-links").innerHTML = url
+    ? `<p>内容仓库（${esc(provider)}）：<a href="${esc(url)}" target="_blank" rel="noreferrer">${esc(url)}</a></p>
+       <p class="dim">编辑、PR/MR、评审与历史均在 Gitea/GitLab；本后台不提供内容编辑器或第二套评审流。</p>
+       <p class="dim">管理自动化：${mgmt ? '<span class="ok">Gitea 已启用</span>' : '<span class="warn">GitLab 首期仅内容同步，建号/授权/门禁自动化未启用</span>'}</p>`
+    : `<p class="dim">未配置内容仓库地址（repo=${esc(health.repo)}）。</p>`;
+}
+
+$("#token-save").addEventListener("click", () => {
+  const v = $("#token-input").value.trim();
+  if (v === "") { $("#token-msg").textContent = "token 不能为空"; return; }
+  sessionStorage.setItem("omoKbToken", v);
+  $("#token-msg").textContent = "";
+  $("#token-input").value = "";
+  loadState();
+});
+
+$("#au-apply").addEventListener("click", async () => {
+  try { await loadAudit(); } catch (err) { $("#au-msg").textContent = String(err.message ?? err); }
+});
 
 $("#code-issue").addEventListener("click", async () => {
   const device = $("#code-device").value.trim();
@@ -175,12 +327,86 @@ $("#code-issue").addEventListener("click", async () => {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ device, ttlMin }),
   });
-  if (!ok) { alert(body.error ?? `HTTP ${"失败"}`); return; }
+  if (!ok) { alert(body.error ?? "失败"); return; }
   $("#code-value").textContent = body.code;
   $("#code-meta").textContent = `（设备 ${body.device} · 有效期至 ${body.expiresAt}）`;
   $("#code-hint").textContent = "实例侧：" + body.hint;
   $("#code-result").classList.remove("hidden");
   $("#code-copy").onclick = () => navigator.clipboard.writeText(body.code).then(() => { $("#code-copy").textContent = "已复制 ✓"; setTimeout(() => ($("#code-copy").textContent = "复制码"), 1500); });
+});
+
+$("#ins-generate").addEventListener("click", async () => {
+  const version = $("#ins-version").value.trim();
+  const channel = $("#ins-channel").value;
+  const device = $("#ins-device").value.trim();
+  $("#ins-result").classList.add("hidden");
+  const { ok, body } = await jfetch("api/install-tokens", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version, channel, device }),
+  });
+  if (!ok) { $("#ins-msg").textContent = body.error ?? "失败"; return; }
+  $("#ins-token").textContent = body.token;
+  $("#ins-meta").textContent = `installId=${body.installId} · 有效期至 ${body.expiresAt}`;
+  $("#ins-token-file").textContent = body.tokenFile;
+  $("#ins-command").textContent = body.command;
+  $("#ins-result").classList.remove("hidden");
+  $("#ins-copy-token").onclick = () => navigator.clipboard.writeText(body.token);
+  $("#ins-copy-command").onclick = () => navigator.clipboard.writeText(body.command);
+  $("#ins-msg").textContent = "注意：令牌只显示一次；请先保存到 0600 token 文件。";
+  loadState();
+});
+
+$("#up-upload").addEventListener("click", async () => {
+  const version = $("#up-version").value.trim();
+  const channel = $("#up-channel").value.trim() || "stable";
+  const os = $("#up-os").value.trim() || "linux";
+  const arch = $("#up-arch").value.trim() || "x86_64";
+  const file = $("#up-file").files[0];
+  if (version === "" || !file) { $("#up-msg").textContent = "版本和制品文件必填"; return; }
+  $("#up-msg").textContent = "登记版本…";
+  const reg = await jfetch("api/installers", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version, channel, manifest: { version, platforms: [] } }),
+  });
+  if (!reg.ok) { $("#up-msg").textContent = reg.body.error ?? "登记失败"; return; }
+  $("#up-msg").textContent = "上传制品…";
+  const up = await jfetch(`api/installers/${encodeURIComponent(version)}/artifacts?name=${encodeURIComponent(file.name)}&os=${encodeURIComponent(os)}&arch=${encodeURIComponent(arch)}`, {
+    method: "POST", body: file,
+  });
+  $("#up-msg").textContent = up.ok ? `✓ ${file.name} sha256=${up.body.sha256.slice(0, 16)}…` : (up.body.error ?? "上传失败");
+  loadState();
+});
+
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-action]");
+  if (!b) return;
+  const id = b.dataset.id;
+  if (b.dataset.action === "gate-apply") {
+    const r = await jfetch("api/gate/apply", { method: "POST" });
+    alert(r.ok ? "门禁已应用（分支保护 + webhook）" : (r.body.error ?? "应用失败"));
+    loadState();
+  } else if (b.dataset.action === "gate-rotate") {
+    if (!confirm("轮换 webhook 密钥？\n· Gitea hook 先切到新密钥\n· 旧密钥保留 24h 宽限\n· 服务会自动重启")) return;
+    const r = await jfetch("api/secret/rotate", { method: "POST" });
+    if (!r.ok) { alert(r.body.error ?? "轮换失败"); return; }
+    alert(`已轮换并重启。\n新密钥（只显示这一次）：\n${r.body.secret}\n\n旧密钥宽限至：${r.body.previousExpiresAt}`);
+    setTimeout(loadState, 1500);
+  } else if (b.dataset.action === "gate-close-window") {
+    if (!confirm("关闭旧密钥宽限？\n· 需已观测到新密钥验签成功\n· 关闭后旧密钥立即失效（会重启服务）")) return;
+    const r = await jfetch("api/secret/close", { method: "POST" });
+    if (!r.ok) { alert(r.body.error ?? "关闭失败"); return; }
+    alert(r.body.detail ?? "宽限已关闭");
+    setTimeout(loadState, 1500);
+  } else if (b.dataset.action === "revoke-token") {
+    const r = await jfetch(`api/install-tokens/${encodeURIComponent(id)}/revoke`, { method: "POST" });
+    if (!r.ok) alert(r.body.error ?? "吊销失败");
+    loadState();
+  } else if (b.dataset.action === "rotate" || b.dataset.action === "revoke") {
+    const r = await jfetch(`api/instances/${encodeURIComponent(id)}/${b.dataset.action}`, { method: "POST" });
+    if (!r.ok) { alert(r.body.error ?? "操作失败"); return; }
+    alert(`已签一次性码（${r.body.expiresAt}）：\n${r.body.code}\n\n${r.body.hint}`);
+    loadState();
+  }
 });
 
 function renderRegistry({ entries, pendingCodes, file, error }) {
@@ -203,13 +429,47 @@ function renderRegistry({ entries, pendingCodes, file, error }) {
     pendingCodes.map((c) => `<tr><td>${esc(c.op)}</td><td>${esc(c.device)}</td><td class="dim">${esc(c.expiresAt)}</td></tr>`).join("") + "</table>";
 }
 
-function renderAudit(tail) {
-  $("#audit-pre").textContent = tail.length === 0 ? "（空）" :
-    tail.map((r) => r.raw !== undefined ? r.raw :
-      `#${r.seq} ${r.ts ?? ""} ${r.event}${r.actor ? " actor=" + r.actor : ""}${r.device ? " device=" + r.device : ""}${r.ip ? " ip=" + r.ip : ""}`).join("\n");
+function auditLine(r) {
+  if (r.raw !== undefined) return r.raw;
+  return `#${r.seq} ${r.ts ?? ""} ${r.event}${r.actor ? " actor=" + r.actor : ""}${r.device ? " device=" + r.device : ""}${r.installId ? " install=" + r.installId : ""}${r.step ? " step=" + r.step : ""}${r.stage ? " stage=" + r.stage : ""}${r.reason ? " reason=" + r.reason : ""}${r.ip ? " ip=" + r.ip : ""}`;
 }
 
-const ENUMS = { OMO_KB_PERMISSION: ["read", "write", "admin"], OMO_KB_GRANT: ["team", "collab", "none"], OMO_KB_UI: ["on", "off"] };
+function renderAudit(tail) {
+  $("#audit-pre").textContent = tail.length === 0 ? "（空）" : tail.map(auditLine).join("\n");
+  renderInstallHistory(tail);
+}
+
+/** 安装历史：按 installId 归组，展示阶段序列（manifest/script/artifact/enroll/report/失败原因） */
+function renderInstallHistory(events) {
+  const grouped = new Map();
+  for (const e of events ?? []) {
+    if (e.installId === undefined) continue;
+    if (!String(e.event ?? "").match(/^(install\.|enroll\.)/) && !String(e.actor ?? "").startsWith("install:")) continue;
+    if (!grouped.has(e.installId)) grouped.set(e.installId, []);
+    grouped.get(e.installId).push(e);
+  }
+  if (grouped.size === 0) { $("#audit-installs").innerHTML = '<span class="dim">（当前查询结果中没有安装事件）</span>'; return; }
+  $("#audit-installs").innerHTML = [...grouped.entries()].map(([id, list]) =>
+    `<p class="dim" style="margin:10px 0 4px"><code>${esc(id)}</code> · device=${esc(list.find((x) => x.device)?.device ?? "-")}</p>` +
+    "<table><tr><th>时间</th><th>事件</th><th>阶段</th><th>结果</th><th>详情</th></tr>" +
+    list.map((e) => `<tr><td class="dim">${esc(e.ts ?? "-")}</td><td>${esc(e.event)}</td><td>${esc(e.stage ?? e.step ?? "-")}</td><td>${String(e.event).includes("failed") || String(e.event).includes("denied") ? '<span class="bad">失败</span>' : '<span class="ok">✓</span>'}</td><td class="dim">${esc(e.reason ?? e.name ?? e.version ?? "-")}</td></tr>`).join("") +
+    "</table>").join("");
+}
+
+async function loadAudit() {
+  const q = new URLSearchParams();
+  const map = { "au-event": "event", "au-actor": "actor", "au-install": "installId", "au-q": "q", "au-limit": "limit" };
+  for (const [id, key] of Object.entries(map)) {
+    const v = $("#" + id).value.trim();
+    if (v !== "") q.set(key, v);
+  }
+  const { ok, body } = await jfetch("api/audit?" + q.toString());
+  if (!ok) { $("#au-msg").textContent = body.error ?? "查询失败"; return; }
+  $("#au-msg").textContent = `共 ${body.audit.length} 条`;
+  renderAudit(body.audit);
+}
+
+const ENUMS = { OMO_KB_PERMISSION: ["read", "write", "admin"], OMO_KB_GRANT: ["team", "collab", "none"], OMO_KB_UI: ["on", "off"], OMO_KB_LINT_MODE: ["off", "warn", "strict"] };
 let CFG_KEYS = {}, CFG_VALUES = {};
 
 function renderConfig(cfg, uiMeta) {

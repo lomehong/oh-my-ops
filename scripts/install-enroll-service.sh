@@ -187,8 +187,8 @@ for cand in "$SELF_DIR" "$SELF_DIR/.." "$SELF_DIR/../scripts"; do
   [ -f "$cand/ops-kb-enroll-server.mjs" ] && { FILE_BASE="$cand"; break; }
 done
 if [ -n "$FILE_BASE" ]; then
-  cp "$FILE_BASE/ops-kb-enroll-server.mjs" "$FILE_BASE/ops-kb-provision.mjs" "$SERVICE_DIR/"
-  cp "$FILE_BASE/lib/kb-gitea.mjs" "$FILE_BASE/lib/kb-registry.mjs" "$FILE_BASE/lib/kb-audit.mjs" "$FILE_BASE/lib/kb-auth.mjs" "$FILE_BASE/lib/kb-ui-config.mjs" "$FILE_BASE/lib/kb-lint.mjs" "$FILE_BASE/lib/secret-perm.mjs" "$SERVICE_DIR/lib/"
+  cp "$FILE_BASE/ops-kb-enroll-server.mjs" "$FILE_BASE/ops-kb-provision.mjs" "$FILE_BASE/install-remote.sh" "$SERVICE_DIR/"
+  cp "$FILE_BASE/lib/kb-gitea.mjs" "$FILE_BASE/lib/kb-registry.mjs" "$FILE_BASE/lib/kb-audit.mjs" "$FILE_BASE/lib/kb-auth.mjs" "$FILE_BASE/lib/kb-ui-config.mjs" "$FILE_BASE/lib/kb-lint.mjs" "$FILE_BASE/lib/kb-control-plane.mjs" "$FILE_BASE/lib/secret-perm.mjs" "$SERVICE_DIR/lib/"
   mkdir -p "$SERVICE_DIR/ui"
   cp "$FILE_BASE/ui/index.html" "$SERVICE_DIR/ui/index.html"
   ok "服务文件取自本机包（$FILE_BASE）"
@@ -198,6 +198,8 @@ else
   for src in "https://cdn.jsdelivr.net/gh/$REPO_SLUG@$VERSION" "https://fastly.jsdelivr.net/gh/$REPO_SLUG@$VERSION" "https://raw.githubusercontent.com/$REPO_SLUG/$VERSION"; do
     if curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/ops-kb-enroll-server.mjs" -o "$SERVICE_DIR/ops-kb-enroll-server.mjs" \
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/ops-kb-provision.mjs" -o "$SERVICE_DIR/ops-kb-provision.mjs" \
+       && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/install-remote.sh" -o "$SERVICE_DIR/install-remote.sh" \
+       && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-control-plane.mjs" -o "$SERVICE_DIR/lib/kb-control-plane.mjs" \
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-gitea.mjs" -o "$SERVICE_DIR/lib/kb-gitea.mjs" \
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-registry.mjs" -o "$SERVICE_DIR/lib/kb-registry.mjs" \
        && curl -fsSL --retry 2 --connect-timeout 8 "$src/scripts/lib/kb-audit.mjs" -o "$SERVICE_DIR/lib/kb-audit.mjs" \
@@ -295,14 +297,25 @@ OMO_KB_LOG=$(native_path "$DIR/logs/service.log")
 # 管理后台（/ui）：默认关。开启前先把本服务接入 yufu 网关（认证+TLS 由 yufu 负责），
 # 服务只认网关注入的身份头（真机实测定为 X-Auth-Username（值=username）；如网关行为不同可改）。
 OMO_KB_UI=off
+# 管理面独立 loopback 监听；远程仅经 yufu 反代或 SSH 隧道。所有 /ui/api/* 需 control-plane/admin.token。
+OMO_KB_UI_HOST=127.0.0.1
+OMO_KB_UI_PORT=8788
+OMO_KB_CONTROL_PLANE=$(native_path "$DIR/control-plane")
+# 安装命令的公开地址（目标机必须可达）；留空时服务端用 127.0.0.1（仅本机安装）。
+OMO_KB_INSTALL_BASE_URL=
 # 知识合流期 lint 门禁（/kb/webhook）：warn=只评论；strict=违规 status=failure 阻断合并；off=关闭。
 # 需先在 Gitea 配置 webhook（指向 https://<本机>:8787/kb/webhook）并在此填共享密钥后重启。
 # OMO_KB_WEBHOOK_SECRET=
+# 密钥轮换由后台「轮换 webhook 密钥」自动维护（新密钥 + PREVIOUS + ROTATED_AT，旧密钥 24h 宽限后失效）。
+# OMO_KB_WEBHOOK_SECRET_PREVIOUS=
+# OMO_KB_WEBHOOK_SECRET_ROTATED_AT=
 # OMO_KB_LINT_MODE=warn
 # OMO_KB_MAIN_BRANCH=main
 OMO_KB_UI_IDENTITY_HEADER=X-Auth-Username
 EOF
 chmod 600 "$DIR/config.env"; ok "配置已写入 $DIR/config.env（0600）"
+mkdir -p "$DIR/control-plane" "$DIR/artifacts"
+chmod 700 "$DIR/control-plane" "$DIR/artifacts"
 
 # ── 5) 启动前自证：凭据可用性 + **作用域逐项探测**
 #    探测手法：发**必然校验失败**（而非变更成功）的请求 —— 403+scope 提示 = 缺权；4xx 校验错 = 有权限。
@@ -484,7 +497,7 @@ if command -v systemctl >/dev/null 2>&1 && { [ "$USE_SYSTEM" = true ] || systemc
     echo "Type=simple"
     echo "EnvironmentFile=$DIR/config.env"
     echo "WorkingDirectory=$SERVICE_DIR"
-    echo "ExecStart=__BUN__ $SERVICE_DIR/ops-kb-enroll-server.mjs --api \${OMO_KB_API} --repo \${OMO_KB_REPO} --team \${OMO_KB_TEAM} --permission \${OMO_KB_PERMISSION} --grant \${OMO_KB_GRANT} --registry \${OMO_KB_REGISTRY} --audit \${OMO_KB_AUDIT} --host \${OMO_KB_HOST} --port \${OMO_KB_PORT} --tls-cert \${OMO_KB_TLS_CERT} --tls-key \${OMO_KB_TLS_KEY}__ADMIN_ARGS__"
+    echo "ExecStart=__BUN__ $SERVICE_DIR/ops-kb-enroll-server.mjs --config $(native_path "$DIR/config.env") --api \${OMO_KB_API} --repo \${OMO_KB_REPO} --team \${OMO_KB_TEAM} --permission \${OMO_KB_PERMISSION} --grant \${OMO_KB_GRANT} --registry \${OMO_KB_REGISTRY} --audit \${OMO_KB_AUDIT} --host \${OMO_KB_HOST} --port \${OMO_KB_PORT} --tls-cert \${OMO_KB_TLS_CERT} --tls-key \${OMO_KB_TLS_KEY}__ADMIN_ARGS__"
     echo "Restart=on-failure"
     echo "RestartSec=3"
     echo
@@ -531,4 +544,5 @@ echo "  签码：  omo-kb code --op enroll --device <设备名>"
 [ -n "$FP" ] && echo "  证书指纹（SHA256）：$FP"
 echo "  实例侧：omo kb enroll --server https://<本机可达地址>:$PORT --code-file <0600 码文件>"
 echo "  批量接入：bash omo-kb-fleet.sh service <设备名…>（本包内；逐设备签码并给出实例侧一条命令）"
-echo "  管理后台：config.env 设 OMO_KB_UI=on 并 omo-kb restart ⇒ https://<本机>:${PORT}/ui/（建议经 yufu 反代；身份头 ${OMO_KB_UI_IDENTITY_HEADER:-X-Auth-Username}）"
+echo "  管理后台：config.env 设 OMO_KB_UI=on 并 omo-kb restart ⇒ http://127.0.0.1:8788/ui/（远程经 yufu/SSH 隧道；需 control-plane/admin.token）"
+echo "  安装分发：后台生成安装命令前，把 OMO_KB_INSTALL_BASE_URL 设为目标机可达地址；admin token：$DIR/control-plane/admin.token"

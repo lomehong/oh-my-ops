@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { enroll } from "../src/kb-enroll.ts";
+import { enroll, kbInstallStatePath, loadKbInstallState, reportInstallStatus, saveKbInstallState } from "../src/kb-enroll.ts";
 import { kbCredentialPath, kbGitCredentialsPath, loadKbCredential } from "../src/kb-credential.ts";
 import { expectSecret0600 } from "./runtime/perm-mode.ts";
 
@@ -246,6 +246,62 @@ describe("P3 · 凭据自注册端到端（服务真 HTTP + 客户端真兑换�
 			svc.stop();
 			gitea.stop();
 			rmTempSync(dir);
+		}
+	});
+
+	test("★ 安装上报：report token Bearer 上报最近状态；无令牌/被拒时明确失败", async () => {
+		let seenAuth: string | undefined;
+		let payload: Record<string, unknown> | undefined;
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				seenAuth = req.headers.get("authorization") ?? undefined;
+				payload = (await req.json()) as Record<string, unknown>;
+				if (seenAuth === "Bearer omoreport_bad") return new Response(JSON.stringify({ error: "上报令牌无效" }), { status: 401 });
+				return new Response(JSON.stringify({ ok: true, installId: "ins_1" }), { status: 200 });
+			},
+		});
+		const omo = tmpdir();
+		try {
+			const base = `http://127.0.0.1:${server.port}`;
+			const good = { controlPlane: base, installId: "ins_1", reportToken: "omoreport_ok", enrolledAt: new Date().toISOString() };
+			await saveKbInstallState(omo, good);
+			const loaded = await loadKbInstallState(omo);
+			expect(loaded?.reportToken).toBe("omoreport_ok");
+			expectSecret0600(kbInstallStatePath(omo));
+
+			const r = await reportInstallStatus(
+				loaded!,
+				{ device: "node-1", ok: true, lastSync: "2026-10-30T00:00:00Z", version: "v1" },
+				{ allowInsecureHttp: true },
+			);
+			expect(r.ok).toBe(true);
+			expect(r.status).toBe(200);
+			expect(seenAuth).toBe("Bearer omoreport_ok");
+			expect(payload?.stage).toBe("status");
+			expect(payload?.device).toBe("node-1");
+			expect(payload?.lastSync).toBe("2026-10-30T00:00:00Z");
+			expect(JSON.stringify(payload)).not.toContain("omoreport_ok");
+
+			const rejected = await reportInstallStatus(
+				{ ...loaded!, reportToken: "omoreport_bad" },
+				{ device: "node-1", ok: false, reason: "sync failed" },
+				{ allowInsecureHttp: true },
+			);
+			expect(rejected.ok).toBe(false);
+			expect(rejected.status).toBe(401);
+			expect(rejected.message).toContain("上报令牌无效");
+
+			const noToken = await reportInstallStatus({ ...loaded!, reportToken: undefined }, { device: "node-1", ok: true });
+			expect(noToken.ok).toBe(false);
+			expect(noToken.message).toContain("没有实例上报令牌");
+
+			const httpDenied = await reportInstallStatus({ ...loaded! }, { device: "d", ok: true });
+			expect(httpDenied.ok).toBe(false);
+			expect(httpDenied.message).toContain("拒绝以明文 HTTP");
+		} finally {
+			server.stop(true);
+			rmTempSync(omo);
 		}
 	});
 });

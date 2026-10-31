@@ -167,3 +167,66 @@ export async function verifyBotCredential(api, repo, login, secret) {
 	const probe = await api.get(`/repos/${repo}`, { user: login, password: secret });
 	return { ok: probe.ok, status: probe.status };
 }
+
+/* ── 合流门禁（P1-2）：分支保护 + webhook（Gitea API；实现前由探针确认能力） ── */
+
+export async function listBranchProtections(api, repo) {
+	const r = await api.get(`/repos/${repo}/branch_protections`);
+	if (!r.ok) throw new Error(`读取分支保护失败 HTTP ${r.status} ${r.text.slice(0, 160)}`);
+	return Array.isArray(r.json) ? r.json : [];
+}
+
+export async function ensureBranchProtection(api, repo, branch, contexts = ["kb-lint"]) {
+	const list = await listBranchProtections(api, repo);
+	const existing = list.find((p) => p.branch_name === branch);
+	const body = {
+		branch_name: branch,
+		enable_push: false,
+		enable_status_check: true,
+		status_check_contexts: contexts,
+		require_approvals: 0,
+	};
+	if (existing !== undefined) {
+		const r = await api.patch(`/repos/${repo}/branch_protections/${encodeURIComponent(branch)}`, body);
+		if (!r.ok) throw new Error(`更新分支保护失败 HTTP ${r.status} ${r.text.slice(0, 160)}`);
+		return { created: false, status: r.status, body: r.json };
+	}
+	const r = await api.post(`/repos/${repo}/branch_protections`, body);
+	if (!r.ok) throw new Error(`创建分支保护失败 HTTP ${r.status} ${r.text.slice(0, 160)}`);
+	return { created: true, status: r.status, body: r.json };
+}
+
+export async function listWebhooks(api, repo) {
+	const r = await api.get(`/repos/${repo}/hooks`);
+	if (!r.ok) throw new Error(`读取 webhook 失败 HTTP ${r.status} ${r.text.slice(0, 160)}`);
+	return Array.isArray(r.json) ? r.json : [];
+}
+
+export async function ensureWebhook(api, repo, url, secret) {
+	const list = await listWebhooks(api, repo);
+	const existing = list.find((h) => h.config?.url === url);
+	const body = {
+		type: "gitea",
+		config: { url, content_type: "json", http_method: "post", secret },
+		events: ["pull_request"],
+		active: true,
+	};
+	if (existing !== undefined) {
+		const r = await api.patch(`/repos/${repo}/hooks/${existing.id}`, body);
+		if (!r.ok) throw new Error(`更新 webhook 失败 HTTP ${r.status} ${r.text.slice(0, 160)}`);
+		return { created: false, status: r.status, id: existing.id };
+	}
+	const r = await api.post(`/repos/${repo}/hooks`, body);
+	if (!r.ok) throw new Error(`创建 webhook 失败 HTTP ${r.status} ${r.text.slice(0, 160)}`);
+	return { created: true, status: r.status, id: r.json?.id };
+}
+
+export async function getGateState(api, repo, branch, webhookUrl) {
+	const [protections, hooks] = await Promise.all([listBranchProtections(api, repo), listWebhooks(api, repo)]);
+	const protection = protections.find((p) => p.branch_name === branch);
+	const hook = hooks.find((h) => h.config?.url === webhookUrl);
+	return {
+		branchProtection: protection === undefined ? { configured: false } : { configured: true, statusChecks: protection.status_check_contexts ?? [], enablePush: protection.enable_push === true },
+		webhook: hook === undefined ? { configured: false } : { configured: true, id: hook.id, active: hook.active === true, events: hook.events ?? [] },
+	};
+}

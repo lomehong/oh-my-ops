@@ -21,13 +21,19 @@ export const UI_CONFIG_KEYS = {
 	OMO_KB_HOST: { label: "监听地址", validate: (v) => /^[^\s]+$/.test(v) || "非空且无空白" },
 	OMO_KB_PORT: { label: "端口", validate: (v) => (/^\d+$/.test(v) && Number(v) >= 1 && Number(v) <= 65535) || "1-65535 整数" },
 	OMO_KB_UI: { label: "管理后台开关", validate: (v) => ["on", "off"].includes(v) || "on|off" },
+	OMO_KB_UI_HOST: { label: "管理监听地址", validate: (v) => /^[^\s]+$/.test(v) || "非空且无空白" },
+	OMO_KB_UI_PORT: { label: "管理监听端口", validate: (v) => (/^\d+$/.test(v) && Number(v) >= 1 && Number(v) <= 65535) || "1-65535 整数" },
 	OMO_KB_UI_IDENTITY_HEADER: { label: "身份头键名（yufu）", validate: (v) => /^[A-Za-z0-9-]+$/.test(v) || "仅字母/数字/连字符" },
+	OMO_KB_CONTROL_PLANE: { label: "控制面数据目录", validate: (v) => v === "" || fs.existsSync(v) || "目录不存在" },
+	OMO_KB_INSTALL_BASE_URL: { label: "安装命令公开地址", validate: (v) => v === "" || /^https?:\/\/\S+$/.test(v) || "需为 http(s) URL 或留空" },
+	OMO_KB_LINT_MODE: { label: "合流 lint 模式", validate: (v) => ["off", "warn", "strict"].includes(v) || "off|warn|strict" },
+	OMO_KB_MAIN_BRANCH: { label: "主线分支", validate: (v) => /^[^\s]+$/.test(v) || "非空且无空白" },
 	OMO_KB_TLS_CERT: { label: "TLS 证书路径", validate: (v) => v === "" || fs.existsSync(v) || "文件不存在" },
 	OMO_KB_TLS_KEY: { label: "TLS 私钥路径", validate: (v) => v === "" || fs.existsSync(v) || "文件不存在" },
 };
 
-/** 管理员凭据类键（只回「已配置/未配置」，绝不回值） */
-export const SECRET_KEYS = new Set(["OMO_KB_ADMIN_MODE", "OMO_KB_ADMIN_USER", "OMO_KB_ADMIN_TOKEN_FILE", "OMO_KB_ADMIN_PASSWORD_FILE", "OMO_KB_ADMIN_PW_FILE"]);
+/** 管理员凭据/秘密类键（只回「已配置/未配置」，绝不回值） */
+export const SECRET_KEYS = new Set(["OMO_KB_ADMIN_MODE", "OMO_KB_ADMIN_USER", "OMO_KB_ADMIN_TOKEN_FILE", "OMO_KB_ADMIN_PASSWORD_FILE", "OMO_KB_ADMIN_PW_FILE", "OMO_KB_WEBHOOK_SECRET"]);
 
 /** 解析 KEY=VALUE 文本：保留行序与注释，values 取最后出现的值 */
 export function parseConfigEnv(text) {
@@ -83,6 +89,18 @@ export function renderConfigEnv(parsed, newValues) {
 	});
 	for (const [k, v] of Object.entries(wanted)) out.push(`${k}=${v}`);
 	return `${out.join("\n").replace(/\n*$/, "\n")}`;
+}
+
+/** 删除指定键（保留行序与注释）；用于关闭双密钥宽限窗口 */
+export function removeConfigKeys(parsed, keys) {
+	const set = new Set(keys);
+	return `${parsed.lines
+		.filter((line) => {
+			const m = /^([A-Za-z_][A-Za-z0-9_]*)=/.exec(line);
+			return !(m !== null && set.has(m[1]));
+		})
+		.join("\n")
+		.replace(/\n*$/, "\n")}`;
 }
 
 /** 原子写（tmp+mv，0600，保留一代 .bak） */
