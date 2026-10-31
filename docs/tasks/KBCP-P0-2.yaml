@@ -1,6 +1,6 @@
 id: 'KBCP-P0-2'
 title: 'KB 控制面 P0-2：安装分发 API + 令牌 + TLS 双锚'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-10-29T15:27:45.800Z'
 accept:
@@ -21,6 +21,10 @@ events:
     op: 'report'
     by: 'qoder-architect(qoder-cli)'
     note: '安装分发面落地：/install/{manifest,script,artifacts,enroll,report} + 一次性安装令牌 Bearer；cacert+SPKI pin 双锚；制品白名单/路径穿越拒绝/服务端重算哈希；探针全绿'
+  - ts: '2026-10-31T14:35:38.070Z'
+    op: 'confirm'
+    by: '主人'
+    note: '确认落定；报告中的实机 pending（el7/真实 Gitea/公网网关/真浏览器）保留为后续验收项'
 branch: 'main'
 report:
   summary: '安装分发面落地：/install/{manifest,script,artifacts,enroll,report} + 一次性安装令牌 Bearer；cacert+SPKI pin 双锚；制品白名单/路径穿越拒绝/服务端重算哈希；探针全绿'
@@ -33,3 +37,5 @@ report:
     - '真实公网/网关前缀下的安装未复验（install-base-url/SAN/反代路径）'
   at: '2026-10-29T16:19:04.723Z'
   by: 'qoder-architect(qoder-cli)'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-10-31，指令「确认」；对应提交 176d4ec）'

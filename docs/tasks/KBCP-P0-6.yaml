@@ -1,6 +1,6 @@
 id: 'KBCP-P0-6'
 title: 'KB 控制面 P0-6：管理监听分离 + 本机 admin token'
-state: '待确认'
+state: '已落定'
 level: 'L2'
 created: '2026-10-29T15:27:46.312Z'
 accept:
@@ -21,6 +21,10 @@ events:
     op: 'report'
     by: 'qoder-architect(qoder-cli)'
     note: '管理监听分离落地：主监听 0.0.0.0:8787 不暴露 /ui；管理监听 127.0.0.1:8788；所有 /ui/api/* 必须 control-plane admin.token；yufu 头仅作 actor；配置三处落点 + 重启 drop 集（含 config 文件存在键）'
+  - ts: '2026-10-31T14:35:39.179Z'
+    op: 'confirm'
+    by: '主人'
+    note: '确认落定；报告中的实机 pending（el7/真实 Gitea/公网网关/真浏览器）保留为后续验收项'
 branch: 'main'
 report:
   summary: '管理监听分离落地：主监听 0.0.0.0:8787 不暴露 /ui；管理监听 127.0.0.1:8788；所有 /ui/api/* 必须 control-plane admin.token；yufu 头仅作 actor；配置三处落点 + 重启 drop 集（含 config 文件存在键）'
@@ -31,3 +35,5 @@ report:
   pending: []
   at: '2026-10-29T16:19:21.313Z'
   by: 'qoder-architect(qoder-cli)'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-10-31，指令「确认」；对应提交 176d4ec）'

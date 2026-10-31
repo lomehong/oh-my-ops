@@ -1,6 +1,6 @@
 id: 'KBCP-P0-4'
 title: 'KB 控制面 P0-4：/install/enroll 与客户端安装令牌模式'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-10-29T15:27:46.059Z'
 accept:
@@ -20,6 +20,10 @@ events:
     op: 'report'
     by: 'qoder-architect(qoder-cli)'
     note: '客户端安装令牌模式落地：omo kb enroll 支持 --install-token-file/--response-file/--ca-file；Bearer 兑换 /install/enroll；凭据 0600 + git store；安装态（installId/reportToken/CA 路径）落盘；TLS 走 node:https 显式 CA（不污染进程开关）'
+  - ts: '2026-10-31T14:35:38.625Z'
+    op: 'confirm'
+    by: '主人'
+    note: '确认落定；报告中的实机 pending（el7/真实 Gitea/公网网关/真浏览器）保留为后续验收项'
 branch: 'main'
 report:
   summary: '客户端安装令牌模式落地：omo kb enroll 支持 --install-token-file/--response-file/--ca-file；Bearer 兑换 /install/enroll；凭据 0600 + git store；安装态（installId/reportToken/CA 路径）落盘；TLS 走 node:https 显式 CA（不污染进程开关）'
@@ -32,3 +36,5 @@ report:
     - 'e2e 的 git 自证以本地状态替代（测试环境无 git 远端）；真实同步链路由 OMO-KB-SYNC 既有测试覆盖'
   at: '2026-10-29T16:19:12.806Z'
   by: 'qoder-architect(qoder-cli)'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-10-31，指令「确认」；对应提交 176d4ec）'

@@ -1,6 +1,6 @@
 id: 'KBCP-P1-2'
 title: 'KB 控制面 P1-2：门禁状态/配置 + Gitea API 探针 + secret 轮换'
-state: '待确认'
+state: '已落定'
 level: 'L2'
 created: '2026-10-29T15:27:46.591Z'
 accept:
@@ -20,6 +20,10 @@ events:
     op: 'report'
     by: 'qoder-architect(qoder-cli)'
     note: '门禁状态/配置与密钥轮换落地：GET/POST gate（observed=分支保护+webhook；apply 需能力探针成功）；secret 轮换顺序 Gitea→配置→重启，旧密钥 24h 双密钥宽限，写盘失败回滚 Gitea；审计留存'
+  - ts: '2026-10-31T14:35:39.726Z'
+    op: 'confirm'
+    by: '主人'
+    note: '确认落定；报告中的实机 pending（el7/真实 Gitea/公网网关/真浏览器）保留为后续验收项'
 branch: 'main'
 report:
   summary: '门禁状态/配置与密钥轮换落地：GET/POST gate（observed=分支保护+webhook；apply 需能力探针成功）；secret 轮换顺序 Gitea→配置→重启，旧密钥 24h 双密钥宽限，写盘失败回滚 Gitea；审计留存'
@@ -32,3 +36,5 @@ report:
     - 'GitLab 首期明确不支持门禁自动化（P2-1 独立适配器）'
   at: '2026-10-29T16:19:30.482Z'
   by: 'qoder-architect(qoder-cli)'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-10-31，指令「确认」；对应提交 176d4ec）'

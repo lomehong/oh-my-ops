@@ -1,6 +1,6 @@
 id: 'KBCP-P0-1'
 title: 'KB 控制面 P0-1：数据模型与存储（installers/install-tokens/instances/audit）'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-10-29T15:27:45.670Z'
 accept:
@@ -21,6 +21,10 @@ events:
     op: 'report'
     by: 'qoder-architect(qoder-cli)'
     note: '控制面数据模型与存储已落地：新增 scripts/lib/kb-control-plane.mjs（installers/install-tokens/instances JSON、0600 原子写、revision 串行写、256bit 安装令牌、状态机、admin token）；新增 L2 单测 9 例全绿。'
+  - ts: '2026-10-31T14:35:37.779Z'
+    op: 'confirm'
+    by: '主人'
+    note: '确认落定；报告中的实机 pending（el7/真实 Gitea/公网网关/真浏览器）保留为后续验收项'
 branch: 'main'
 report:
   summary: '控制面数据模型与存储已落地：新增 scripts/lib/kb-control-plane.mjs（installers/install-tokens/instances JSON、0600 原子写、revision 串行写、256bit 安装令牌、状态机、admin token）；新增 L2 单测 9 例全绿。'
@@ -31,3 +35,5 @@ report:
     - '尚未接线到 ops-kb-enroll-server 路由/UI（由 P0-2/P0-6 完成）'
   at: '2026-10-29T15:31:47.424Z'
   by: 'qoder-architect(qoder-cli)'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-10-31，指令「确认」；对应提交 176d4ec）'

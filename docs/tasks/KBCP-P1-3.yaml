@@ -1,6 +1,6 @@
 id: 'KBCP-P1-3'
 title: 'KB 控制面 P1-3：审计过滤/安装历史'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-10-29T15:27:46.717Z'
 accept:
@@ -20,6 +20,10 @@ events:
     op: 'report'
     by: 'qoder-architect(qoder-cli)'
     note: '审计过滤与安装历史落地：/ui/api/audit 支持 event 前缀/actor/installId/关键字/limit；UI 审计页过滤表单 + 按 installId 归组的阶段历史（manifest→script→artifact→enroll→report/失败）；响应/审计不含秘密'
+  - ts: '2026-10-31T14:35:40.069Z'
+    op: 'confirm'
+    by: '主人'
+    note: '确认落定；报告中的实机 pending（el7/真实 Gitea/公网网关/真浏览器）保留为后续验收项'
 branch: 'main'
 report:
   summary: '审计过滤与安装历史落地：/ui/api/audit 支持 event 前缀/actor/installId/关键字/limit；UI 审计页过滤表单 + 按 installId 归组的阶段历史（manifest→script→artifact→enroll→report/失败）；响应/审计不含秘密'
@@ -32,3 +36,5 @@ report:
     - '真浏览器人工点检（headless 垫片）'
   at: '2026-10-29T16:19:34.774Z'
   by: 'qoder-architect(qoder-cli)'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-10-31，指令「确认」；对应提交 176d4ec）'

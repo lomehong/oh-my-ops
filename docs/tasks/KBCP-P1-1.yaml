@@ -1,6 +1,6 @@
 id: 'KBCP-P1-1'
 title: 'KB 控制面 P1-1：实例上报/最近状态 + 凭据操作'
-state: '待确认'
+state: '已落定'
 level: 'L2'
 created: '2026-10-29T15:27:46.442Z'
 accept:
@@ -21,6 +21,10 @@ events:
     op: 'report'
     by: 'qoder-architect(qoder-cli)'
     note: '实例上报落地：/install/enroll 签发实例上报令牌（只存哈希、可吊销）；omo kb status --report 上报最近状态；installId 唯一、重复上报幂等；lastSeen/lastSync/stale；registry 有记录但未上报不出现在实例页；无常驻心跳'
+  - ts: '2026-10-31T14:35:39.446Z'
+    op: 'confirm'
+    by: '主人'
+    note: '确认落定；报告中的实机 pending（el7/真实 Gitea/公网网关/真浏览器）保留为后续验收项'
 branch: 'main'
 report:
   summary: '实例上报落地：/install/enroll 签发实例上报令牌（只存哈希、可吊销）；omo kb status --report 上报最近状态；installId 唯一、重复上报幂等；lastSeen/lastSync/stale；registry 有记录但未上报不出现在实例页；无常驻心跳'
@@ -33,3 +37,5 @@ report:
     - '真实 git 同步后的 lastSync 上报未在真机复验（e2e 以本地状态替代）'
   at: '2026-10-29T16:19:25.339Z'
   by: 'qoder-architect(qoder-cli)'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-10-31，指令「确认」；对应提交 176d4ec）'

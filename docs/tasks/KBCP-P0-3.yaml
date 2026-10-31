@@ -1,6 +1,6 @@
 id: 'KBCP-P0-3'
 title: 'KB 控制面 P0-3：安装包装脚本（modern/el7 legacy）'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-10-29T15:27:45.926Z'
 accept:
@@ -21,6 +21,10 @@ events:
     op: 'report'
     by: 'qoder-architect(qoder-cli)'
     note: '安装包装脚本落地：modern(≥7.55 cacert+pin) / el7 legacy(openssl SPKI pin + --cacert + --config 头文件)；既有 ~/.omo 默认拒绝、--upgrade 放行；临时 HOME 端到端 + 失败注入探针全绿'
+  - ts: '2026-10-31T14:35:38.359Z'
+    op: 'confirm'
+    by: '主人'
+    note: '确认落定；报告中的实机 pending（el7/真实 Gitea/公网网关/真浏览器）保留为后续验收项'
 branch: 'main'
 report:
   summary: '安装包装脚本落地：modern(≥7.55 cacert+pin) / el7 legacy(openssl SPKI pin + --cacert + --config 头文件)；既有 ~/.omo 默认拒绝、--upgrade 放行；临时 HOME 端到端 + 失败注入探针全绿'
@@ -32,3 +36,5 @@ report:
     - '正式发布制品（含真实 omo 安装器）未在目标机全流程复验；探针用测试安装包'
   at: '2026-10-29T16:19:08.632Z'
   by: 'qoder-architect(qoder-cli)'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-10-31，指令「确认」；对应提交 176d4ec）'

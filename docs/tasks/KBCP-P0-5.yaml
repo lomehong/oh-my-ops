@@ -1,6 +1,6 @@
 id: 'KBCP-P0-5'
 title: 'KB 控制面 P0-5：UI 安装/实例/配置/内容深链'
-state: '待确认'
+state: '已落定'
 level: 'L1'
 created: '2026-10-29T15:27:46.187Z'
 accept:
@@ -20,6 +20,10 @@ events:
     op: 'report'
     by: 'qoder-architect(qoder-cli)'
     note: 'UI 安装/实例/配置/内容深链落地：安装页生成令牌+命令+制品登记+安装历史；实例页 lastSeen/lastSync/stale/上报令牌/最近错误；配置页扩展键；内容页只深链 Gitea/GitLab'
+  - ts: '2026-10-31T14:35:38.907Z'
+    op: 'confirm'
+    by: '主人'
+    note: '确认落定；报告中的实机 pending（el7/真实 Gitea/公网网关/真浏览器）保留为后续验收项'
 branch: 'main'
 report:
   summary: 'UI 安装/实例/配置/内容深链落地：安装页生成令牌+命令+制品登记+安装历史；实例页 lastSeen/lastSync/stale/上报令牌/最近错误；配置页扩展键；内容页只深链 Gitea/GitLab'
@@ -31,3 +35,5 @@ report:
     - '真浏览器人工点检（headless DOM 垫片覆盖渲染逻辑，不等同真实浏览器）'
   at: '2026-10-29T16:19:17.312Z'
   by: 'qoder-architect(qoder-cli)'
+confirmedBy: '主人'
+confirmedVia: '会话确认（2026-10-31，指令「确认」；对应提交 176d4ec）'
